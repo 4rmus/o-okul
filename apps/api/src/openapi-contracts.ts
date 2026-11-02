@@ -257,6 +257,7 @@ const institutionDashboardSummarySchema = objectSchema({
     openSupportTicketCount: integerSchema({ minimum: 0 }),
   }, ["attendanceAlertCount", "openImportQuarantineCount", "openSupportTicketCount"]),
   latestExam: institutionDashboardExamSchema,
+  campusScoped: { type: "boolean" },
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
 
 const tenantFirstOwnerCreateRequestSchema = objectSchema({

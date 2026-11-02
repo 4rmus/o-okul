@@ -3,6 +3,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { GuardianAutoNotificationService, InMemoryGuardianNotifyQueueProducer } from "../guardian-notification/guardian-auto-notification.service.js";
 import { InMemoryGuardianNotificationSettingsStore } from "../guardian-notification/guardian-notification-settings-store.js";
 import { InMemoryAcademicCalendarStore } from "../school/academic-calendar-store.js";
+import { InMemoryClassStore } from "../school/class-store.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
@@ -268,6 +269,59 @@ describe("AttendanceService", () => {
     });
   });
 });
+
+describe("AttendanceService kampüs kapsamı", () => {
+  it("kampüs kapsamlı kullanıcı yalnız kayıt tarihindeki sınıfı kendi kampüsünde olan yoklamayı görür ve yazar", async () => {
+    const service = createCampusService(new InMemoryClassStore());
+
+    expect((await service.list(adminContext)).map((record) => record.id)).toContain("attendance-a");
+    expect((await service.list(campusContext("campus-main"))).map((record) => record.id)).toContain("attendance-a");
+    await expect(service.list(campusContext("campus-other"))).resolves.toEqual([]);
+    await expect(service.list(campusContext("campus-other"), { studentId: "student-a" })).resolves.toEqual([]);
+    await expect(service.aggregate(campusContext("campus-other"))).resolves.toMatchObject({ total: 0 });
+    await expect(service.getDailyRoster(campusContext("campus-other"), "class-a", "2026-06-03"))
+      .rejects.toThrow("ATTENDANCE_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(service.upsertDaily(campusContext("campus-other"), {
+      classId: "class-a",
+      date: "2026-06-03",
+      entries: [{ studentId: "student-a", status: "PRESENT" }],
+    })).rejects.toThrow("ATTENDANCE_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(service.getDailyRoster(campusContext("campus-main"), "class-a", "2026-06-03"))
+      .resolves.toMatchObject({ classId: "class-a" });
+  });
+
+  it("sınıfı çözülemeyen kayıtta fail-closed davranır, kampüssüz operasyon çalışanını reddeder", async () => {
+    const service = createCampusService(undefined);
+
+    await expect(service.list(campusContext("campus-main"))).resolves.toEqual([]);
+    expect((await service.list(adminContext)).map((record) => record.id)).toContain("attendance-a");
+    await expect(service.list({ ...adminContext, roles: ["OPERATIONS_STAFF"] })).rejects.toThrow("ATTENDANCE_CAMPUS_SCOPE_MISSING");
+  });
+});
+
+function createCampusService(classStore: InMemoryClassStore | undefined): AttendanceService {
+  return new AttendanceService(
+    new InMemoryAttendanceStore(),
+    new InMemoryAcademicCalendarStore(),
+    new InMemoryStudentStore(),
+    new InMemoryStudentEnrollmentStore(),
+    new InMemoryGuardianStudentStore(),
+    new InMemoryTeacherAssignmentStore(),
+    undefined,
+    undefined,
+    classStore,
+  );
+}
+
+function campusContext(campusId: string): RequestContext {
+  return {
+    userId: "assistant-tenant-a",
+    tenantId: "tenant-a",
+    roles: ["ASSISTANT_ADMIN"],
+    bypassRls: false,
+    campusScope: { scopeMode: "CAMPUSES", campusIds: [campusId] },
+  };
+}
 
 function createService(
   attendanceStore = new InMemoryAttendanceStore(),

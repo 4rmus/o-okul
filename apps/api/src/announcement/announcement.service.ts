@@ -29,7 +29,12 @@ import { IdempotencyService } from "../http/idempotency.js";
 import { NotificationDeviceService } from "../notification-device/notification-device.service.js";
 import { chunkAnnouncementPushDevices, type ProducedJob, type TenantQueueJobInput } from "../queue/job-producer.js";
 import { requiredText } from "../shared/required-text.js";
-import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import {
+  assertTenantResourceAccess,
+  filterTenantResources,
+  isCampusInScope,
+  resolveCampusRestriction,
+} from "../tenant/tenant-access.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -86,21 +91,26 @@ export class AnnouncementService {
   ) {}
 
   async list(context: RequestContext): Promise<AnnouncementRecord[]> {
-    return filterTenantResources(context, await this.store.list()).filter((announcement) => !announcement.deletedAt);
+    const announcements = await this.listTenant(context);
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return announcements;
+    const classCampusById = await this.classCampusById(context);
+    return announcements.filter((announcement) =>
+      this.campusVisibility(restriction, announcement, classCampusById) !== "OUT_OF_SCOPE",
+    );
   }
 
   async findOne(context: RequestContext, id: string): Promise<AnnouncementRecord> {
-    const announcement = await this.store.findById(id);
-    if (!announcement || announcement.deletedAt) {
-      throw new NotFoundException("ANNOUNCEMENT_NOT_FOUND");
+    const announcement = await this.findTenantAnnouncement(context, id);
+    const restriction = this.campusRestriction(context);
+    if (restriction && this.campusVisibility(restriction, announcement, await this.classCampusById(context)) === "OUT_OF_SCOPE") {
+      throw new ForbiddenException("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
     }
-
-    this.assertAccess(context, announcement);
     return announcement;
   }
 
   async recipientReport(context: RequestContext, id: string): Promise<AnnouncementRecipientReport> {
-    const announcement = await this.findOne(context, id);
+    const announcement = await this.findManageable(context, id);
     const recipients = await this.resolveRecipients(context, announcement);
     const receipts = await this.receiptStore.listByAnnouncement(announcement.tenantId, announcement.id);
     const readAtBySubject = new Map<string, string>();
@@ -127,7 +137,7 @@ export class AnnouncementService {
   }
 
   async deliveryReports(context: RequestContext, id: string): Promise<AnnouncementDeliveryReportRecord[]> {
-    const announcement = await this.findOne(context, id);
+    const announcement = await this.findManageable(context, id);
     return this.deliveryReportStore.listByAnnouncement(announcement.tenantId, announcement.id);
   }
 
@@ -157,7 +167,7 @@ export class AnnouncementService {
     id: string,
     input: Partial<AnnouncementDeliveryResultRequest>,
   ): Promise<AnnouncementDeliveryQueueResult> {
-    const announcement = await this.findOne(context, id);
+    const announcement = await this.findManageable(context, id);
     const result = parseDeliveryResultInput(input);
     return this.enqueueDeliveryReport(context, announcement, result);
   }
@@ -193,7 +203,7 @@ export class AnnouncementService {
     input: Partial<AnnouncementDeliverySendRequest>,
     idempotencyKey: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
-    const announcement = await this.findOne(context, id);
+    const announcement = await this.findManageable(context, id);
     const channel = resolveDeliveryChannel(input.channel);
     if (channel === "PUSH") {
       // ponytail: hashed key keeps the raw header out of Redis and free of ":".
@@ -350,7 +360,7 @@ export class AnnouncementService {
     }
 
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
-    const announcements = (await this.list(context)).filter((announcement) =>
+    const announcements = (await this.listTenant(context)).filter((announcement) =>
       announcement.audience === "SCHOOL" || announcement.audience === "TEACHERS",
     );
     return this.withReadStatus(context, announcements.filter((announcement) => this.matchesTeacherScope(announcement, assignments)));
@@ -397,6 +407,10 @@ export class AnnouncementService {
     const body = requiredText(input.body, "ANNOUNCEMENT_BODY_REQUIRED");
     const audience = resolveAudience(input.audience);
     const targets = await this.resolveTargets(tenantId, input);
+    const restriction = this.campusRestriction(context);
+    if (restriction && this.campusVisibility(restriction, targets, await this.classCampusById(context)) !== "IN_SCOPE") {
+      throw new ForbiddenException("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
 
     const record = await this.store.create({
       tenantId,
@@ -460,13 +474,67 @@ export class AnnouncementService {
     return targets;
   }
 
+  private async listTenant(context: RequestContext): Promise<AnnouncementRecord[]> {
+    return filterTenantResources(context, await this.store.list()).filter((announcement) => !announcement.deletedAt);
+  }
+
+  private async findTenantAnnouncement(context: RequestContext, id: string): Promise<AnnouncementRecord> {
+    const announcement = await this.store.findById(id);
+    if (!announcement || announcement.deletedAt) {
+      throw new NotFoundException("ANNOUNCEMENT_NOT_FOUND");
+    }
+
+    this.assertAccess(context, announcement);
+    return announcement;
+  }
+
+  // Recipient reports and deliveries reach every targeted student, guardian and teacher, so a campus-scoped user may
+  // only manage announcements attributable to an in-scope campus; school-wide ones stay read-only for them.
+  private async findManageable(context: RequestContext, id: string): Promise<AnnouncementRecord> {
+    const announcement = await this.findTenantAnnouncement(context, id);
+    const restriction = this.campusRestriction(context);
+    if (restriction && this.campusVisibility(restriction, announcement, await this.classCampusById(context)) !== "IN_SCOPE") {
+      throw new ForbiddenException("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    return announcement;
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("ANNOUNCEMENT_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  private async classCampusById(context: RequestContext): Promise<Map<string, string | undefined>> {
+    return new Map(
+      filterTenantResources(context, await this.classStore.list())
+        .filter((schoolClass) => !schoolClass.deletedAt)
+        .map((schoolClass) => [schoolClass.id, schoolClass.campusId]),
+    );
+  }
+
+  // School-wide announcements (no campus and no class target) stay visible to campus-scoped staff; a campus or class
+  // target must resolve to an in-scope campus, and a class that no longer resolves fails closed.
+  private campusVisibility(
+    restriction: ReadonlySet<string>,
+    target: Pick<Partial<AnnouncementRecord>, "campusId" | "classId">,
+    classCampusById: Map<string, string | undefined>,
+  ): "IN_SCOPE" | "SCHOOL_WIDE" | "OUT_OF_SCOPE" {
+    if (!target.campusId && !target.classId) return "SCHOOL_WIDE";
+    if (target.campusId && !isCampusInScope(restriction, target.campusId)) return "OUT_OF_SCOPE";
+    if (target.classId && !isCampusInScope(restriction, classCampusById.get(target.classId))) return "OUT_OF_SCOPE";
+    return "IN_SCOPE";
+  }
+
   private async filterForStudent(
     context: RequestContext,
     student: StudentRecord,
     audiences: AnnouncementAudience[],
   ): Promise<AnnouncementRecord[]> {
     const schoolClass = student.classId ? await this.classStore.findById(student.classId) : undefined;
-    return (await this.list(context)).filter((announcement) =>
+    return (await this.listTenant(context)).filter((announcement) =>
       audiences.includes(announcement.audience) && this.matchesStudentScope(announcement, student, schoolClass),
     );
   }

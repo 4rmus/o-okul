@@ -2723,6 +2723,11 @@ export interface InstitutionDashboardSummary {
     openSupportTicketCount: number;
   };
   latestExam?: InstitutionDashboardExamSummary;
+  /**
+   * Present for a campus-scoped membership: counts cover only its campuses, tenant-wide figures that cannot be
+   * attributed to a campus (import quarantine, report averages) read 0 or are left out.
+   */
+  campusScoped?: boolean;
 }
 
 export interface ReportErrorBooklet {

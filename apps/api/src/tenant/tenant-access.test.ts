@@ -3,8 +3,11 @@ import {
   assertSubjectResourceAccess,
   assertTeacherScopedStudentAccess,
   assertTenantResourceAccess,
+  campusScopedClassIds,
   filterTeacherScopedStudents,
   filterTenantResources,
+  isCampusInScope,
+  resolveCampusRestriction,
 } from "./tenant-access.js";
 
 const resources = [
@@ -143,5 +146,52 @@ describe("tenant access", () => {
         { id: "student-b", tenantId: "tenant-b", responsibleTeacherId: "teacher-a" },
       ]),
     ).toEqual([{ id: "student-a", tenantId: "tenant-a", responsibleTeacherId: "teacher-a" }]);
+  });
+
+  it("kampüs kısıtı yalnız CAMPUSES üyeliğinde oluşur, kampüssüz operasyon çalışanı fail-closed reddedilir", () => {
+    const base = { userId: "staff-a", tenantId: "tenant-a", bypassRls: false };
+
+    expect(resolveCampusRestriction({ ...base, roles: ["TENANT_ADMIN"] })).toBeUndefined();
+    expect(resolveCampusRestriction({
+      ...base,
+      roles: ["OPERATIONS_STAFF"],
+      campusScope: { scopeMode: "TENANT", campusIds: [] },
+    })).toBeUndefined();
+    expect(resolveCampusRestriction({
+      ...base,
+      roles: ["TEACHER"],
+      subjectType: "TEACHER",
+      subjectId: "teacher-a",
+    })).toBeUndefined();
+    expect([...resolveCampusRestriction({
+      ...base,
+      roles: ["ASSISTANT_ADMIN"],
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a", "campus-a"] },
+    })!]).toEqual(["campus-a"]);
+    expect(() => resolveCampusRestriction({ ...base, roles: ["OPERATIONS_STAFF"] })).toThrow("CAMPUS_SCOPE_MISSING");
+    expect(resolveCampusRestriction({ userId: "sys", tenantId: null, roles: ["SYSTEM_ADMIN"], bypassRls: true })).toBeUndefined();
+  });
+
+  it("kampüs kapsamı kampüsü olmayan kaydı ve başka tenant sınıfını dışarıda bırakır", () => {
+    const restriction = new Set(["campus-a"]);
+    const context = {
+      userId: "staff-a",
+      tenantId: "tenant-a",
+      roles: ["ASSISTANT_ADMIN"],
+      bypassRls: false,
+      campusScope: { scopeMode: "CAMPUSES" as const, campusIds: ["campus-a"] },
+    };
+
+    expect(isCampusInScope(undefined, undefined)).toBe(true);
+    expect(isCampusInScope(restriction, "campus-a")).toBe(true);
+    expect(isCampusInScope(restriction, "campus-b")).toBe(false);
+    expect(isCampusInScope(restriction, null)).toBe(false);
+    expect([...campusScopedClassIds(context, restriction, [
+      { id: "class-a", tenantId: "tenant-a", campusId: "campus-a" },
+      { id: "class-deleted", tenantId: "tenant-a", campusId: "campus-a", deletedAt: "2026-10-01T00:00:00.000Z" },
+      { id: "class-b", tenantId: "tenant-a", campusId: "campus-b" },
+      { id: "class-none", tenantId: "tenant-a" },
+      { id: "class-other-tenant", tenantId: "tenant-b", campusId: "campus-a" },
+    ])]).toEqual(["class-a"]);
   });
 });

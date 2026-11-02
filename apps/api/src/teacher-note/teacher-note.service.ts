@@ -5,6 +5,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
@@ -17,9 +18,12 @@ import { type StudentStore, studentStoreToken } from "../student/student-store.j
 import {
   assertSubjectResourceAccess,
   assertTenantResourceAccess,
+  campusScopedClassIds,
   filterTeacherScopedStudents,
   filterTenantResources,
+  isCampusInScope,
   isTeacherSubjectContext,
+  resolveCampusRestriction,
 } from "../tenant/tenant-access.js";
 import { type TeacherNoteStore, teacherNoteStoreToken } from "./teacher-note-store.js";
 
@@ -45,13 +49,14 @@ export class TeacherNoteService {
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() @Inject(classStoreToken) private readonly classStore?: ClassStore,
   ) {}
 
   async list(context: RequestContext, filters: TeacherNoteListFilters = {}): Promise<TeacherNoteRecord[]> {
     const notes = filters.studentId
       ? await this.listForTenantStudent(context, filters.studentId)
       : await this.filterForTeacherScope(context, filterTenantResources(context, await this.store.list()).filter((note) => !note.deletedAt));
-    return this.filterByStudentClass(context, notes, filters.classId);
+    return this.filterByStudentClass(context, await this.filterForCampusScope(context, notes), filters.classId);
   }
 
   async listCurrentStudent(context: RequestContext): Promise<TeacherNoteRecord[]> {
@@ -83,6 +88,7 @@ export class TeacherNoteService {
 
   private async createOnce(context: RequestContext, input: Partial<TeacherNoteInput>): Promise<TeacherNoteRecord> {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "TEACHER_NOTE_STUDENT_REQUIRED"));
+    await this.assertStudentInCampusScope(context, student);
     const teacher = await this.findTeacherForTenant(context, await this.resolveTeacherId(context, input.teacherId));
     const academicContext = await this.resolveAcademicContext(context, student.tenantId, input);
     await assertTeacherAssigned(context, this.teacherAssignmentStore, {
@@ -230,6 +236,11 @@ export class TeacherNoteService {
 
     this.assertTenantAccess(context, record);
     await this.assertNoteTeacherScope(context, record);
+    if (this.campusRestriction(context)) {
+      const student = await this.studentStore.findById(record.studentId);
+      if (!student) throw new ForbiddenException("TEACHER_NOTE_CAMPUS_SCOPE_FORBIDDEN");
+      await this.assertStudentInCampusScope(context, student);
+    }
     return record;
   }
 
@@ -314,6 +325,48 @@ export class TeacherNoteService {
 
     const scopedStudentIds = new Set(filterTeacherScopedStudents(context, await this.studentStore.list()).map((student) => student.id));
     return notes.filter((note) => note.teacherId === context.subjectId && scopedStudentIds.has(note.studentId));
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("TEACHER_NOTE_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  // A note belongs to its student's current class campus; a student without a class fails closed.
+  private async filterForCampusScope(context: RequestContext, notes: TeacherNoteRecord[]): Promise<TeacherNoteRecord[]> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return notes;
+
+    const allowedClassIds = this.classStore
+      ? campusScopedClassIds(context, restriction, await this.classStore.list())
+      : new Set<string>();
+    const allowedStudentIds = new Set(
+      filterTenantResources(context, await this.studentStore.list())
+        .filter((student) => Boolean(student.classId && allowedClassIds.has(student.classId)))
+        .map((student) => student.id),
+    );
+    return notes.filter((note) => allowedStudentIds.has(note.studentId));
+  }
+
+  private async assertStudentInCampusScope(
+    context: RequestContext,
+    student: { tenantId: string; classId?: string },
+  ): Promise<void> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return;
+
+    const schoolClass = student.classId && this.classStore ? await this.classStore.findById(student.classId) : undefined;
+    if (
+      !schoolClass
+      || schoolClass.deletedAt
+      || schoolClass.tenantId !== student.tenantId
+      || !isCampusInScope(restriction, schoolClass.campusId)
+    ) {
+      throw new ForbiddenException("TEACHER_NOTE_CAMPUS_SCOPE_FORBIDDEN");
+    }
   }
 
   private async filterByStudentClass(context: RequestContext, notes: TeacherNoteRecord[], classId: string | undefined): Promise<TeacherNoteRecord[]> {
