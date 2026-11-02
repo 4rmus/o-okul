@@ -5,6 +5,12 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
+import {
+  campusOperationsStaffEmail,
+  registerExamOperationsStaff,
+  tenantWideOperationsStaffEmail,
+} from "./exam-operations-staff.test-support.js";
 import {
   rawImportQuarantineStoreToken,
   type ImportQuarantineRecord,
@@ -41,6 +47,8 @@ describe("RawImportController", () => {
   let analysisStore: FakeAnalysisStore;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    registerExamOperationsStaff();
     archiveStore = new FakeArchiveStore();
     repository = new FakeRepository();
     producer = new FakeProducer();
@@ -92,6 +100,68 @@ describe("RawImportController", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
+  });
+
+  it("tenant geneli OPERATIONS_STAFF optik yükler, eşleşmeyeni çözer ve değerlendirmeyi izler; kampüs kapsamlı 403 alır (DEC-20261102-03)", async () => {
+    const ops = await login(tenantWideOperationsStaffEmail);
+    const campus = await login(campusOperationsStaffEmail);
+    const uploadBody = {
+      sourceType: "OPTICAL_TXT",
+      fileName: "answers.dat",
+      fileBase64: Buffer.from("ogrenci_no\tcevaplar").toString("base64"),
+      contentType: "text/plain",
+      parserConfigVersion: "parser-v1",
+    };
+
+    const rejectedUpload = await request(server)
+      .post("/exams/exam-a/raw-imports")
+      .set("Authorization", `Bearer ${campus.accessToken}`)
+      .send(uploadBody)
+      .expect(403);
+    expect(rejectedUpload.body.error.code).toBe("RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+    for (const path of [
+      "/exams/exam-a/raw-imports/raw-import-a/quarantines",
+      "/exams/exam-a/raw-imports/raw-import-a/summary",
+      "/exams/exam-a/raw-imports/raw-import-a/evaluation-status?answerKeyId=answer-key-a",
+    ]) {
+      await request(server).get(path).set("Authorization", `Bearer ${campus.accessToken}`).expect(403);
+    }
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${campus.accessToken}`)
+      .send({ answerKeyId: "answer-key-a" })
+      .expect(403);
+    expect(archiveStore.puts).toHaveLength(0);
+    expect(repository.creates).toHaveLength(0);
+    expect(producer.inputs).toHaveLength(0);
+
+    const uploaded = await request(server)
+      .post("/exams/exam-a/raw-imports")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .send(uploadBody)
+      .expect(201);
+    expect(uploaded.body).toMatchObject({ rawImport: { tenantId: "tenant-a", examId: "exam-a" }, status: "uploaded" });
+    await request(server)
+      .get("/exams/exam-a/raw-imports/raw-import-a/quarantines")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .expect(200);
+    await request(server)
+      .get("/exams/exam-a/raw-imports/raw-import-a/summary")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .expect(200);
+    const evaluation = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .send({ answerKeyId: "answer-key-a" })
+      .expect(201);
+    expect(evaluation.body).toMatchObject({ tenantId: "tenant-a", queuedCount: 2, queueName: "exam-evaluation" });
+    analysisStore.evaluatedCount = 2;
+    const status = await request(server)
+      .get("/exams/exam-a/raw-imports/raw-import-a/evaluation-status?answerKeyId=answer-key-a")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .expect(200);
+    expect(status.body).toMatchObject({ evaluatedCount: 2, status: "COMPLETED" });
   });
 
   it("TENANT_ADMIN RawImport upload isteğini arşiv + DB + excel-import enqueue zincirine bağlar", async () => {

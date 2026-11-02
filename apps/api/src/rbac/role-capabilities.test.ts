@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFinanceOnlyStaff } from "@o-okul/shared-types";
+import { canAccessExamWorkspace, isFinanceOnlyStaff } from "@o-okul/shared-types";
 import { capabilitiesForRoles, hasCapability } from "./role-capabilities.js";
 
 describe("role capabilities", () => {
@@ -101,6 +101,24 @@ describe("role capabilities", () => {
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:list")).toBe(false);
     expect(hasCapability({ roles: ["STUDENT"] }, "student:manage")).toBe(false);
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:manage")).toBe(false);
+  });
+
+  // DEC-20261102-03: capability matrisi değişmez; sınav çalışma alanı rol/persona kuralı OPERATIONS_STAFF'ı STAFF
+  // personasında açar. Kampüs kapsamı oturumda olmadığından API ayrıca reddeder.
+  it("sınav çalışma alanı yönetici rolleri ve STAFF personasındaki OPERATIONS_STAFF'a açılır", () => {
+    for (const role of ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF"]) {
+      expect(canAccessExamWorkspace([role], "STAFF")).toBe(true);
+      expect(canAccessExamWorkspace([role], "TEACHER")).toBe(false);
+    }
+    expect(canAccessExamWorkspace(["TENANT_ADMIN"], undefined)).toBe(true);
+    expect(canAccessExamWorkspace(["OPERATIONS_STAFF"], undefined)).toBe(false);
+    expect(canAccessExamWorkspace(["OPERATIONS_STAFF", "TEACHER"], "STAFF")).toBe(false);
+    expect(canAccessExamWorkspace(["OPERATIONS_STAFF", "FINANCE_STAFF"], "STAFF")).toBe(true);
+    expect(canAccessExamWorkspace(["TENANT_ADMIN", "TEACHER"], "STAFF")).toBe(true);
+    for (const role of ["SYSTEM_ADMIN", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN"]) {
+      expect(canAccessExamWorkspace([role], "STAFF")).toBe(false);
+    }
+    expect(capabilitiesForRoles(["OPERATIONS_STAFF"])).toEqual(capabilitiesForRoles(["ASSISTANT_ADMIN"]));
   });
 
   it("yalnız finans rolü olan kullanıcıyı ayırır; ek kurum rolü olanı ayırmaz (KF-1)", () => {

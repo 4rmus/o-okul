@@ -10,6 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { AnswerKeyExcelImportService } from "../exam/answer-key-excel-import.service.js";
 import {
+  campusOperationsStaffEmail,
+  registerExamOperationsStaff,
+  tenantWideOperationsStaffEmail,
+} from "../exam/exam-operations-staff.test-support.js";
+import {
   answerKeyRepositoryToken,
   type AnswerKeyRepository,
   type SaveAnswerKeyInput,
@@ -107,6 +112,7 @@ describe("Capability access matrix", () => {
     registerTestLoginIdentity("finance-rbac@example.test", { tenantSlug: "dna-egitim" });
     registerTestLoginIdentity("finance-tenant-scope@example.test", { tenantSlug: "dna-egitim" });
     registerTestLoginIdentity("finance-no-scope@example.test", { tenantSlug: "dna-egitim" });
+    registerExamOperationsStaff();
 
     answerKeys = new FakeAnswerKeyRepository();
     const moduleRef = await Test.createTestingModule({
@@ -499,6 +505,33 @@ describe("Capability access matrix", () => {
       .post("/exams")
       .set("Authorization", `Bearer ${teacherToken}`)
       .send(examCreateBody("Öğretmen Yetki Denemesi"))
+      .expect(403);
+  });
+
+  it("tenant geneli OPERATIONS_STAFF sınıflı sınav açar; kampüs kapsamlı OPERATIONS_STAFF sınav servisine giremez (DEC-20261102-03)", async () => {
+    const ops = await login(tenantWideOperationsStaffEmail);
+    const campus = await login(campusOperationsStaffEmail);
+
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${ops}`)
+      .send({ ...examCreateBody("Operasyon Yetki Denemesi"), classIds: ["class-a"] })
+      .expect(201);
+    const participants = await request(server)
+      .get(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${ops}`)
+      .expect(200);
+    expect(participants.body).toEqual(expect.arrayContaining([expect.objectContaining({ studentId: "student-a" })]));
+
+    const rejected = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${campus}`)
+      .send(examCreateBody("Kampüs Yetki Denemesi"))
+      .expect(403);
+    expect(rejected.body.error.code).toBe("EXAM_CAMPUS_SCOPE_FORBIDDEN");
+    await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${campus}`)
       .expect(403);
   });
 

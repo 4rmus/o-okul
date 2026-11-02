@@ -43,6 +43,29 @@ tenant aktivasyonu bu kapsamda değildir.
 - Bu workspace kampüs kapsamlı çalışana açılmaz. Önceden var olan kampüs kapsamlı rapor erişim borcu
   bu dilimin dışındadır ve kampüs pilotu/Gate D öncesi ayrı güvenlik kapısıdır.
 
+### 2026-11-02 güncellemesi: DEC-20261102-03
+
+Yukarıdaki "operasyon çalışanı workspace'e yönlendirilmez" maddesi bu kayıtla daralan biçimde değişir:
+
+- Tenant geneli OPERATIONS_STAFF (STAFF personası, üyelik kapsamı `TENANT`, `academic:manage`) sınav
+  çalışma alanını, `GET /exams/:id/workspace` ucunu ve katılımcı, cevap anahtarı, optik yükleme,
+  değerlendirme ve rapor adımlarını kullanır. Capability matrisi değişmez.
+- Katılımcı ekleme ve sınıfla katılımcı yazımı için sınav servisinde sınava özel bir kural vardır.
+  OPERATIONS_STAFF paylaşılan öğretmen ataması baypasına (`canBypassTeacherAssignment`) eklenmez; yoklama,
+  ödev, not defteri, öğretmen notu, gelişim ve veli yollarının kapsamı genişlemez.
+- Kampüs kapsamlı OPERATIONS_STAFF sınav servislerinden 403 ile dışarıda kalır. Kapsamı olmayan STAFF
+  oturumu, rol önizlemesi ve OPERATIONS_STAFF+TEACHER çift rollü kullanıcı workspace'e alınmaz; çift rollü
+  kullanıcının öğretmen atamasıyla daralan okumaları ayrı bir güvenlik dilimidir.
+- Web oturumu kampüs kapsamı taşımadığından web kuralı rol/persona ile açar; kampüs kapsamlı üyelikte
+  API 403 döner ve çerçeve nötr başlıkta kalır.
+- `POST /exams` sınıf listesiyle çağrıldığında sınıflar ve çağıranın katılımcı kapsamı yazımdan önce
+  doğrulanır; katılımcı ekleyemeyecek çağıran için sınav oluşturulmaz ve denetim kaydı yazılmaz.
+  `PATCH /exams/:id` aynı ön doğrulamayı uygular.
+- Kanıt: `apps/api/src/exam/exam.controller.e2e.test.ts`, `answer-key.controller.e2e.test.ts`,
+  `raw-import.controller.e2e.test.ts`, `apps/api/src/report/report-generation.controller.e2e.test.ts`,
+  `apps/api/src/rbac/capability-access.e2e.test.ts`, `gate-c-exam-workspace-next.spec.ts` ve
+  `exam-workspace-consolidation-next.spec.ts` (LOCAL_TEST; Playwright doğrulaması ayrı aşamada).
+
 ## Yerel doğrulama
 
 | Kontrol | Sonuç |

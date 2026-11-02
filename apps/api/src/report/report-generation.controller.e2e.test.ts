@@ -6,6 +6,12 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
+import {
+  campusOperationsStaffEmail,
+  registerExamOperationsStaff,
+  tenantWideOperationsStaffEmail,
+} from "../exam/exam-operations-staff.test-support.js";
 import type { ProducedJob } from "../queue/job-producer.js";
 import {
   createReportGenerationContentHash,
@@ -30,6 +36,8 @@ describe("ReportGenerationController", () => {
   let snapshotStore: FakeReportSnapshotStore;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    registerExamOperationsStaff();
     producer = new FakeProducer();
     pdfRenderer = new FakePdfRenderer();
     generationJobStatuses = new FakeReportGenerationJobStatusReader();
@@ -55,6 +63,7 @@ describe("ReportGenerationController", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   it("TENANT_ADMIN rapor üretim işini report-generation queue'ya bağlar", async () => {
@@ -232,6 +241,30 @@ describe("ReportGenerationController", () => {
       .get("/exams/exam-a/reports/snapshots/snapshot-a/export.pdf")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
+  });
+
+  it("tenant geneli OPERATIONS_STAFF sınav raporunu okur ve üretir; kampüs kapsamlı 403 alır (DEC-20261102-03)", async () => {
+    const ops = await login(tenantWideOperationsStaffEmail);
+    const campus = await login(campusOperationsStaffEmail);
+
+    for (const path of ["/exams/exam-a/reports/snapshots", "/exams/exam-a/reports/snapshots/snapshot-a/export.xlsx"]) {
+      await request(server).get(path).set("Authorization", `Bearer ${ops.accessToken}`).expect(200);
+      const rejected = await request(server).get(path).set("Authorization", `Bearer ${campus.accessToken}`).expect(403);
+      expect(rejected.body.error.code).toBe("REPORT_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    producer.inputs = [];
+    await request(server)
+      .post("/exams/exam-a/reports/generation-jobs")
+      .set("Authorization", `Bearer ${campus.accessToken}`)
+      .send({ reportType: examResultSummaryReportType })
+      .expect(403);
+    expect(producer.inputs).toEqual([]);
+    await request(server)
+      .post("/exams/exam-a/reports/generation-jobs")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .send({ reportType: examResultSummaryReportType })
+      .expect(201);
+    expect(producer.inputs).toEqual([expect.objectContaining({ tenantId: "tenant-a", entityId: "exam-a", userId: "user-ops-tenant" })]);
   });
 
   it("STUDENT ve GUARDIAN kurum rapor snapshotlarına erişemez", async () => {
