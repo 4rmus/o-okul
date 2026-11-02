@@ -30,6 +30,7 @@ import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../.
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { AttendanceRoster } from "../../_shared/attendance-status-picker.js";
 import { formatDateKey, istanbulDateKey } from "../../_shared/format.js";
+import { listCsvExportOptions } from "../../../../src/list-export.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
@@ -255,6 +256,12 @@ export function AttendancePage() {
         }
         emptyText="Devamsızlık kaydı yok"
         error={attendanceQuery.isError ? "Devamsızlık kayıtları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined}
+        exportOptions={listCsvExportOptions(auth ? {
+          accessToken: auth.accessToken,
+          fileName: "devamsizlik",
+          filters: { classId, page: listQuery.page, q: listQuery.q.trim(), sort: listQuery.sort },
+          list: "attendance",
+        } : null)}
         getRowKey={(record) => record.id}
         density="compact"
         hasActiveFilters={Boolean(listQuery.q.trim())}

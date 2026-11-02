@@ -119,6 +119,7 @@ function auditCategory(record: AuditLogRecord): AuditLogCategory {
 
 function formatAuditAction(action: string) {
   const normalizedAction = normalizeAuditSearchText(action);
+  if (normalizedAction === "list.exported") return "Liste dışa aktarıldı";
   if (normalizedAction.startsWith("auth.login")) return "Oturum açıldı";
   if (normalizedAction.startsWith("auth.")) return "Kimlik olayı";
   if (normalizedAction.startsWith("identity_invitation.")) return "Davet olayı";
@@ -152,6 +153,7 @@ function formatAuditEntity(record: AuditLogRecord) {
   const normalizedAction = normalizeAuditSearchText(record.action);
   const combined = `${normalizedEntity} ${normalizedAction}`;
 
+  if (normalizedEntity === "listexport") return "Liste dışa aktarma kaydı";
   if (combined.includes("auth")) return "Kimlik kaydı";
   if (combined.includes("invitation")) return "Davet kaydı";
   if (combined.includes("finance") || combined.includes("payment")) return "Finans görünürlüğü kaydı";
@@ -294,6 +296,9 @@ const allowedAuditDiffKeys = new Set([
   "loginnameassigned",
   "roleremoved",
   "sessionsclosed",
+  // DEC-20261102-08: list export audit keeps only active filter keys and id/sort/page values; the list-export
+  // validation rejects free text and drops the search value, so no name reaches this key.
+  "filterssummary",
 ]);
 
 function sensitiveAuditKey(key: string): boolean {

@@ -15,6 +15,7 @@ import {
   type ClassFormPayload,
   type ClassFormState,
 } from "../../../../src/form-validation.js";
+import { listCsvExportOptions } from "../../../../src/list-export.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
@@ -306,6 +307,12 @@ export function ClassesPage() {
           />
         }
         emptyText="Sınıf kaydı yok"
+        exportOptions={listCsvExportOptions(auth ? {
+          accessToken: auth.accessToken,
+          fileName: "siniflar",
+          filters: { page: listQuery.page, q: listQuery.q.trim(), sort: listQuery.sort },
+          list: "classes",
+        } : null)}
         error={
           error ||
           (classesQuery.isError ? "Sınıflar alınamadı." : campusesQuery.isError ? "Kampüsler alınamadı." : gradeLevelsQuery.isError ? "Seviyeler alınamadı." : undefined)

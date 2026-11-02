@@ -1,11 +1,28 @@
 "use client";
 
-import { useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 import { classNames } from "../class-names.js";
 import { Alert } from "./alert.js";
+import { Button } from "./button.js";
 import { DataTable, type DataTableColumn, type DataTableSelectionOptions } from "./data-table.js";
+import { readDataTableSnapshot, type DataTableSnapshot, type ReadDataTableSnapshotOptions } from "./data-table-export.js";
+import { Tooltip } from "./tooltip.js";
 
 type CrudPageDensity = "comfortable" | "compact";
+
+/**
+ * İsteğe bağlı CSV dışa aktarma (DEC-20261102-08). Düğme tablonun o an gösterdiği satırların ve sütunların ekrandaki
+ * (biçimlenmiş, maskeli) metnini `onExport`'a verir; veri yeniden çekilmez. `onExport` reddedilirse (örneğin denetim
+ * kaydı yazılamadıysa) dosya oluşmaz ve hata mesajı gösterilir.
+ */
+export interface CrudPageExportOptions extends ReadDataTableSnapshotOptions {
+  /** Hata mesajı; verilmezse genel metin gösterilir. */
+  errorMessage?: string;
+  /** Düğmenin açıklama ipucu. */
+  hint?: string;
+  label?: string;
+  onExport(snapshot: DataTableSnapshot): Promise<void> | void;
+}
 
 export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "title"> {
   actions?: ReactNode;
@@ -15,6 +32,8 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   emptyState?: ReactNode;
   emptyText?: ReactNode;
   error?: ReactNode;
+  /** Verildiğinde tablonun üstünde CSV dışa aktarma düğmesi çizilir; portallarda verilmez. */
+  exportOptions?: CrudPageExportOptions;
   filteredEmptyState?: ReactNode;
   getRowKey(row: TRow): string;
   hasActiveFilters?: boolean;
@@ -39,6 +58,7 @@ export function CrudPage<TRow>({
   emptyState,
   emptyText,
   error,
+  exportOptions,
   filteredEmptyState,
   getRowKey,
   hasActiveFilters = false,
@@ -70,6 +90,23 @@ export function CrudPage<TRow>({
   const tableRows = loading ? lastLoadedRowsRef.current : rows;
   const shouldRenderEmptyState = !loading && !error && rows.length === 0 && resolvedEmptyState;
   const shouldRenderTable = loading || (!error && !shouldRenderEmptyState);
+  const tableShellRef = useRef<HTMLDivElement>(null);
+  const [exportState, setExportState] = useState<{ message: string; status: "error" | "idle" | "pending" | "success" }>({ message: "", status: "idle" });
+  const canExport = Boolean(exportOptions) && !loading && !error && rows.length > 0;
+
+  async function handleExport() {
+    const table = tableShellRef.current?.querySelector<HTMLTableElement>("table");
+    if (!exportOptions || !table || exportState.status === "pending") return;
+    const snapshot = readDataTableSnapshot(table, exportOptions);
+    if (snapshot.rows.length === 0) return;
+    setExportState({ message: "", status: "pending" });
+    try {
+      await exportOptions.onExport(snapshot);
+      setExportState({ message: `${snapshot.rows.length.toLocaleString("tr-TR")} satır CSV olarak indirildi.`, status: "success" });
+    } catch {
+      setExportState({ message: exportOptions.errorMessage ?? "Dışa aktarma tamamlanamadı; dosya oluşturulmadı. Lütfen yeniden deneyin.", status: "error" });
+    }
+  }
 
   return (
     <section {...props} className={classNames("uh-crud-page", className)}>
@@ -87,10 +124,31 @@ export function CrudPage<TRow>({
           {error}
         </Alert>
       ) : null}
+      {exportOptions && shouldRenderTable ? (
+        <div className="uh-crud-page__table-tools">
+          <Tooltip label={exportOptions.hint ?? "Yalnız bu sayfada görünen satırlar ve sütunlar, ekrandaki maskeli biçimiyle indirilir."}>
+            <Button
+              disabled={!canExport}
+              loading={exportState.status === "pending"}
+              loadingLabel="Dışa aktarılıyor"
+              onClick={() => void handleExport()}
+              size="sm"
+              variant="secondary"
+            >
+              {exportOptions.label ?? "CSV indir"}
+            </Button>
+          </Tooltip>
+          {exportState.status === "error" ? (
+            <p className="uh-crud-page__error" role="alert">{exportState.message}</p>
+          ) : (
+            <p className="uh-crud-page__success" role="status">{exportState.status === "success" ? exportState.message : ""}</p>
+          )}
+        </div>
+      ) : null}
       {shouldRenderEmptyState ? (
         resolvedEmptyState
       ) : shouldRenderTable ? (
-        <div className="uh-crud-page__table-shell">
+        <div className="uh-crud-page__table-shell" ref={tableShellRef}>
           <DataTable<TRow>
             caption={tableCaption}
             columns={columns}

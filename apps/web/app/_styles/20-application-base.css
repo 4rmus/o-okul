@@ -2424,6 +2424,28 @@
   border-radius: var(--radius-lg);
 }
 
+/* DEC-20261102-08: isteğe bağlı CSV dışa aktarma; tablonun hemen üstünde sağa yaslı kısa düğme ve sonuç metni. */
+.uh-crud-page__table-tools {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.uh-crud-page__table-tools > p:empty {
+  display: none;
+}
+
+/* Dokunmatik genişliklerde dışa aktarma düğmesi 44 px hedef taşır. */
+@media (max-width: 1023px) {
+  .uh-crud-page__table-tools .uh-button {
+    min-height: 44px;
+  }
+}
+
 .uh-crud-page__table-shell .uh-data-table {
   min-width: min(760px, 100%);
 }

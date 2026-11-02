@@ -2342,6 +2342,32 @@ export interface StudentAuditSummaryRecord {
   createdAt: string;
 }
 
+/**
+ * Lists whose screen offers a masked CSV export (DEC-20261102-08). The export is built in the browser from the
+ * cells the list already shows; the API only records who exported which list and how many rows, never row content.
+ */
+export const listExportKinds = ["students", "teachers", "classes", "attendance"] as const;
+export type ListExportKind = (typeof listExportKinds)[number];
+/** Upper bound for one export: a list screen shows at most one page of rows. */
+export const listExportMaxRowCount = 1000;
+
+export interface ListExportAuditRequest {
+  list: ListExportKind;
+  rowCount: number;
+  /**
+   * Active filter keys of the list screen, `key` or `key=value` pairs joined with `;` (for example
+   * `q;classId=class-a;sort=-date;page=2`). Search text is never sent: the `q` key carries no value.
+   */
+  filtersSummary: string;
+}
+
+export interface ListExportAuditRecord {
+  auditId: string;
+  list: ListExportKind;
+  recordedAt: string;
+  rowCount: number;
+}
+
 export type ExamScoreType = "LGS" | "TYT" | "SAY" | "EA" | "SOZ";
 export type ExamScoreStatus = "CALCULATED" | "NOT_ELIGIBLE" | "MISSING_TYT";
 
