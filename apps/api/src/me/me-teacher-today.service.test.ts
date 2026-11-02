@@ -31,25 +31,92 @@ describe("buildTeacherTodaySummary", () => {
   });
 });
 
+const context = { tenantId: "t", roles: ["TEACHER"], bypassRls: false, subjectType: "TEACHER", subjectId: "teacher-a", userId: "u" };
+
+function createService(overrides: Partial<Record<"teachers" | "schedules" | "homework" | "reportIndex" | "school" | "gradebook" | "announcements" | "store", object>> = {}) {
+  return new MeTeacherTodayService(
+    (overrides.teachers ?? { findCurrentTeacher: vi.fn().mockResolvedValue({ firstName: "Ayşe", lastName: "Öğretmen" }) }) as never,
+    (overrides.schedules ?? { listCurrentTeacherLessons: vi.fn().mockResolvedValue([{ id: "l1", classId: "c1", title: "8-A", startsAt: "2026-10-01T06:30:00.000Z", endsAt: "2026-10-01T07:10:00.000Z" }]) }) as never,
+    (overrides.homework ?? { list: vi.fn().mockResolvedValue([{ id: "h1", classId: "c1", title: "Ödev" }]) }) as never,
+    (overrides.reportIndex ?? { listForTeacher: vi.fn().mockResolvedValue([]) }) as never,
+    (overrides.school ?? { listClasses: vi.fn().mockResolvedValue([]) }) as never,
+    (overrides.gradebook ?? { listAssessments: vi.fn().mockResolvedValue([]) }) as never,
+    (overrides.announcements ?? { listCurrentTeacher: vi.fn().mockResolvedValue([]) }) as never,
+    (overrides.store ?? { loadInbox: vi.fn().mockResolvedValue(undefined) }) as never,
+  );
+}
+
 describe("MeTeacherTodayService", () => {
   it("rapor dizini hatasında dersleri ve ödevleri döner, son raporu null yapar", async () => {
-    const context = { tenantId: "t", roles: ["TEACHER"], bypassRls: false, subjectType: "TEACHER", subjectId: "teacher-a", userId: "u" };
-    const service = new MeTeacherTodayService(
-      { findCurrentTeacher: vi.fn().mockResolvedValue({ firstName: "Ayşe", lastName: "Öğretmen" }) } as never,
-      { listCurrentTeacherLessons: vi.fn().mockResolvedValue([{ id: "l1", classId: "c1", title: "8-A", startsAt: "2026-10-01T06:30:00.000Z", endsAt: "2026-10-01T07:10:00.000Z" }]) } as never,
-      { list: vi.fn().mockResolvedValue([{ id: "h1", classId: "c1", title: "Ödev" }]) } as never,
-      { listForTeacher: vi.fn().mockRejectedValue(new Error("REPORT_INDEX_DOWN")) } as never,
-    );
+    const service = createService({ reportIndex: { listForTeacher: vi.fn().mockRejectedValue(new Error("REPORT_INDEX_DOWN")) } });
     const summary = await service.get(context as never, now);
     expect(summary.todayLessons).toHaveLength(1);
     expect(summary.pendingHomeworkCount).toBe(1);
     expect(summary.latestReport).toBeNull();
   });
 
+  it("gelen kutusunu yalnız öğretmen kapsamındaki ders, ödev ve değerlendirme kimlikleriyle okur", async () => {
+    const loadInbox = vi.fn().mockResolvedValue({ attendanceClassIds: ["c1"], pendingSubmissionCount: 3, unpublishedGradeDraftCount: 2 });
+    const service = createService({
+      schedules: {
+        listCurrentTeacherLessons: vi.fn().mockResolvedValue([
+          { id: "l1", classId: "c1", title: "8-A Matematik", startsAt: "2026-10-01T06:30:00.000Z", endsAt: "2026-10-01T07:10:00.000Z" },
+          { id: "l2", classId: "c2", title: "8-B Matematik", startsAt: "2026-10-01T08:30:00.000Z", endsAt: "2026-10-01T09:10:00.000Z" },
+          { id: "l3", classId: "c3", title: "Yarın", startsAt: "2026-10-02T06:30:00.000Z", endsAt: "2026-10-02T07:10:00.000Z" },
+        ]),
+      },
+      school: {
+        listClasses: vi.fn().mockResolvedValue([
+          { id: "c1", name: "8-A", tenantId: "t" },
+          { id: "c2", name: "8-B", tenantId: "t" },
+          { id: "c9", name: "Başka sınıf", tenantId: "t" },
+        ]),
+      },
+      gradebook: { listAssessments: vi.fn().mockResolvedValue([{ id: "a1" }, { id: "a2" }]) },
+      announcements: { listCurrentTeacher: vi.fn().mockResolvedValue([{ id: "n1" }, { id: "n2", readAt: "2026-09-30T10:00:00.000Z" }, { id: "n3" }]) },
+      store: { loadInbox },
+    });
+    const summary = await service.get(context as never, now);
+
+    expect(loadInbox).toHaveBeenCalledWith({ tenantId: "t", date: "2026-10-01", classIds: ["c1", "c2"], homeworkIds: ["h1"], assessmentIds: ["a1", "a2"] });
+    expect(summary.todayLessons.map(({ id, className, attendanceTaken }) => ({ id, className, attendanceTaken }))).toEqual([
+      { id: "l1", className: "8-A", attendanceTaken: true },
+      { id: "l2", className: "8-B", attendanceTaken: false },
+    ]);
+    expect(summary.pendingSubmissionCount).toBe(3);
+    expect(summary.unpublishedGradeDraftCount).toBe(2);
+    expect(summary.unreadAnnouncementCount).toBe(2);
+    expect(JSON.stringify(summary)).not.toContain("Başka sınıf");
+  });
+
+  it("gelen kutusu kaynakları okunamazsa sayaçları sıfır yerine yanıttan düşürür", async () => {
+    const loadInbox = vi.fn().mockResolvedValue({ attendanceClassIds: [], pendingSubmissionCount: 0 });
+    const service = createService({
+      school: { listClasses: vi.fn().mockRejectedValue(new Error("CLASSES_DOWN")) },
+      gradebook: { listAssessments: vi.fn().mockRejectedValue(new Error("GRADEBOOK_DOWN")) },
+      announcements: { listCurrentTeacher: vi.fn().mockRejectedValue(new Error("ANNOUNCEMENTS_DOWN")) },
+      store: { loadInbox },
+    });
+    const summary = await service.get(context as never, now);
+
+    expect(loadInbox).toHaveBeenCalledWith({ tenantId: "t", date: "2026-10-01", classIds: ["c1"], homeworkIds: ["h1"] });
+    expect(summary.todayLessons[0]).not.toHaveProperty("className");
+    expect(summary.todayLessons[0]?.attendanceTaken).toBe(false);
+    expect(summary.pendingSubmissionCount).toBe(0);
+    expect(summary).not.toHaveProperty("unpublishedGradeDraftCount");
+    expect(summary).not.toHaveProperty("unreadAnnouncementCount");
+
+    const unknownInbox = await createService({ store: { loadInbox: vi.fn().mockRejectedValue(new Error("DB_DOWN")) } }).get(context as never, now);
+    expect(unknownInbox.todayLessons[0]).not.toHaveProperty("attendanceTaken");
+    expect(unknownInbox).not.toHaveProperty("pendingSubmissionCount");
+    expect(unknownInbox).not.toHaveProperty("unpublishedGradeDraftCount");
+    expect(unknownInbox.pendingHomeworkCount).toBe(1);
+  });
+
   it("öğretmen özne bağlamı olmadan hiçbir alt servisi çağırmaz", async () => {
     const calls = vi.fn();
     const stub = new Proxy({}, { get: () => calls });
-    const service = new MeTeacherTodayService(stub as never, stub as never, stub as never, stub as never);
+    const service = new MeTeacherTodayService(stub as never, stub as never, stub as never, stub as never, stub as never, stub as never, stub as never, stub as never);
     for (const context of [
       { tenantId: "t", roles: ["TEACHER"], bypassRls: false },
       { tenantId: "t", roles: ["STUDENT"], subjectType: "STUDENT", subjectId: "s", bypassRls: false },

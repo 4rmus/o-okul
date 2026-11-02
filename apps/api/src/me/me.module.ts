@@ -26,6 +26,7 @@ import {
   institutionDashboardStoreToken,
 } from "./me-institution-dashboard.store.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { createTeacherTodayStore, teacherTodayStoreToken } from "./me-teacher-today.store.js";
 
 @Module({
   imports: [
@@ -57,6 +58,10 @@ import { MeReportIndexService } from "./me-report-index.service.js";
     {
       provide: institutionDashboardStoreToken,
       useFactory: createInstitutionDashboardStore,
+    },
+    {
+      provide: teacherTodayStoreToken,
+      useFactory: createTeacherTodayStore,
     },
   ],
 })
