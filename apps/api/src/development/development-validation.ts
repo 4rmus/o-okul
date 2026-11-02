@@ -1,6 +1,10 @@
 import { z } from "zod";
-import type { DevelopmentAssessmentCreateRequest, DevelopmentCriterionCreateRequest } from "@o-okul/shared-types";
-import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
+import {
+  developmentMentorNoteMaxLength,
+  type DevelopmentAssessmentCreateRequest,
+  type DevelopmentCriterionCreateRequest,
+} from "@o-okul/shared-types";
+import { optionalTrimmedString, requiredTrimmedString, trimmedString } from "../http/zod-validation.js";
 
 const integerSchema = z.number().int();
 
@@ -18,10 +22,11 @@ const developmentAssessmentScoreBodySchema = z.object({
 
 const developmentAssessmentVisibilitySchema = z.enum(["GUARDIAN", "INTERNAL"]);
 
+// A duplicate criterionId is rejected by the service (DEVELOPMENT_SCORE_CRITERION_DUPLICATE) before any insert.
 export const developmentAssessmentBodySchema = z.object({
-  mentorNote: optionalTrimmedString,
-  periodLabel: requiredTrimmedString,
-  scores: z.array(developmentAssessmentScoreBodySchema).min(1),
+  mentorNote: trimmedString.max(developmentMentorNoteMaxLength).optional(),
+  periodLabel: requiredTrimmedString.max(120),
+  scores: z.array(developmentAssessmentScoreBodySchema).min(1).max(50),
   studentId: requiredTrimmedString,
   teacherId: optionalTrimmedString,
   termId: optionalTrimmedString,

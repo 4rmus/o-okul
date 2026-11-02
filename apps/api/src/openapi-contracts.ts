@@ -991,14 +991,18 @@ const developmentAssessmentRecordSchema = objectSchema({
 }, ["id", "tenantId", "studentId", "teacherId", "periodLabel", "visibility", "scores"]);
 
 const developmentAssessmentCreateRequestSchema = objectSchema({
-  mentorNote: stringSchema(),
-  periodLabel: stringSchema(),
-  scores: arraySchema(developmentAssessmentScoreInputSchema, { minItems: 1 }),
+  mentorNote: stringSchema({ maxLength: 1000 }),
+  periodLabel: stringSchema({ maxLength: 120 }),
+  scores: arraySchema(developmentAssessmentScoreInputSchema, { minItems: 1, maxItems: 50 }),
   studentId: stringSchema(),
   teacherId: stringSchema(),
   termId: stringSchema(),
   visibility: developmentAssessmentVisibilitySchema,
 }, ["periodLabel", "scores", "studentId"]);
+
+const developmentAuthoringScopeSchema = objectSchema({
+  studentIds: arraySchema(stringSchema()),
+}, ["studentIds"]);
 
 const developmentTrendScoreSchema = objectSchema({
   criterionId: stringSchema(),
@@ -3772,6 +3776,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/development/assessments": {
     responseBody: arraySchema(developmentAssessmentRecordSchema),
     listResponse: true,
+  },
+  "get /api/v1/development/authoring-scope": {
+    responseBody: developmentAuthoringScopeSchema,
   },
   "post /api/v1/development/assessments": {
     requestBody: developmentAssessmentCreateRequestSchema,
