@@ -395,7 +395,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 96) throw new Error(`Route manifest must contain exactly 96 entries; found ${manifest.length}.`);
+  if (manifest.length !== 98) throw new Error(`Route manifest must contain exactly 98 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);

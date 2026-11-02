@@ -52,7 +52,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     await expect(form).toBeVisible();
     await expect(panel.getByText("Sağlık veya diğer özel nitelikli kişisel verileri yazmayın.")).toBeVisible();
 
-    const studentSelect = form.getByLabel("Öğrenci");
+    const studentSelect = form.getByRole("combobox", { name: /^Öğrenci/ });
     await expect(studentSelect.locator("option")).toHaveText(["Seçin", "Ada Kaya"]);
     await expect(form.getByLabel("Görünürlük")).toHaveValue("INTERNAL");
     await expect(form).toContainText("Yalnız sen, rehber öğretmen ve kurum yöneticileri görür.");
@@ -92,7 +92,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     await open(page, "teacher", "/ogretmen/gelisim", captured);
     const form = page.getByRole("form", { name: "Gelişim değerlendirmesi formu" });
 
-    await form.getByLabel("Öğrenci").selectOption("student-a");
+    await form.getByRole("combobox", { name: /^Öğrenci/ }).selectOption("student-a");
     await form.getByLabel("Dönem").fill("2026 Kasım");
     await form.getByLabel("Sorumluluk (1–3)").selectOption("2");
     await form.getByLabel("Görünürlük").selectOption("GUARDIAN");
@@ -113,7 +113,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     await open(page, "teacher", "/ogretmen/gelisim", captured, { createStatus: 403 });
     const form = page.getByRole("form", { name: "Gelişim değerlendirmesi formu" });
 
-    await form.getByLabel("Öğrenci").selectOption("student-a");
+    await form.getByRole("combobox", { name: /^Öğrenci/ }).selectOption("student-a");
     await form.getByLabel("Dönem").fill("2026 Kasım");
     await form.getByRole("button", { name: "Değerlendirmeyi kaydet" }).click();
     await expect(form.getByRole("alert")).toContainText("En az bir kriter için puan seçin.");
