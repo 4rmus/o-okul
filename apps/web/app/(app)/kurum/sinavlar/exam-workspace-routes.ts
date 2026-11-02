@@ -10,6 +10,15 @@ export function examWorkspaceHref(examId: string, section?: "degerlendirme") {
   return section ? `${base}/${section}` : base;
 }
 
+// Sınav yönetimi (katılımcı, cevap anahtarı, yayın) listede kalır; çalışma alanından gelen bağlantı sınavı seçer
+// ve listede "Çalışma alanına dön" bağlantısını açar.
+export const workspaceReturnParam = "from";
+export const workspaceReturnValue = "workspace";
+
+export function examManagementHref(examId: string) {
+  return `/kurum/sinavlar?examId=${encodeURIComponent(examId)}&${workspaceReturnParam}=${workspaceReturnValue}`;
+}
+
 export function opticalWorkspaceHref(examId: string, tab: OpticalWorkspaceTab = "format") {
   return `${examWorkspaceHref(examId)}/optik/${opticalSegments[tab]}`;
 }

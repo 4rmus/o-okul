@@ -34,6 +34,7 @@ import type {
   StudentRecord,
 } from "@o-okul/shared-types";
 import {
+  canAccessExamWorkspace,
   reportCourseMatchesScoreType,
   reportCourseShortName,
   reportCourseSortOrder,
@@ -122,6 +123,8 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
   const [queueMessage, setQueueMessage] = useState("");
   const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
   const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => routeTab ?? readReportWorkspaceTab(searchParams));
+  // Çalışma alanı çerçevesi yalnız bu rollere çizilir; diğer roller route modunda da tam sayfayı görür.
+  const embedded = Boolean(routeExamId && auth && canAccessExamWorkspace(auth.session.roles, auth.session.activePersona));
   const examIdRef = useRef(examId);
   const selectionGeneration = useRef(0);
   const reportDataAbortController = useRef<AbortController | null>(null);
@@ -440,30 +443,18 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
     }
   }
 
-  return (
-    <PageFrame
-      title="Sınav Raporu"
-      subtitle="Raporu açın, gerekiyorsa yeniden hazırlayın ve Excel/PDF olarak indirin."
-      context={
-        <dl className="next-work-context next-report-work-context">
-          <div><dt>Sınav</dt><dd>{selectedExamLabel}</dd></div>
-          <div>
-            <dt>{productTerms.reportVersion}</dt>
-            <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Henüz oluşturulmadı"}</dd>
-          </div>
-        </dl>
-      }
-    >
-      <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
-        <Panel
-          as="form"
-          aria-label="Rapor kontrol alanı"
-          className="next-report-query-panel"
-          description="Önce sınavı seçin; kapsam filtreleri yalnız gerektiğinde açılır."
-          title="Raporu hazırla"
-          onSubmit={(event) => void loadReports(event)}
-        >
-          <div className="next-report-control-row" aria-label="Rapor üst kontrolleri">
+  const reportWorkspace = (
+    <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
+      <Panel
+        as="form"
+        aria-label="Rapor kontrol alanı"
+        className="next-report-query-panel"
+        description={embedded ? "Kapsam filtreleri yalnız gerektiğinde açılır." : "Önce sınavı seçin; kapsam filtreleri yalnız gerektiğinde açılır."}
+        title="Raporu hazırla"
+        onSubmit={(event) => void loadReports(event)}
+      >
+        <div className="next-report-control-row" aria-label="Rapor üst kontrolleri">
+          {embedded ? null : (
             <Field className="next-report-control-row__exam" label="Sınav">
               <Select
                 disabled={isReportLoading || isReportJobBusy}
@@ -478,225 +469,251 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
                 {examId && !selectedExamExists ? <option value={examId}>Sınav seçildi</option> : null}
               </Select>
             </Field>
-            <Field label="Puan türü">
-              <Select disabled={!scoreTypeOptions.length} value={activeScoreType ?? ""} onChange={(event) => setScoreType(event.target.value as ReportScoreType)}>
-                {!scoreTypeOptions.length ? <option value="">Eski hesaplama</option> : null}
-                {scoreTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
-              </Select>
-            </Field>
-            <div className="next-report-actions">
+          )}
+          <Field label="Puan türü">
+            <Select disabled={!scoreTypeOptions.length} value={activeScoreType ?? ""} onChange={(event) => setScoreType(event.target.value as ReportScoreType)}>
+              {!scoreTypeOptions.length ? <option value="">Eski hesaplama</option> : null}
+              {scoreTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+            </Select>
+          </Field>
+          <div className="next-report-actions">
+            <Button
+              disabled={referencesQuery.isPending || isReportJobBusy}
+              loading={isReportLoading}
+              loadingLabel="Yükleniyor"
+              type="submit"
+            >
+              <RefreshCw size={17} aria-hidden="true" />
+              Raporu getir
+            </Button>
+            {latestSnapshot || isReportJobBusy ? (
               <Button
-                disabled={referencesQuery.isPending || isReportJobBusy}
-                loading={isReportLoading}
-                loadingLabel="Yükleniyor"
-                type="submit"
+                disabled={!examId || isReportLoading}
+                loading={isReportJobBusy}
+                loadingLabel="Hazırlanıyor"
+                type="button"
+                variant="secondary"
+                onClick={() => void enqueueReportGeneration()}
               >
                 <RefreshCw size={17} aria-hidden="true" />
-                Raporu getir
+                {latestSnapshot ? "Yeniden hazırla" : "Raporu hazırla"}
               </Button>
-              {latestSnapshot || isReportJobBusy ? (
-                <Button
-                  disabled={!examId || isReportLoading}
-                  loading={isReportJobBusy}
-                  loadingLabel="Hazırlanıyor"
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void enqueueReportGeneration()}
-                >
-                  <RefreshCw size={17} aria-hidden="true" />
-                  {latestSnapshot ? "Yeniden hazırla" : "Raporu hazırla"}
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
-          <details className="next-report-filter-details">
-            <summary>
-              <span>Kapsam filtreleri</span>
-              <small>{activeFilterCount ? `${activeFilterCount} filtre seçili` : "Tüm kurum"}</small>
-            </summary>
-            <div className="next-report-filter-grid" aria-label="Rapor filtreleri">
-              <Field label="Kampüs">
-                <Select value={filters.campusId} onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}>
-                  <option value="">Tümü</option>
-                  {campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Seviye">
-                <Select value={filters.gradeLevelId} onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}>
-                  <option value="">Tümü</option>
-                  {gradeLevels.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Sınıf">
-                <Select value={filters.classId} onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}>
-                  <option value="">Tümü</option>
-                  {classes.map((klass) => <option key={klass.id} value={klass.id}>{klass.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Ders">
-                <Select value={filters.courseId} onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}>
-                  <option value="">Tümü</option>
-                  {courses.map((course) => <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>)}
-                </Select>
-              </Field>
-              <Field label="Dönem">
-                <Select value={filters.termId} onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}>
-                  <option value="">Tümü</option>
-                  {terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
-                </Select>
-              </Field>
-            </div>
-          </details>
-          {referencesQuery.isError ? <p className="uh-crud-page__error" role="alert">Rapor için gerekli bilgiler alınamadı.</p> : null}
-          {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
-          {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
-        </Panel>
-        <section className="next-report-status-surface" aria-label="Rapor iş akışı">
+        </div>
+        <details className="next-report-filter-details">
+          <summary>
+            <span>Kapsam filtreleri</span>
+            <small>{activeFilterCount ? `${activeFilterCount} filtre seçili` : "Tüm kurum"}</small>
+          </summary>
+          <div className="next-report-filter-grid" aria-label="Rapor filtreleri">
+            <Field label="Kampüs">
+              <Select value={filters.campusId} onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}>
+                <option value="">Tümü</option>
+                {campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Seviye">
+              <Select value={filters.gradeLevelId} onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}>
+                <option value="">Tümü</option>
+                {gradeLevels.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Sınıf">
+              <Select value={filters.classId} onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}>
+                <option value="">Tümü</option>
+                {classes.map((klass) => <option key={klass.id} value={klass.id}>{klass.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Ders">
+              <Select value={filters.courseId} onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}>
+                <option value="">Tümü</option>
+                {courses.map((course) => <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>)}
+              </Select>
+            </Field>
+            <Field label="Dönem">
+              <Select value={filters.termId} onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}>
+                <option value="">Tümü</option>
+                {terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+        </details>
+        {referencesQuery.isError ? <p className="uh-crud-page__error" role="alert">Rapor için gerekli bilgiler alınamadı.</p> : null}
+        {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
+        {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
+      </Panel>
+      <section className="next-report-status-surface" aria-label="Rapor iş akışı">
+        {/* Çalışma alanında sınav adı ve seçimi çerçevededir; rapor sürümü, çıktı ve karne durumu burada kalır. */}
+        {embedded ? null : (
           <div className="next-report-status-main">
             <span>Aktif rapor</span>
             <strong>{selectedExamLabel}</strong>
             <small>{snapshotContext}</small>
           </div>
-          <div className="next-report-status-pills">
-            <span>Seçim <StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge></span>
-            <span>Rapor <StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge></span>
-            <span>Çıktı <StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge></span>
-            <span>Karne <StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge></span>
-          </div>
-          <details className="next-report-meta-details">
-            <summary>Rapor ayrıntıları</summary>
-            <dl>
-              <div><dt>{productTerms.reportVersion}</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
-              <div><dt>Hazırlanma zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
-              <div><dt>Bağlam</dt><dd>{snapshotContext}</dd></div>
-              <div><dt>Girdi</dt><dd>{snapshotInputRefs}</dd></div>
-            </dl>
-          </details>
-        </section>
-        <Tabs label="Rapor çalışma alanı">
-          {reportWorkspaceTabs.map((tab) => (
-            <TabButton
-              aria-controls={activeTab === tab.id ? `report-tabpanel-${tab.id}` : undefined}
-              id={`report-tab-${tab.id}`}
-              key={tab.id}
-              onClick={() => selectReportTab(tab.id)}
-              selected={activeTab === tab.id}
-            >
-              {tab.label}
-            </TabButton>
-          ))}
-        </Tabs>
-        <div
-          aria-labelledby={`report-tab-${activeTab}`}
-          className="next-report-tab-panel"
-          id={`report-tabpanel-${activeTab}`}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {!latestSnapshot && !isReportLoading ? (
-            <EmptyState
-              title="Hazır rapor yok"
-              description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu açın veya hazırlayın."
-              primaryAction={examId && !isReportJobBusy
-                ? { label: "Raporu hazırla", onClick: () => void enqueueReportGeneration() }
-                : undefined}
-            />
-          ) : null}
-          {activeTab === "overview" && latestSnapshot ? (
-            <ReportAnalyticsPanel
-              activeScoreType={activeScoreType}
-              isSnapshotReady={isSnapshotReady}
-              latestSnapshot={latestSnapshot}
-              snapshotContext={snapshotContext}
-            />
-          ) : null}
-          {activeTab === "students" && latestSnapshot ? (
-            <StudentResultsTable
-              error={error}
-              loading={isReportLoading}
-              rows={studentRows}
-              selectedStudentId={reportData?.selectedStudentId ?? ""}
-              onSelect={(studentId) => void selectStudentReport(studentId)}
-            />
-          ) : null}
-          {activeTab === "karne" && latestSnapshot ? (
-            <>
-              <StudentReportCard
-                report={studentReport}
-                progress={reportData?.studentProgress ?? null}
-                errorBooklet={reportData?.errorBooklet ?? null}
-                outputStatusLabel={snapshotExportReadiness}
-                scoreType={activeScoreType}
-              />
-              {reportData?.errorBooklet ? (
-                <Panel
-                  aria-label="Hata kitapçığı"
-                  className="next-report-output-panel"
-                  description="Seçili öğrencinin soru cevap inceleme bağlamı."
-                  title="Hata kitapçığı"
-                >
-                  <ErrorBookletTable
-                    caption="Seçili öğrenci hata kitapçığı"
-                    emptyLabel="Hata kaydı yok"
-                    items={reportData.errorBooklet.items}
-                  />
-                </Panel>
-              ) : null}
-            </>
-          ) : null}
-          {activeTab === "exports" && latestSnapshot ? (
-            <Panel
-              aria-label="Rapor çıktıları"
-              className="next-report-output-panel"
-              description={
-                <>
-                  Excel ve PDF çıktıları yalnız hazır rapor sürümünden alınır. Mevcut durum:{" "}
-                  <StatusBadge tone={snapshotStatusTone(latestSnapshot.status)}>{formatSnapshotStatus(latestSnapshot.status)}</StatusBadge>
-                </>
-              }
-              title="Çıktılar"
-            >
-              <div className="next-report-export-grid">
-                <div>
-                  <strong>Kurum Excel</strong>
-                  <span>Özet, branş, sınıf ve öğrenci metrikleri.</span>
-                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("xlsx")}>
-                    <Download size={17} aria-hidden="true" />
-                    Excel indir
-                  </Button>
-                </div>
-                <div>
-                  <strong>Kurum PDF özeti</strong>
-                  <span>Nötr rapor şablonu ve seçili rapor sürümü verisi.</span>
-                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-summary")}>
-                    <Download size={17} aria-hidden="true" />
-                    PDF indir
-                  </Button>
-                </div>
-                <div>
-                  <strong>Toplu Karneler</strong>
-                  <span>Rapor sürümündeki tüm öğrencilerin iki sayfalık karneleri.</span>
-                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-packet")}>
-                    <Download size={17} aria-hidden="true" />
-                    Toplu karneleri indir
-                  </Button>
-                </div>
-                <div>
-                  <strong>Tekli Karne PDF</strong>
-                  <span>Karne alanında seçili öğrencinin iki sayfalık çıktısı.</span>
-                  <Button
-                    disabled={!isSnapshotReady || !reportData?.selectedStudentId}
-                    onClick={() => void exportReport("pdf-student")}
-                  >
-                    <Download size={17} aria-hidden="true" />
-                    Tekli karneyi indir
-                  </Button>
-                </div>
-              </div>
-            </Panel>
-          ) : null}
+        )}
+        <div className="next-report-status-pills">
+          {embedded ? null : <span>Seçim <StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge></span>}
+          <span>Rapor <StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge></span>
+          <span>Çıktı <StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge></span>
+          <span>Karne <StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge></span>
         </div>
+        <details className="next-report-meta-details">
+          <summary>Rapor ayrıntıları</summary>
+          <dl>
+            <div><dt>{productTerms.reportVersion}</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
+            <div><dt>Hazırlanma zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
+            <div><dt>Bağlam</dt><dd>{snapshotContext}</dd></div>
+            <div><dt>Girdi</dt><dd>{snapshotInputRefs}</dd></div>
+          </dl>
+        </details>
       </section>
+      <Tabs label="Rapor çalışma alanı">
+        {reportWorkspaceTabs.map((tab) => (
+          <TabButton
+            aria-controls={activeTab === tab.id ? `report-tabpanel-${tab.id}` : undefined}
+            id={`report-tab-${tab.id}`}
+            key={tab.id}
+            onClick={() => selectReportTab(tab.id)}
+            selected={activeTab === tab.id}
+          >
+            {tab.label}
+          </TabButton>
+        ))}
+      </Tabs>
+      <div
+        aria-labelledby={`report-tab-${activeTab}`}
+        className="next-report-tab-panel"
+        id={`report-tabpanel-${activeTab}`}
+        role="tabpanel"
+        tabIndex={0}
+      >
+        {!latestSnapshot && !isReportLoading ? (
+          <EmptyState
+            title="Hazır rapor yok"
+            description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu açın veya hazırlayın."
+            primaryAction={examId && !isReportJobBusy
+              ? { label: "Raporu hazırla", onClick: () => void enqueueReportGeneration() }
+              : undefined}
+          />
+        ) : null}
+        {activeTab === "overview" && latestSnapshot ? (
+          <ReportAnalyticsPanel
+            activeScoreType={activeScoreType}
+            isSnapshotReady={isSnapshotReady}
+            latestSnapshot={latestSnapshot}
+            snapshotContext={snapshotContext}
+          />
+        ) : null}
+        {activeTab === "students" && latestSnapshot ? (
+          <StudentResultsTable
+            error={error}
+            loading={isReportLoading}
+            rows={studentRows}
+            selectedStudentId={reportData?.selectedStudentId ?? ""}
+            onSelect={(studentId) => void selectStudentReport(studentId)}
+          />
+        ) : null}
+        {activeTab === "karne" && latestSnapshot ? (
+          <>
+            <StudentReportCard
+              report={studentReport}
+              progress={reportData?.studentProgress ?? null}
+              errorBooklet={reportData?.errorBooklet ?? null}
+              outputStatusLabel={snapshotExportReadiness}
+              scoreType={activeScoreType}
+            />
+            {reportData?.errorBooklet ? (
+              <Panel
+                aria-label="Hata kitapçığı"
+                className="next-report-output-panel"
+                description="Seçili öğrencinin soru cevap inceleme bağlamı."
+                title="Hata kitapçığı"
+              >
+                <ErrorBookletTable
+                  caption="Seçili öğrenci hata kitapçığı"
+                  emptyLabel="Hata kaydı yok"
+                  items={reportData.errorBooklet.items}
+                />
+              </Panel>
+            ) : null}
+          </>
+        ) : null}
+        {activeTab === "exports" && latestSnapshot ? (
+          <Panel
+            aria-label="Rapor çıktıları"
+            className="next-report-output-panel"
+            description={
+              <>
+                Excel ve PDF çıktıları yalnız hazır rapor sürümünden alınır. Mevcut durum:{" "}
+                <StatusBadge tone={snapshotStatusTone(latestSnapshot.status)}>{formatSnapshotStatus(latestSnapshot.status)}</StatusBadge>
+              </>
+            }
+            title="Çıktılar"
+          >
+            <div className="next-report-export-grid">
+              <div>
+                <strong>Kurum Excel</strong>
+                <span>Özet, branş, sınıf ve öğrenci metrikleri.</span>
+                <Button disabled={!isSnapshotReady} onClick={() => void exportReport("xlsx")}>
+                  <Download size={17} aria-hidden="true" />
+                  Excel indir
+                </Button>
+              </div>
+              <div>
+                <strong>Kurum PDF özeti</strong>
+                <span>Nötr rapor şablonu ve seçili rapor sürümü verisi.</span>
+                <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-summary")}>
+                  <Download size={17} aria-hidden="true" />
+                  PDF indir
+                </Button>
+              </div>
+              <div>
+                <strong>Toplu Karneler</strong>
+                <span>Rapor sürümündeki tüm öğrencilerin iki sayfalık karneleri.</span>
+                <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-packet")}>
+                  <Download size={17} aria-hidden="true" />
+                  Toplu karneleri indir
+                </Button>
+              </div>
+              <div>
+                <strong>Tekli Karne PDF</strong>
+                <span>Karne alanında seçili öğrencinin iki sayfalık çıktısı.</span>
+                <Button
+                  disabled={!isSnapshotReady || !reportData?.selectedStudentId}
+                  onClick={() => void exportReport("pdf-student")}
+                >
+                  <Download size={17} aria-hidden="true" />
+                  Tekli karneyi indir
+                </Button>
+              </div>
+            </div>
+          </Panel>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  // Çalışma alanı içinde başlık, sınav seçimi ve adım durumu üst çerçevededir; burada yalnız rapor işi kalır.
+  if (embedded) {
+    return reportWorkspace;
+  }
+
+  return (
+    <PageFrame
+      title="Sınav Raporu"
+      subtitle="Raporu açın, gerekiyorsa yeniden hazırlayın ve Excel/PDF olarak indirin."
+      context={
+        <dl className="next-work-context next-report-work-context">
+          <div><dt>Sınav</dt><dd>{selectedExamLabel}</dd></div>
+          <div>
+            <dt>{productTerms.reportVersion}</dt>
+            <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Henüz oluşturulmadı"}</dd>
+          </div>
+        </dl>
+      }
+    >
+      {reportWorkspace}
     </PageFrame>
   );
 }
