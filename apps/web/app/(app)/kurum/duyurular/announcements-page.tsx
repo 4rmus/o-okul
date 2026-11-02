@@ -922,7 +922,7 @@ function AnnouncementDeliveryReportTable({
       priority: "optional",
       render: (report) => {
         const time = deliveryReportTime(report);
-        return formatDateTime(time);
+        return time ? formatDateTime(new Date(time)) : "-";
       },
     },
   ];
