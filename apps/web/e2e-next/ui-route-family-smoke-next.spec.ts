@@ -66,6 +66,7 @@ const routeCases = [
   route("/kurum/duyurular", "Duyurular", "assistantAdmin", { role: "region", name: "Duyuru yönetimi" }),
   route("/kurum/etutler", "Etütler", "assistantAdmin", { role: "region", name: "Etüt yönetimi" }),
   route("/kurum/finans", "Finans", "tenantAdmin", { role: "region", name: "Finans yönetimi" }),
+  route("/kurum/gelisim-kriterleri", "Gelişim Kriterleri", "assistantAdmin", { role: "region", name: "Gelişim kriteri yönetimi" }),
   route("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "tenantAdmin", { role: "region", name: "Canlıya geçiş güvenlik kontrolleri" }),
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
@@ -130,6 +131,7 @@ const routeCases = [
   route("/ogretmen/ders-akisi", "Öğretmen Portalı", "teacher", { role: "region", name: "Bugünkü dersler" }),
   route("/ogretmen/destek", "Öğretmen Portalı", "teacher", { role: "region", name: "Destek talepleri" }),
   route("/ogretmen/duyurular", "Öğretmen Portalı", "teacher", { role: "region", name: "Duyurular" }),
+  route("/ogretmen/gelisim", "Öğretmen Portalı", "teacher", { role: "region", name: "Gelişim değerlendirmesi yaz" }),
   route("/ogretmen/odevler", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen ödev kontrolü" }),
   route("/ogretmen/not-defteri", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen not girişi" }),
   route("/ogretmen/ogrenci-takibi", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen öğrenci kapsamı" }),
@@ -750,6 +752,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   if (portalArrayPaths.has(pathName)) return { data: [] };
 
   if (pathName === "/tenants/current/reset-request") return { data: { request: null } };
+  if (pathName === "/development/authoring-scope") return { data: { studentIds: [] } };
   if (pathName === "/device-backups/status") return { data: { available: false, maxFileBytes: 33558528 } };
 
   const directArrays: Record<string, unknown[]> = {
@@ -766,6 +769,8 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/campuses": [campusFixture],
     "/classes": [classFixture],
     "/courses": [courseFixture],
+    "/development/assessments": [],
+    "/development/criteria": [],
     "/employees": [],
     "/exams": [],
     "/grade-level-course-templates": [],
