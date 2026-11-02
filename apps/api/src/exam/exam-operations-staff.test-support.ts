@@ -31,3 +31,31 @@ export function registerExamOperationsStaff(): void {
     registerTestLoginIdentity(email, { tenantSlug: "dna-egitim" });
   }
 }
+
+// DEC-20261102-03: a tenant-wide OPERATIONS_STAFF membership that also opens a teacher persona. The STAFF-persona
+// session carries only [OPERATIONS_STAFF]; the TEACHER-persona session carries only [TEACHER] (auth.service
+// resolvePersonaSessionContext), so the two never meet in one request context.
+export const dualPersonaOperationsStaffEmail = "ops-teacher@example.test";
+export const dualPersonaOperationsStaffUserId = "user-ops-teacher";
+
+/** Callers reset the in-memory users; the TEACHER persona also needs a Teacher row bound to this user id. */
+export function registerDualPersonaOperationsStaff(): void {
+  upsertInMemoryAuthUser({
+    id: dualPersonaOperationsStaffUserId,
+    email: dualPersonaOperationsStaffEmail,
+    name: "Operasyon Öğretmeni",
+    password: "password",
+    tenantId: "tenant-a",
+    roles: ["OPERATIONS_STAFF", "TEACHER"],
+    membership: {
+      id: "membership-ops-teacher",
+      staffRole: "OPERATIONS_STAFF",
+      hasTeacherPersona: true,
+      hasStudentPersona: false,
+      version: 1,
+      scopeMode: "TENANT",
+      campusIds: [],
+    },
+  });
+  registerTestLoginIdentity(dualPersonaOperationsStaffEmail, { tenantSlug: "dna-egitim" });
+}

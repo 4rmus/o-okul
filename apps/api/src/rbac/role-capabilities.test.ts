@@ -112,7 +112,10 @@ describe("role capabilities", () => {
     }
     expect(canAccessExamWorkspace(["TENANT_ADMIN"], undefined)).toBe(true);
     expect(canAccessExamWorkspace(["OPERATIONS_STAFF"], undefined)).toBe(false);
-    expect(canAccessExamWorkspace(["OPERATIONS_STAFF", "TEACHER"], "STAFF")).toBe(false);
+    // A membership with staffRole OPERATIONS_STAFF and a teacher persona: the STAFF-persona session carries
+    // [OPERATIONS_STAFF] and opens the workspace; the TEACHER-persona session carries [TEACHER] and stays outside.
+    expect(canAccessExamWorkspace(["OPERATIONS_STAFF"], "STAFF")).toBe(true);
+    expect(canAccessExamWorkspace(["TEACHER"], "TEACHER")).toBe(false);
     expect(canAccessExamWorkspace(["OPERATIONS_STAFF", "FINANCE_STAFF"], "STAFF")).toBe(true);
     expect(canAccessExamWorkspace(["TENANT_ADMIN", "TEACHER"], "STAFF")).toBe(true);
     for (const role of ["SYSTEM_ADMIN", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN"]) {
