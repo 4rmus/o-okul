@@ -36,7 +36,8 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
 
   const overview = overviewQuery.data;
   const activePersona = auth?.session.activePersona;
-  const assessments = uniqueAssessments(overview.teacherAssignments);
+  // Sınıfın bu dönemki tüm değerlendirmeleri; canlı not giren ataması olmayanlar da listede kalır.
+  const assessments = sortAssessments(overview.assessments);
   const rollCall = rollCallLabel(overview);
 
   const teacherColumns: Array<DataTableColumn<ClassOverviewTeacherAssignment>> = [
@@ -169,7 +170,7 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
       <Panel
         actions={canAccessHref(roles, "/kurum/not-defteri", activePersona) ? <Link href="/kurum/not-defteri">Not defterini aç</Link> : undefined}
         aria-label="Öğretmen not girişi durumu"
-        description="Sınıfa atanmış sınıf ve branş öğretmenlerinin bu dönem açtığı değerlendirmeler ve giriş durumu."
+        description="Sınıfa atanmış sınıf ve branş öğretmenlerinin ders ve dönem kapsamına giren değerlendirmeler ve giriş durumu."
         title="Not girişi"
       >
         <DataTable
@@ -185,7 +186,7 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
           caption="Değerlendirme giriş durumu"
           columns={assessmentColumns}
           density="compact"
-          description="Girilen öğrenci sayısı sınıf mevcuduyla karşılaştırılır; yayın sütunu yalnız sürüm bilgisini gösterir."
+          description="Sınıfın bu dönemki tüm değerlendirmeleri; girilen öğrenci sayısı sınıf mevcuduyla karşılaştırılır, tarihi gelmemiş değerlendirme eksik sayılmaz."
           emptyText="Bu dönem açılmış değerlendirme yok"
           getRowKey={(assessment) => assessment.assessmentId}
           rows={assessments}
@@ -201,20 +202,18 @@ function isClassOverview(value: unknown): value is ClassOverview {
   return typeof record.rosterCount === "number"
     && Boolean(record.homework)
     && Boolean(record.gradeEntry)
+    && Array.isArray(record.assessments)
     && Array.isArray(record.teacherAssignments);
 }
 
-function uniqueAssessments(assignments: readonly ClassOverviewTeacherAssignment[]): ClassOverviewAssessmentStatus[] {
-  const byId = new Map<string, ClassOverviewAssessmentStatus>();
-  for (const assignment of assignments) {
-    for (const assessment of assignment.assessments) byId.set(assessment.assessmentId, assessment);
-  }
-  return [...byId.values()].sort((left, right) => right.heldOn.localeCompare(left.heldOn) || left.title.localeCompare(right.title, "tr"));
+function sortAssessments(assessments: readonly ClassOverviewAssessmentStatus[]): ClassOverviewAssessmentStatus[] {
+  return [...assessments].sort((left, right) => right.heldOn.localeCompare(left.heldOn) || left.title.localeCompare(right.title, "tr"));
 }
 
 function rollCallLabel(overview: ClassOverview): { description: string; label: string; tone: StatusBadgeProps["tone"] } {
   const rollCall = overview.rollCall;
   if (!rollCall) return { description: "Programda bugün ders yok", label: "Ders yok", tone: "neutral" };
+  if (rollCall.state === "EMPTY_ROSTER") return { description: "Sınıf mevcudu boş; işaretlenecek öğrenci yok", label: "Öğrenci yok", tone: "neutral" };
   const marked = `${formatCount(rollCall.markedCount)}/${formatCount(overview.rosterCount)} öğrenci işaretlendi`;
   if (rollCall.state === "TAKEN") return { description: marked, label: "Alındı", tone: "success" };
   if (rollCall.state === "PARTIAL") return { description: marked, label: "Eksik", tone: "warning" };
@@ -222,7 +221,7 @@ function rollCallLabel(overview: ClassOverview): { description: string; label: s
 }
 
 function assignmentStatus(assignment: ClassOverviewTeacherAssignment): { label: string; tone: StatusBadgeProps["tone"] } {
-  if (assignment.assessmentCount === 0) return { label: "Değerlendirme açılmadı", tone: "warning" };
+  if (assignment.assessmentCount === 0) return { label: "Kapsamda değerlendirme yok", tone: "warning" };
   if (assignment.missingEntryAssessmentCount > 0) return { label: "Eksik giriş", tone: "warning" };
   if (assignment.unpublishedDraftAssessmentCount > 0) return { label: "Yayın bekliyor", tone: "info" };
   return { label: "Tamam", tone: "success" };

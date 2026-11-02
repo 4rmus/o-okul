@@ -59,19 +59,12 @@ describe("GET /classes/:classId/overview", () => {
   const get = (probe: string, classId: string) =>
     request(server).get(`/classes/${classId}/overview`).set("Authorization", `Bearer ${tokens[probe]}`);
 
-  it("returns counts to academic:manage roles", async () => {
+  it("passes academic:manage roles through the guard and answers unavailable, not zeros, on the in-memory driver", async () => {
     for (const probe of ["admin", "assistant", "opsTenant", "opsMain"]) {
-      const response = await get(probe, "class-a").expect(200);
-      // The bare test app has no response envelope interceptor (configureApiApp adds it in production).
-      const body = response.body as Record<string, unknown>;
-      expect(body).toMatchObject({
-        classId: "class-a",
-        rosterCount: 0,
-        homework: { openCount: 0, waitingSubmissionCount: 0 },
-        gradeEntry: { assessmentCount: 0, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
-        teacherAssignments: [],
-      });
-      expect(body).not.toHaveProperty("rollCall");
+      const response = await get(probe, "class-a").expect(503);
+      // The in-memory API cannot read the other modules' stores, so it never reports false zero counts.
+      expect(JSON.stringify(response.body)).toContain("CLASS_OVERVIEW_UNAVAILABLE");
+      expect(response.body).not.toHaveProperty("rosterCount");
     }
   });
 
@@ -86,7 +79,8 @@ describe("GET /classes/:classId/overview", () => {
     await get("admin", "class-b").expect(404);
     await get("admin", "class-missing").expect(404);
     await get("adminB", "class-a").expect(404);
-    await get("adminB", "class-b").expect(200);
+    // In scope: past the 404 checks, the in-memory driver reports the source as unavailable.
+    await get("adminB", "class-b").expect(503);
     await get("opsOther", "class-a").expect(404);
   });
 });

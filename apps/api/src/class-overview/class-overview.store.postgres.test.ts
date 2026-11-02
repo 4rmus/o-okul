@@ -160,6 +160,8 @@ run("Class 360 and dashboard academic-ops counts with restricted app role and RL
           ["a-past", "c1", "math", "term-past", "Eski", "2026-05-20", null],
           ["a-deleted-term", "c1", "math", "term-deleted", "Silinen", "2026-10-01", null],
           ["a-class-2", "c2", "math", "term-current", "2. sınıf", "2026-10-20", null],
+          // Dated after today: counted as an assessment, never as missing entries.
+          ["a-future", "c1", "math", "term-current", "2. yazılı", "2026-11-03", null],
         ];
         for (const [assessment, klass, course, term, title, heldOn, publishedVersion] of assessments) {
           await db.query(
@@ -204,16 +206,20 @@ run("Class 360 and dashboard academic-ops counts with restricted app role and RL
       rosterCount: 3,
       rollCall: { state: "PARTIAL", lessonCount: 2, markedCount: 1 },
       homework: { openCount: 1, waitingSubmissionCount: 1 },
-      gradeEntry: { assessmentCount: 3, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 2 },
+      gradeEntry: { assessmentCount: 4, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 2 },
     });
+    expect(overview.assessments.map((assessment) => assessment.assessmentId))
+      .toEqual(["a-future", "a-math-2", "a-tr-1", "a-math-1"].map((name) => id(tenantA, name)));
+    expect(overview.assessments[0]).toMatchObject({ heldOn: "2026-11-03", enteredCount: 0, rosterCount: 3, missingEntries: false });
     expect(overview.teacherAssignments.map((assignment) => assignment.assignmentId)).toEqual([id(tenantA, "as-math"), id(tenantA, "as-class")]);
     const [math, classTeacher] = overview.teacherAssignments;
-    expect(math).toMatchObject({ teacherName: "Can Arslan", courseName: "Matematik", assessmentCount: 2, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 2 });
+    expect(math).toMatchObject({ teacherName: "Can Arslan", courseName: "Matematik", assessmentCount: 3, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 2 });
     expect(math?.assessments).toEqual([
+      expect.objectContaining({ assessmentId: id(tenantA, "a-future"), heldOn: "2026-11-03", enteredCount: 0, missingEntries: false, hasUnpublishedDraft: false }),
       expect.objectContaining({ assessmentId: id(tenantA, "a-math-2"), heldOn: "2026-10-28", enteredCount: 2, rosterCount: 3, missingEntries: true, hasUnpublishedDraft: true }),
       expect.objectContaining({ assessmentId: id(tenantA, "a-math-1"), heldOn: "2026-10-20", enteredCount: 3, missingEntries: false, hasUnpublishedDraft: true, publishedVersion: 1 }),
     ]);
-    expect(classTeacher).toMatchObject({ teacherName: "Ayşe Demir", role: "CLASS_TEACHER", assessmentCount: 3 });
+    expect(classTeacher).toMatchObject({ teacherName: "Ayşe Demir", role: "CLASS_TEACHER", assessmentCount: 4, missingEntryAssessmentCount: 1 });
     // Counts only: no score, no average and nothing from the other tenant (ADR-0011, RLS).
     const serialized = JSON.stringify(overview);
     for (const forbidden of ["87.5", "score", "average", tenantB, "a-past", "a-deleted-term", "Rehber", "Biten", "Eski"]) {
@@ -250,7 +256,8 @@ run("Class 360 and dashboard academic-ops counts with restricted app role and RL
   it("counts dashboard academic ops tenant-wide and per campus, matching Class 360", async () => {
     const db = await admin.connect();
     try {
-      // Nobody marked today: c1 and c2 both had lessons and non-empty rosters.
+      // Nobody marked today: c1 and c2 both had lessons and non-empty rosters. a-future (tomorrow) has no entries and is
+    // still not missing: only a-math-2 counts.
       await db.query("BEGIN");
       await db.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantB]);
       await db.query('UPDATE "Attendance" SET "deletedAt" = now() WHERE "tenantId" = $1', [tenantB]);

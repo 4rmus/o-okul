@@ -546,7 +546,12 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(teacherEntries).toContainText("Tüm dersler");
     await expect(teacherEntries).toContainText("Eksik giriş");
     const assessmentEntries = classDetail.getByRole("table", { name: "Değerlendirme giriş durumu" });
-    await expect(assessmentEntries.locator("tbody tr")).toHaveCount(2);
+    // Üst düzey liste: canlı not giren ataması olmayan Kimya yazılısı da satır olarak görünür.
+    await expect(assessmentEntries.locator("tbody tr")).toHaveCount(3);
+    await expect(assessmentEntries).toContainText("Kimya yazılısı");
+    await expect(teacherEntries).not.toContainText("Kimya");
+    await expect(academicStatus).toContainText("2 eksik");
+    await expect(academicStatus).toContainText("3 değerlendirme");
     await expect(assessmentEntries).toContainText("1/2");
     await expect(assessmentEntries).toContainText("Yayında · sürüm 1");
     await expect(assessmentEntries).toContainText("Yayınlanmadı");
@@ -1419,6 +1424,20 @@ function createClassOverview() {
       publishedVersion: 1,
     },
   ];
+  // Kimya'nın canlı not giren ataması yok: tablo yine de üst düzey listeden gösterir.
+  const uncoveredAssessment = {
+    assessmentId: "assessment-chemistry",
+    title: "Kimya yazılısı",
+    kind: "WRITTEN",
+    heldOn: "2026-06-10",
+    courseId: "course-chemistry",
+    courseName: "Kimya",
+    termId: "term-2026-fall",
+    enteredCount: 0,
+    rosterCount: 2,
+    missingEntries: true,
+    hasUnpublishedDraft: false,
+  };
   return {
     classId: "class-8a",
     date: "2026-06-17",
@@ -1426,7 +1445,8 @@ function createClassOverview() {
     rosterCount: 2,
     rollCall: { state: "PARTIAL", lessonCount: 2, markedCount: 1 },
     homework: { openCount: 3, waitingSubmissionCount: 2 },
-    gradeEntry: { assessmentCount: 2, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 1 },
+    gradeEntry: { assessmentCount: 3, missingEntryAssessmentCount: 2, unpublishedDraftAssessmentCount: 1 },
+    assessments: [assessments[0], uncoveredAssessment, assessments[1]],
     teacherAssignments: [
       {
         assignmentId: "assignment-math",

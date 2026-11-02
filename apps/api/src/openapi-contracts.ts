@@ -306,7 +306,7 @@ const classOverviewSchema = objectSchema({
   generatedAt: stringSchema({ format: "date-time" }),
   rosterCount: integerSchema({ minimum: 0 }),
   rollCall: objectSchema({
-    state: { type: "string", enum: ["NOT_TAKEN", "PARTIAL", "TAKEN"] },
+    state: { type: "string", enum: ["EMPTY_ROSTER", "NOT_TAKEN", "PARTIAL", "TAKEN"] },
     lessonCount: integerSchema({ minimum: 1 }),
     markedCount: integerSchema({ minimum: 0 }),
   }, ["state", "lessonCount", "markedCount"]),
@@ -315,6 +315,8 @@ const classOverviewSchema = objectSchema({
     waitingSubmissionCount: integerSchema({ minimum: 0 }),
   }, ["openCount", "waitingSubmissionCount"]),
   gradeEntry: classOverviewGradeEntrySummarySchema,
+  // Every current-term assessment of the class, also those no live grade-writer assignment covers.
+  assessments: arraySchema(classOverviewAssessmentStatusSchema),
   teacherAssignments: arraySchema(objectSchema({
     assignmentId: stringSchema(),
     teacherId: stringSchema(),
@@ -337,7 +339,7 @@ const classOverviewSchema = objectSchema({
     "unpublishedDraftAssessmentCount",
     "assessments",
   ])),
-}, ["classId", "date", "generatedAt", "rosterCount", "homework", "gradeEntry", "teacherAssignments"]);
+}, ["classId", "date", "generatedAt", "rosterCount", "homework", "gradeEntry", "assessments", "teacherAssignments"]);
 
 const tenantFirstOwnerCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
