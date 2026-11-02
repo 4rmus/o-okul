@@ -2,7 +2,8 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -13,8 +14,34 @@ describe("Support ticket API", () => {
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
+  let mainCampusOperationsToken: string;
+  let otherCampusOperationsToken: string;
 
   beforeAll(async () => {
+    for (const [id, email, campusId] of [
+      ["user-support-ops-main", "support-ops-main@example.test", "campus-main"],
+      ["user-support-ops-other", "support-ops-other@example.test", "campus-other"],
+    ] as const) {
+      upsertInMemoryAuthUser({
+        id,
+        email,
+        name: "Kampüs Operasyon",
+        password: "password",
+        tenantId: "tenant-a",
+        roles: ["OPERATIONS_STAFF"],
+        membership: {
+          id: `membership-${id}`,
+          staffRole: "OPERATIONS_STAFF",
+          hasTeacherPersona: false,
+          hasStudentPersona: false,
+          version: 1,
+          scopeMode: "CAMPUSES",
+          campusIds: [campusId],
+        },
+      });
+      registerTestLoginIdentity(email, { tenantSlug: "dna-egitim" });
+    }
+
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -46,11 +73,20 @@ describe("Support ticket API", () => {
       .send(testLoginBody("guardian-a@example.test"))
       .expect(200);
     guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
+
+    mainCampusOperationsToken = await loginToken("support-ops-main@example.test");
+    otherCampusOperationsToken = await loginToken("support-ops-other@example.test");
   });
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
+
+  async function loginToken(email: string): Promise<string> {
+    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
+    return (response.body as { accessToken: string }).accessToken;
+  }
 
   it("tenant A sadece kendi destek taleplerini listeler", async () => {
     const response = await request(server)
@@ -471,9 +507,19 @@ describe("Support ticket API", () => {
       },
     ]);
 
-    const created = await request(server)
+    await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        fileName: "../ekran.txt",
+        contentType: "text/plain",
+        fileBase64: Buffer.from("hello world").toString("base64"),
+      })
+      .expect(404);
+
+    const created = await request(server)
+      .post("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "../ekran.txt",
         contentType: "text/plain",
@@ -484,7 +530,7 @@ describe("Support ticket API", () => {
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
       ticketId: "support-ticket-a",
-      uploadedById: "teacher-tenant-a",
+      uploadedById: "user-tenant-a",
       fileName: "ekran.txt",
       contentType: "text/plain",
       byteSize: 11,
@@ -504,13 +550,13 @@ describe("Support ticket API", () => {
 
     const first = await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send(body)
       .expect(201);
     const second = await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send(body)
       .expect(201);
@@ -519,7 +565,7 @@ describe("Support ticket API", () => {
 
     await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send({
         ...body,
@@ -579,16 +625,22 @@ describe("Support ticket API", () => {
       },
     ]);
 
-    const created = await request(server)
+    await request(server)
       .post("/support-tickets/support-ticket-a/comments")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ body: "Kontrol ediyoruz." })
+      .expect(404);
+
+    const created = await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ body: "Kontrol ediyoruz." })
       .expect(201);
 
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
       ticketId: "support-ticket-a",
-      authorId: "teacher-tenant-a",
+      authorId: "user-tenant-a",
       body: "Kontrol ediyoruz.",
     });
     expect(typeof (created.body as { createdAt?: unknown }).createdAt).toBe("string");
@@ -600,13 +652,13 @@ describe("Support ticket API", () => {
 
     const first = await request(server)
       .post("/support-tickets/support-ticket-a/comments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send(body)
       .expect(201);
     const second = await request(server)
       .post("/support-tickets/support-ticket-a/comments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send(body)
       .expect(201);
@@ -615,7 +667,7 @@ describe("Support ticket API", () => {
 
     await request(server)
       .post("/support-tickets/support-ticket-a/comments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send({ body: "Farklı destek yorumu." })
       .expect(409);
@@ -657,7 +709,7 @@ describe("Support ticket API", () => {
   it("geçersiz destek eki girdilerini reddeder", async () => {
     const invalidContentType = await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "ekran.exe",
         contentType: "application/x-msdownload",
@@ -674,7 +726,7 @@ describe("Support ticket API", () => {
 
     const missingFile = await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "ekran.txt",
         contentType: "text/plain",
@@ -690,7 +742,7 @@ describe("Support ticket API", () => {
 
     await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "ekran.txt",
         contentType: "text/plain",
@@ -700,7 +752,7 @@ describe("Support ticket API", () => {
 
     await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "ekran.txt",
         contentType: "text/plain",
@@ -710,7 +762,7 @@ describe("Support ticket API", () => {
 
     await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileName: "ekran.pdf",
         contentType: "application/pdf",
@@ -840,6 +892,131 @@ describe("Support ticket API", () => {
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ status: "RESOLVED" })
       .expect(403);
+  });
+
+  it("öğretmen personel uçlarında yalnız kendi taleplerini görür; başkasının talebine 404 alır", async () => {
+    const own = await request(server)
+      .post("/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ subject: "Kendi talebim", message: "Öğretmen talebi." })
+      .expect(201);
+    const ownId = own.body.id as string;
+    const studentTicket = await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ subject: "Öğrenci talebi", message: "Öğretmen görmemeli." })
+      .expect(201);
+    const guardianTicket = await request(server)
+      .post("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ subject: "Veli talebi", message: "Öğretmen görmemeli." })
+      .expect(201);
+
+    const listed = await request(server)
+      .get("/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200);
+    const listedTickets = listed.body as Array<{ id: string; requesterId: string }>;
+    expect(listedTickets.map((ticket) => ticket.id)).toContain(ownId);
+    expect(listedTickets.every((ticket) => ticket.requesterId === "teacher-tenant-a")).toBe(true);
+
+    const attachment = { fileName: "ek.txt", contentType: "text/plain", fileBase64: Buffer.from("hello world").toString("base64") };
+    for (const ticketId of ["support-ticket-a", studentTicket.body.id as string, guardianTicket.body.id as string]) {
+      await request(server).get(`/support-tickets/${ticketId}`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(404);
+      await request(server).get(`/support-tickets/${ticketId}/comments`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(404);
+      await request(server).get(`/support-tickets/${ticketId}/attachments`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(404);
+      await request(server)
+        .post(`/support-tickets/${ticketId}/comments`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ body: "Erişememeli." })
+        .expect(404);
+      await request(server)
+        .post(`/support-tickets/${ticketId}/attachments`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send(attachment)
+        .expect(404);
+    }
+    await request(server)
+      .get("/support-tickets/support-ticket-a/attachments/support-attachment-a/download")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(404);
+
+    await request(server).get(`/support-tickets/${ownId}`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+    await request(server)
+      .post(`/support-tickets/${ownId}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ body: "Kendi talebime yanıt." })
+      .expect(201);
+    await request(server)
+      .post(`/support-tickets/${ownId}/attachments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send(attachment)
+      .expect(201);
+    await request(server)
+      .get(`/support-tickets/${ownId}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([expect.objectContaining({ body: "Kendi talebime yanıt." })]));
+
+    await request(server)
+      .get("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([expect.objectContaining({ id: ownId })]));
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "support-ticket-a" })]));
+        expectPortalSupportTicketResponseIsPublic(body);
+      });
+    await request(server)
+      .get(`/me/teacher/support-tickets/${ownId}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200);
+    await request(server)
+      .get(`/me/teacher/support-tickets/${studentTicket.body.id as string}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(404);
+  });
+
+  it("CAMPUSES kapsamlı personel yalnız kendi kampüsünün taleplerine ulaşır; kampüssüz talepler kapalı kalır", async () => {
+    const campusless = await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ subject: "Kampüssüz talep", message: "Yalnız kurum geneli personel görür." })
+      .expect(201);
+    const campuslessId = campusless.body.id as string;
+
+    await request(server)
+      .get("/support-tickets")
+      .set("Authorization", `Bearer ${mainCampusOperationsToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const tickets = body as Array<{ id: string; campusId?: string }>;
+        expect(tickets.map((ticket) => ticket.id)).toContain("support-ticket-a");
+        expect(tickets.every((ticket) => ticket.campusId === "campus-main")).toBe(true);
+      });
+    await request(server).get("/support-tickets/support-ticket-a").set("Authorization", `Bearer ${mainCampusOperationsToken}`).expect(200);
+    await request(server).get(`/support-tickets/${campuslessId}`).set("Authorization", `Bearer ${mainCampusOperationsToken}`).expect(404);
+
+    await request(server)
+      .get("/support-tickets")
+      .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([]));
+    await request(server).get("/support-tickets/support-ticket-a").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
+    await request(server).get("/support-tickets/support-ticket-a/comments").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
+    await request(server).get("/support-tickets/support-ticket-a/attachments").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
+    await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
+      .send({ body: "Kapsam dışı." })
+      .expect(404);
+    await request(server)
+      .patch("/support-tickets/support-ticket-a")
+      .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
+      .send({ status: "RESOLVED" })
+      .expect(404);
+
+    await request(server).get(`/support-tickets/${campuslessId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(200);
   });
 
   it("yetkisiz request destek endpointine erişemez", async () => {

@@ -10,6 +10,7 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { requiredText } from "../shared/required-text.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
@@ -113,7 +114,7 @@ export class SupportTicketService {
 
   async list(context: RequestContext, filters: SupportTicketListFilters = {}): Promise<SupportTicketRecord[]> {
     return filterSupportTickets(
-      filterTenantResources(context, await this.store.list()).filter((ticket) => !ticket.deletedAt),
+      (await this.listTenantTickets(context)).filter((ticket) => canReachStaffSupportTicket(context, ticket)),
       filters,
     );
   }
@@ -125,7 +126,14 @@ export class SupportTicketService {
     }
 
     this.assertAccess(context, ticket);
+    if (!canReachStaffSupportTicket(context, ticket)) {
+      throw new NotFoundException("SUPPORT_TICKET_NOT_FOUND");
+    }
     return ticket;
+  }
+
+  private async listTenantTickets(context: RequestContext): Promise<SupportTicketRecord[]> {
+    return filterTenantResources(context, await this.store.list()).filter((ticket) => !ticket.deletedAt);
   }
 
   async create(context: RequestContext, input: Partial<SupportTicketRecord>, idempotencyKey?: string): Promise<SupportTicketRecord> {
@@ -179,7 +187,7 @@ export class SupportTicketService {
 
   async listCurrentStudent(context: RequestContext): Promise<SupportTicketRecord[]> {
     const student = await this.findCurrentStudent(context);
-    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
+    return (await this.listTenantTickets(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
   }
 
   async createCurrentStudent(
@@ -208,7 +216,7 @@ export class SupportTicketService {
 
   async listCurrentGuardianStudent(context: RequestContext, studentId: string): Promise<SupportTicketRecord[]> {
     const student = await this.findGuardianSupportStudent(context, studentId);
-    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
+    return (await this.listTenantTickets(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
   }
 
   async createCurrentGuardianStudent(
@@ -223,7 +231,7 @@ export class SupportTicketService {
 
   async listCurrentTeacher(context: RequestContext): Promise<SupportTicketRecord[]> {
     this.assertTeacherContext(context);
-    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId);
+    return (await this.listTenantTickets(context)).filter((ticket) => ticket.requesterId === context.userId);
   }
 
   async createCurrentTeacher(
@@ -699,6 +707,21 @@ export class SupportTicketService {
       throw new ForbiddenException(message);
     }
   }
+}
+
+/**
+ * Staff-route reach. The requester always reaches their own ticket. Other tickets need
+ * `support:manage`; a CAMPUSES-scoped manager reaches only tickets on those campuses, and a
+ * ticket without campusId stays visible to tenant-wide managers only (fail closed).
+ */
+export function canReachStaffSupportTicket(
+  context: RequestContext,
+  ticket: Pick<SupportTicketRecord, "requesterId" | "campusId">,
+): boolean {
+  if (ticket.requesterId === context.userId) return true;
+  if (!hasCapability(context, "support:manage")) return false;
+  if (context.campusScope?.scopeMode !== "CAMPUSES") return true;
+  return Boolean(ticket.campusId && context.campusScope.campusIds.includes(ticket.campusId));
 }
 
 function optionalText(value: string | undefined): string | undefined {

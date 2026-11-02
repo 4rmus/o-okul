@@ -218,6 +218,32 @@ describe("Capability access matrix", () => {
       });
   });
 
+  it("TEACHER support:read-own ile destek personel uçlarında yalnız kendi talebine ulaşır", async () => {
+    await request(server)
+      .get("/support-tickets")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const tickets = body as Array<{ id: string; requesterId: string }>;
+        expect(tickets.map((ticket) => ticket.id)).not.toContain("support-ticket-a");
+        expect(tickets.every((ticket) => ticket.requesterId === "teacher-tenant-a")).toBe(true);
+      });
+    await request(server)
+      .get("/support-tickets/support-ticket-a")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(404);
+    await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .send({ body: "Kapsam dışı." })
+      .expect(404);
+    await request(server)
+      .patch("/support-tickets/support-ticket-a")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .send({ status: "RESOLVED" })
+      .expect(403);
+  });
+
   it("öğrenci ve veli tenant-genel öğrenci listesi ile export alamaz", async () => {
     for (const token of [studentToken, guardianToken]) {
       await request(server)
