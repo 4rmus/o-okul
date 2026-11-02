@@ -3149,6 +3149,10 @@ requireTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
   'tone="success"',
   'tone="warning"',
   'title="SMS gönderimi başladı"',
+  // R2-WEB: kampüs kapsamı 403'ü genel hata yerine açık kapsam mesajı gösterir, gönderim eylemlerini açmaz.
+  '"ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN"',
+  'title="Kampüs kapsamı dışında"',
+  "canManageAnnouncements && selectedAnnouncement && !selectedOutOfCampusScope",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
@@ -4262,7 +4266,7 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "Finans görünürlüğü kapalı",
   "selectedStudentDetail",
   'label: "Ödeme planı"',
-  'value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı"',
+  'value: financeLoading ? panelLoadingValue : canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı"',
   "StudentFocusPanel",
   '<div id="portal-focus">\n        <StudentFocusPanel',
   "PortalWorkspace",
@@ -4271,8 +4275,12 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "/me/guardian/students/${encodeURIComponent(studentId)}/homework/material-assignments",
   "homeworkAssignments,",
   "supportReadOnly",
-  'actionLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı")',
-  'detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı")',
+  'supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı")',
+  'supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı")',
+  // R2-WEB: destek talebi açma yalnız taze okunmuş izinle (fail closed); izin yüklenirken "Kapalı" yerine yükleniyor.
+  "const canOpenSupportTickets = permissionFresh && preferencesQuery.data?.canOpenSupportTickets === true;",
+  'queries={[preferencesQuery, supportTicketsQuery]}',
+  'view === "payments" || view === "support"',
   "Veli destek talebi izni kapalı.",
   "auth && resolvedStudentId && !isRolePreview",
 ]);

@@ -151,6 +151,52 @@ test.describe("Duyuru gönderimi ve kapsamı (UAT F-27, F-28)", () => {
     });
   }
 
+  // R2-WEB: kampüs kapsamlı kullanıcı kampüsü dışındaki duyurunun alıcı ve teslim bilgisine 403 alır; genel hata yerine kapsam mesajı görür.
+  test("kampüs dışı duyuruda alıcı raporu kapsam mesajı gösterir ve gönderim eylemleri açılmaz", async ({ page }) => {
+    const posts: CapturedRequest[] = [];
+    await open(page, "tenantAdmin", posts);
+    await forbidCampusScope(page, (method, path) => method === "GET" && /^\/announcements\/announcement-a\/(recipients|delivery-reports)$/.test(path));
+    await page.getByRole("row", { name: /Veli toplantısı/ }).getByRole("button", { name: "Alıcılar" }).click();
+
+    const report = page.getByLabel("Duyuru alıcı raporu");
+    await expect(report.getByText("Kampüs kapsamı dışında")).toBeVisible();
+    await expect(report).toContainText("Bu duyuru çalışma kampüsünüzün dışında.");
+    await expect(report).not.toContainText("Alıcı raporu alınamadı");
+    await expect(report).not.toContainText("Bu işlem için yetkiniz yok.");
+    await expect(page.getByLabel("Duyuru bildirim gönderimi")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Push gönder" })).toHaveCount(0);
+    expect(deliveryPosts(posts)).toEqual([]);
+    await expectNoHorizontalOverflow(page, "duyuru kampüs kapsamı mesajı");
+  });
+
+  test("kampüs dışı gönderim reddinde kapsam mesajı gösterilir", async ({ page }) => {
+    const posts: CapturedRequest[] = [];
+    await open(page, "tenantAdmin", posts);
+    await forbidCampusScope(page, (method, path) => method === "POST" && path === "/announcements/announcement-a/deliveries");
+    await page.getByRole("row", { name: /Veli toplantısı/ }).getByRole("button", { name: "Alıcılar" }).click();
+
+    const deliveryPanel = page.getByLabel("Duyuru bildirim gönderimi");
+    await deliveryPanel.getByRole("button", { name: "Push gönder" }).click();
+    await page.getByRole("dialog", { name: "Push gönderimini onayla" }).getByRole("button", { name: "Push gönder" }).click();
+    await expect(deliveryPanel.getByRole("alert")).toContainText("Bu duyuru çalışma kampüsünüzün dışında.");
+  });
+
+  test("kampüs dışı hedefle yayın reddinde formda kapsam mesajı gösterilir", async ({ page }) => {
+    const posts: CapturedRequest[] = [];
+    await open(page, "tenantAdmin", posts);
+    await forbidCampusScope(page, (method, path) => method === "POST" && path === "/announcements");
+    await page.getByRole("button", { name: "Duyuru ekle" }).first().click();
+    const form = page.getByRole("dialog", { name: "Duyuru ekle" });
+    await form.getByLabel("Başlık", { exact: true }).fill("Şube duyurusu");
+    await form.getByLabel(/^Duyuru metni/).fill("Şube için bilgilendirme.");
+    await form.getByLabel("Kampüs").selectOption("campus-sube");
+    await form.getByRole("button", { name: "Yayınla", exact: true }).click();
+    await page.getByRole("dialog", { name: "Duyuruyu yayınla" }).getByRole("button", { name: "Yayınla" }).click();
+
+    await expect(form).toContainText("Seçilen hedef çalışma kampüsünüzün dışında.");
+    await expect(form).not.toContainText("Duyuru yayınlanamadı.");
+  });
+
   test("announcement:manage yetkisi olmayan kullanıcı gönderim eylemini görmez", async ({ page }) => {
     const posts: CapturedRequest[] = [];
     const requestedPaths: string[] = [];
@@ -163,6 +209,23 @@ test.describe("Duyuru gönderimi ve kapsamı (UAT F-27, F-28)", () => {
     expect(deliveryPosts(posts)).toEqual([]);
   });
 });
+
+// Sonra eklenen route önce çalışır: eşleşen istek API'nin kampüs kapsamı 403'ünü alır, diğerleri ana mock'a düşer.
+async function forbidCampusScope(page: Page, matches: (method: string, path: string) => boolean) {
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/^\/api\/v1/, "");
+    if (request.method() === "OPTIONS" || !matches(request.method(), path)) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      body: JSON.stringify({ error: { code: "ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN", message: "Forbidden" } }),
+      headers: { ...corsFor(route), "content-type": "application/json" },
+      status: 403,
+    });
+  });
+}
 
 function deliveryPosts(posts: CapturedRequest[]) {
   return posts.filter((post) => post.path.endsWith("/deliveries"));
