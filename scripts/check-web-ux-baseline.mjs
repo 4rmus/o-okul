@@ -99,6 +99,8 @@ const files = {
   "apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/teacher-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", "utf8"),
   "apps/web/app/(app)/portals/student-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/student-portal-page.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/student-homework-feed.tsx": readFileSync("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", "utf8"),
+  "apps/web/e2e-next/student-portal-gelisimim-next.spec.ts": readFileSync("apps/web/e2e-next/student-portal-gelisimim-next.spec.ts", "utf8"),
   "apps/web/app/(app)/portals/teacher-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/teacher-today-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-today-page.tsx", "utf8"),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
@@ -4211,6 +4213,34 @@ requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
   "/me/student/profile",
   "/me/student/support-tickets",
   'ariaLabel="Öğrenci portal çalışma alanı"',
+  // S1: Gelişimim (KV-4 serileri, öğrencinin kendi kapsamı), tek ödev akışı ve panel bazlı yükleme hatası.
+  '"/me/student/overview"',
+  'ariaLabel="Gelişimim"',
+  "<StudentHomeworkFeed",
+  'studentHomeworkFeedGroup(item, now) === "today"',
+  "function PanelLoadError(",
+]);
+
+requireTokens("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", [
+  'aria-label="Ödevlerim"',
+  'overdue: "Gecikmiş"',
+  'today: "Bugün"',
+  'week: "Bu hafta"',
+  'later: "Sonra"',
+  'return item.kind === "material" || item.status === "NOT_SUBMITTED";',
+]);
+
+requireNoTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
+  "HomeworkAssignmentsPanel",
+  "StudentClassHomeworkPanel",
+]);
+
+requireTokens("apps/web/e2e-next/student-portal-gelisimim-next.spec.ts", [
+  "Özet bugün teslimi iki kaynaktan sayar",
+  'toContainText("2 ödev")',
+  'getByRole("table", { name: "Teslim edilenler" })',
+  "bir GET düşerse yalnız o panel hata ve Tekrar dene gösterir",
+  "Devamsızlık ve Profil görünümleri ana sütunu kullanır",
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [

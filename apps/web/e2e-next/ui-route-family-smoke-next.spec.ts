@@ -122,7 +122,7 @@ const routeCases = [
   route("/ogrenci/destek", "Öğrenci Portalı", "student", { role: "region", name: "Destek talepleri" }),
   route("/ogrenci/devamsizlik", "Öğrenci Portalı", "student", { role: "region", name: "Devamsızlık" }),
   route("/ogrenci/duyurular", "Öğrenci Portalı", "student", { role: "region", name: "Duyurular" }),
-  route("/ogrenci/odevler", "Öğrenci Portalı", "student", { role: "region", name: "Ödevler" }),
+  route("/ogrenci/odevler", "Öğrenci Portalı", "student", { role: "region", name: "Ödevlerim" }),
   route("/ogrenci/profil", "Öğrenci Portalı", "student", { role: "region", name: "Profil" }),
   route("/ogrenci/raporlar", "Öğrenci Portalı", "student", { role: "region", name: "Portal rapor özeti" }, { query: "examId=exam-demo-isem-lgs-1&studentId=student-a" }),
 
@@ -701,6 +701,16 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
         attendance: { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
         homework: { assignmentCount: 0, upcoming: [] },
         announcements: { unreadCount: 0 },
+        examSeries: [],
+        schoolGrades: [],
+      },
+    };
+  }
+  if (pathName === "/me/student/overview") {
+    return {
+      data: {
+        attendance: { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
+        homework: { openClassHomeworkCount: 0, materialAssignmentCount: 0 },
         examSeries: [],
         schoolGrades: [],
       },

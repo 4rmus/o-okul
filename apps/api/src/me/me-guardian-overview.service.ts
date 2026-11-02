@@ -3,13 +3,11 @@ import type { GuardianStudentOverview, PaymentPlanWithInstallmentsRecord } from 
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import type { RequestContext } from "../context/request-context.js";
-import { GradebookService } from "../gradebook/gradebook.service.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
 import { PaymentService } from "../payment/payment.service.js";
-import { ReportGenerationService } from "../report/report-generation.service.js";
-import { SchoolService } from "../school/school.service.js";
 import { StudentService } from "../student/student.service.js";
+import { MeProgressSeriesService } from "./me-progress-series.service.js";
 
 const upcomingHomeworkLimit = 5;
 
@@ -26,26 +24,20 @@ export class MeGuardianOverviewService {
     private readonly homework: HomeworkService,
     private readonly announcements: AnnouncementService,
     private readonly payments: PaymentService,
-    private readonly reports: ReportGenerationService,
-    private readonly gradebook: GradebookService,
-    private readonly school: SchoolService,
+    private readonly progressSeries: MeProgressSeriesService,
   ) {}
 
   async get(context: RequestContext, studentId: string): Promise<GuardianStudentOverview> {
     // Single link gate (same pattern as payment.service.ts listCurrentGuardianStudent): 404 unknown, 403 unlinked.
     const link = await this.guardians.findCurrentGuardianStudentLink(context, studentId);
-    const [profile, attendance, assignments, announcements, plans, progress, grades, courses] = await Promise.all([
+    const [profile, attendance, assignments, announcements, plans, series] = await Promise.all([
       this.students.findProfileForViewer(context, link.studentId),
       this.attendance.summarizeCurrentGuardianStudent(context, link.studentId),
       this.homework.listCurrentGuardianStudentMaterialAssignments(context, link.studentId),
       this.announcements.listCurrentGuardianStudent(context, link.studentId),
       link.canViewFinance ? this.payments.listCurrentGuardianStudent(context, link.studentId) : Promise.resolve(undefined),
-      // ponytail: scope "all" ignores examId; the report service only requires it to be non-empty.
-      this.reports.getStudentProgress(context, "all", link.studentId, { scope: "all" }),
-      this.gradebook.listPublishedForStudent(context, link.studentId),
-      this.school.listCourses(context),
+      this.progressSeries.get(context, link.studentId),
     ]);
-    const courseNames = new Map(courses.map((course) => [course.id, course.name]));
     const today = new Date().toISOString().slice(0, 10);
 
     return {
@@ -77,15 +69,8 @@ export class MeGuardianOverviewService {
       },
       announcements: { unreadCount: announcements.filter((announcement) => !announcement.readAt).length },
       ...(plans ? { finance: summarizeFinance(plans) } : {}),
-      examSeries: progress.points.map((point) => ({
-        snapshotId: point.snapshotId,
-        ...(point.generatedAt ? { generatedAt: point.generatedAt } : {}),
-        ...pickNumbers(point.total, ["successRate", "net", "questionCount", "correct", "wrong", "blank"]),
-      })),
-      schoolGrades: grades.map((grade) => {
-        const courseName = courseNames.get(grade.courseId);
-        return courseName ? { ...grade, courseName } : grade;
-      }),
+      examSeries: series.examSeries,
+      schoolGrades: series.schoolGrades,
     };
   }
 }
@@ -101,13 +86,4 @@ function summarizeFinance(plans: PaymentPlanWithInstallmentsRecord[]): NonNullab
     overdueInstallmentCount: overdue.length,
     ...(nextDueDate ? { nextDueDate } : {}),
   };
-}
-
-function pickNumbers<T extends object, K extends keyof T & string>(source: T, keys: readonly K[]): Partial<Record<K, number>> {
-  const picked: Partial<Record<K, number>> = {};
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "number" && Number.isFinite(value)) picked[key] = value;
-  }
-  return picked;
 }

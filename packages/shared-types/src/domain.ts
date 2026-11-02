@@ -3324,3 +3324,16 @@ export interface GuardianStudentOverview {
   /** School grade series on each assessment's own scale (score / maxScore). */
   schoolGrades: GuardianSchoolGradeItem[];
 }
+
+/**
+ * Student 'Gelişimim' read model for the signed-in student only (self scope, portal:student).
+ * examSeries and schoolGrades follow the same KV-4 rules as GuardianStudentOverview: published grade versions only,
+ * each assessment on its own scale, never merged with Başarı %. No guardian, finance, contact or teacher-note fields.
+ */
+export interface StudentSelfOverview {
+  attendance: { total: number; present: number; absent: number; late: number; excused: number };
+  /** Open = class homework the student has not marked as handed in, plus material assignments (no hand-in state). */
+  homework: { openClassHomeworkCount: number; materialAssignmentCount: number };
+  examSeries: GuardianExamSeriesPoint[];
+  schoolGrades: GuardianSchoolGradeItem[];
+}

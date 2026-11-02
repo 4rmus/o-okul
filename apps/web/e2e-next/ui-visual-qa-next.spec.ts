@@ -675,9 +675,14 @@ test.describe("Faz 9 UI görsel smoke", () => {
       { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
       { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
     ]);
-    const homeworkTable = page.getByRole("table", { name: "Ödev ve materyal atamaları" });
-    await expect(homeworkTable.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
+    // S1: sınıf ödevi ve materyal ataması tek "Ödevlerim" akışında; Gelişimim serileri ayrı ölçekle.
+    const homeworkTable = page.getByRole("region", { exact: true, name: "Ödevlerim" }).getByRole("table").first();
+    await expect(homeworkTable.getByRole("columnheader", { name: "Ödev" })).toBeVisible();
+    await expect(homeworkTable.getByRole("columnheader", { name: "Açıklama" })).toBeVisible();
     await expect(homeworkTable.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
+    const gelisimim = page.getByRole("region", { exact: true, name: "Gelişimim" });
+    await expect(gelisimim.getByRole("table", { name: "Deneme sınavları: Başarı %" })).toContainText("%81,7");
+    await expect(gelisimim.getByRole("table", { name: "Okul notları: puan / tam puan" })).toContainText("84 / 100");
     const studentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(studentReportSummary).toContainText("Başarı %");
     await expect(studentReportSummary).toContainText("%81,7");
@@ -709,7 +714,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const mobileStudentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(mobileStudentReportSummary).toContainText("Başarı %");
     await expect(page.getByRole("region", { name: "Sınav raporu özet sayfası" })).toHaveCount(0);
-    await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Ödevlerim" }).getByRole("table").first()).toBeVisible();
     await mobileStudentReportSummary.getByRole("button", { name: "Karne detayını göster" }).click();
     const mobileKarneSummary = page.getByRole("region", { name: "Sınav raporu özet sayfası" });
     await expect(mobileKarneSummary).toBeVisible();
@@ -1058,6 +1063,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/student/enrollments" || pathName === "/me/guardian/students/student-a/enrollments") return { data: createEnrollments() };
   if (pathName === "/me/student/announcements") return { data: createPortalAnnouncements("STUDENTS") };
   if (pathName === "/me/student/homework/material-assignments" || pathName === "/me/guardian/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
+  if (pathName === "/me/student/overview") return { data: createStudentSelfOverview() };
   if (pathName === "/me/student/support-tickets" || pathName === "/me/teacher/support-tickets" || pathName === "/me/guardian/students/student-a/support-tickets") return { data: createPortalSupportTickets() };
   if (pathName === "/me/student/attendance" || pathName === "/me/guardian/students/student-a/attendance") return { data: createAttendanceRecords() };
   if (pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") return { data: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 } };
@@ -1554,6 +1560,16 @@ function createPortalAnnouncements(audience: "GUARDIANS" | "STUDENTS" | "TEACHER
       updatedAt: "2026-06-16T09:00:00.000Z",
     },
   ];
+}
+
+// S1: öğrenci Gelişimim özeti Özet'in katlama çizgisinin altındadır; 414 golden çerçevesi değişmez.
+function createStudentSelfOverview() {
+  return {
+    attendance: { absent: 1, excused: 0, late: 1, present: 28, total: 30 },
+    examSeries: [{ generatedAt: "2026-06-17T08:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-a", successRate: 81.7 }],
+    homework: { materialAssignmentCount: 1, openClassHomeworkCount: 0 },
+    schoolGrades: [{ absent: false, assessmentId: "assessment-a", courseId: "course-math", courseName: "Matematik", heldOn: "2026-06-10", kind: "WRITTEN", maxScore: 100, score: 84, title: "1. Yazılı", version: 1 }],
+  };
 }
 
 function createPortalHomeworkAssignments() {
