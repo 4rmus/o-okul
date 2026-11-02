@@ -1,5 +1,6 @@
 import pg from "pg";
 import type { InstitutionDashboardReportSummary, InstitutionDashboardSummary } from "@o-okul/shared-types";
+import { PostgresClassOverviewStore } from "../class-overview/class-overview.store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
@@ -12,11 +13,17 @@ export interface InstitutionDashboardScope {
   campusIds?: readonly string[];
 }
 
+export interface InstitutionDashboardOptions {
+  /** DEC-20261102-04: also load the academic-ops counts (same campus scope); left out when they cannot be read. */
+  academicOps?: boolean;
+}
+
 export interface InstitutionDashboardStore {
   load(
     tenantId: string,
     attendanceDate: string,
     scope?: InstitutionDashboardScope,
+    options?: InstitutionDashboardOptions,
   ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">>;
 }
 
@@ -45,7 +52,9 @@ export class InMemoryInstitutionDashboardStore implements InstitutionDashboardSt
     _tenantId: string,
     _attendanceDate: string,
     _scope?: InstitutionDashboardScope,
+    _options?: InstitutionDashboardOptions,
   ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
+    // academicOps is left out: other modules' in-memory stores are separate instances, so unknown beats a false zero.
     return {
       institution: {
         name: "Kurum Paneli",
@@ -62,16 +71,36 @@ export class InMemoryInstitutionDashboardStore implements InstitutionDashboardSt
 }
 
 export class PostgresInstitutionDashboardStore implements InstitutionDashboardStore {
+  private readonly academicOps: PostgresClassOverviewStore;
+
   constructor(
     private readonly pool: TenantQueryable = new pg.Pool({
       connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
     }),
-  ) {}
+  ) {
+    // Class 360 and the dashboard share one rule set for roster, roll call and grade entry (DEC-20261102-04).
+    this.academicOps = new PostgresClassOverviewStore(pool);
+  }
 
   async load(
     tenantId: string,
     attendanceDate: string,
     scope: InstitutionDashboardScope = {},
+    options: InstitutionDashboardOptions = {},
+  ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
+    const dashboard = await this.loadSummary(tenantId, attendanceDate, scope);
+    if (!options.academicOps) return dashboard;
+    // An unreadable academic-ops source drops the field, not the dashboard (the teacher "Bugün" T3 rule).
+    const counts = await this.academicOps
+      .loadAcademicOps(tenantId, attendanceDate, scope.campusIds)
+      .catch(() => undefined);
+    return counts ? { ...dashboard, academicOps: { date: attendanceDate, ...counts } } : dashboard;
+  }
+
+  private async loadSummary(
+    tenantId: string,
+    attendanceDate: string,
+    scope: InstitutionDashboardScope,
   ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
     const campusIds = scope.campusIds ? [...new Set(scope.campusIds)] : null;
     return withTenantQuery(this.pool, async (client) => {

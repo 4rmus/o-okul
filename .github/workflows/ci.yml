@@ -353,6 +353,9 @@ jobs:
       INSTITUTION_DASHBOARD_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       INSTITUTION_DASHBOARD_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       INSTITUTION_DASHBOARD_POSTGRES_REQUIRED: "1"
+      CLASS_OVERVIEW_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      CLASS_OVERVIEW_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      CLASS_OVERVIEW_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -415,5 +418,6 @@ jobs:
           src/exam/exam-workspace-progress-store.postgres.test.ts
           src/me/me-teacher-today.store.postgres.test.ts
           src/me/me-institution-dashboard.store.postgres.test.ts
+          src/class-overview/class-overview.store.postgres.test.ts
           src/http/tenant-mutation-settle.postgres.test.ts
           src/listing/cursor-list-keyset.postgres.test.ts

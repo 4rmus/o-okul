@@ -118,7 +118,7 @@ export function KurumDashboard() {
                 className="next-attention-item"
                 detail={item.description}
                 href={item.href}
-                key={item.href}
+                key={item.title}
                 label={item.title}
                 tone="warning"
                 value={item.value}
@@ -301,7 +301,15 @@ function buildMetrics(dashboard: InstitutionDashboardSummary, attentionTotal: nu
 }
 
 function buildAttentionItems(dashboard: InstitutionDashboardSummary): DashboardAttentionItem[] {
+  // DEC-20261102-04: akademik operasyon sayıları yalnız academic:manage rolüne ve aynı kampüs kapsamıyla gelir.
+  const academicOps = dashboard.academicOps;
   const items: DashboardAttentionItem[] = [
+    {
+      title: "Yoklama alınmamış sınıflar",
+      value: academicOps?.rollCallMissingClassCount ?? 0,
+      description: "Bugün dersi olup yoklaması başlamamış sınıflar",
+      href: "/kurum/devamsizlik",
+    },
     {
       title: "Öğrenci destek talepleri",
       value: dashboard.attention.openSupportTicketCount,
@@ -319,6 +327,18 @@ function buildAttentionItems(dashboard: InstitutionDashboardSummary): DashboardA
       value: dashboard.attention.openImportQuarantineCount,
       description: "Eşleştirme veya kontrol bekleyen kayıtlar",
       href: "/kurum/optik",
+    },
+    {
+      title: "Eksik not girişi",
+      value: academicOps?.missingGradeEntryAssessmentCount ?? 0,
+      description: "Girilen not sayısı sınıf mevcudundan az olan değerlendirmeler",
+      href: "/kurum/not-defteri",
+    },
+    {
+      title: "Yayınlanmamış notlar",
+      value: academicOps?.unpublishedDraftAssessmentCount ?? 0,
+      description: "Taslak notu yayın bekleyen değerlendirmeler",
+      href: "/kurum/not-defteri",
     },
   ].filter((item) => Number(item.value) > 0);
 

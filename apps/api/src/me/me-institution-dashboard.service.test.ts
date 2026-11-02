@@ -62,6 +62,25 @@ describe("MeInstitutionDashboardService", () => {
     expect(tenantWide).not.toHaveProperty("campusScoped");
   });
 
+  it("akademik operasyon sayılarını yalnız academic:manage yetkisiyle ister (DEC-20261102-04)", async () => {
+    const options: unknown[] = [];
+    const service = new MeInstitutionDashboardService({
+      async load(_tenantId, _attendanceDate, _scope, option) {
+        options.push(option);
+        return {
+          institution: { name: "Örnek Akademi" },
+          activeStudentCount: 0,
+          attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+        };
+      },
+    });
+
+    await service.get(tenantAdminContext);
+    await service.get({ ...tenantAdminContext, capabilities: ["setup:read"] });
+
+    expect(options).toEqual([{ academicOps: true }, { academicOps: false }]);
+  });
+
   it("kampüs kapsamı eksik operasyon çalışanını reddeder", async () => {
     const service = new MeInstitutionDashboardService({ load: async () => {
       throw new Error("store çağrılmamalı");
@@ -232,6 +251,75 @@ describe("PostgresInstitutionDashboardStore kampüs kapsamı", () => {
     expect(result).not.toHaveProperty("latestExam");
     expect(result).toMatchObject({ activeStudentCount: 6, attention: { openSupportTicketCount: 1 } });
     expect(JSON.stringify(result)).not.toContain("snapshot-a");
+  });
+});
+
+describe("PostgresInstitutionDashboardStore akademik operasyon sayıları", () => {
+  const summaryRow = {
+    name: "Örnek Akademi",
+    institutionType: null,
+    contactEmail: null,
+    logoUrl: null,
+    activeStudentCount: 6,
+    attendanceAlertCount: 0,
+    openImportQuarantineCount: 0,
+    openSupportTicketCount: 0,
+    examId: null,
+    examTitle: null,
+    examStartsAt: null,
+    registeredParticipantCount: 0,
+    attendedParticipantCount: 0,
+    absentParticipantCount: 0,
+    report: null,
+  };
+
+  it("aynı kampüs kapsamıyla sayar ve gün bilgisini ekler", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('WITH "latestExam"')) return { rows: [summaryRow] as T[] };
+        if (sql.includes('WITH "scopedClass"')) {
+          return { rows: [{ rollCallMissingClassCount: 2, missingGradeEntryAssessmentCount: 3, unpublishedDraftAssessmentCount: 1 }] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresInstitutionDashboardStore(pool);
+
+    const withOps = await runWithRequestContext(
+      tenantAdminContext,
+      () => store.load("tenant-a", "2026-11-02", { campusIds: ["campus-a", "campus-a"] }, { academicOps: true }),
+    );
+    const withoutOps = await runWithRequestContext(tenantAdminContext, () => store.load("tenant-a", "2026-11-02"));
+
+    const opsQueries = queries.filter((query) => query.sql.includes('WITH "scopedClass"') && query.sql.includes('"currentAssessment"'));
+    expect(opsQueries).toHaveLength(1);
+    expect(opsQueries[0]?.values).toEqual(["tenant-a", "2026-11-02", ["campus-a"]]);
+    expect(opsQueries[0]?.sql).not.toMatch(/"score"|AVG\(/);
+    expect(withOps.academicOps).toEqual({
+      date: "2026-11-02",
+      rollCallMissingClassCount: 2,
+      missingGradeEntryAssessmentCount: 3,
+      unpublishedDraftAssessmentCount: 1,
+    });
+    expect(withoutOps).not.toHaveProperty("academicOps");
+  });
+
+  it("okunamayan akademik kaynak özeti düşürmez, yalnız alanı bırakır", async () => {
+    const pool = {
+      async query<T>(sql: string) {
+        if (sql.includes('WITH "latestExam"')) return { rows: [summaryRow] as T[] };
+        if (sql.includes('"currentAssessment"')) throw new Error("relation missing");
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresInstitutionDashboardStore(pool);
+
+    const result = await runWithRequestContext(tenantAdminContext, () => store.load("tenant-a", "2026-11-02", {}, { academicOps: true }));
+
+    expect(result).toMatchObject({ activeStudentCount: 6 });
+    expect(result).not.toHaveProperty("academicOps");
   });
 });
 

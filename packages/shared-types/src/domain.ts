@@ -2729,6 +2729,87 @@ export interface InstitutionDashboardSummary {
    * attributed to a campus (import quarantine, the latest exam and its report) read 0 or are left out.
    */
   campusScoped?: boolean;
+  /**
+   * DEC-20261102-04: academic operations counts for academic:manage viewers, filtered by the same campus scope as the
+   * counts above. Left out when the viewer lacks academic:manage or the source tables cannot be read.
+   */
+  academicOps?: InstitutionDashboardAcademicOps;
+}
+
+/** DEC-20261102-04: counts only; never draft scores or averages (ADR-0011). */
+export interface InstitutionDashboardAcademicOps {
+  /** Istanbul calendar day the roll-call count refers to (YYYY-MM-DD). */
+  date: string;
+  /** Classes with a scheduled lesson today and a non-empty roster where no roster student is marked yet. */
+  rollCallMissingClassCount: number;
+  /** Current-term assessments whose entries cover fewer students than the class roster. */
+  missingGradeEntryAssessmentCount: number;
+  /** Current-term assessments that carry at least one unpublished draft entry. */
+  unpublishedDraftAssessmentCount: number;
+}
+
+/**
+ * Roll call of a class on a day with a scheduled lesson: NOT_TAKEN when no roster student is marked, PARTIAL when some
+ * are, TAKEN when every roster student is marked (or the roster is empty).
+ */
+export type ClassOverviewRollCallState = "NOT_TAKEN" | "PARTIAL" | "TAKEN";
+
+/** Grade-entry status of one current-term assessment; counts and the published version only (ADR-0011). */
+export interface ClassOverviewAssessmentStatus {
+  assessmentId: string;
+  title: string;
+  kind: string;
+  heldOn: string;
+  courseId: string;
+  courseName?: string;
+  termId: string;
+  /** Roster students with at least one entry (draft or published). */
+  enteredCount: number;
+  rosterCount: number;
+  missingEntries: boolean;
+  hasUnpublishedDraft: boolean;
+  publishedVersion?: number;
+}
+
+/** An active CLASS_TEACHER or BRANCH_TEACHER assignment of the class and the assessments it may author. */
+export interface ClassOverviewTeacherAssignment {
+  assignmentId: string;
+  teacherId: string;
+  teacherName: string;
+  role: TeacherAssignmentRole;
+  courseId?: string;
+  courseName?: string;
+  termId?: string;
+  assessmentCount: number;
+  missingEntryAssessmentCount: number;
+  unpublishedDraftAssessmentCount: number;
+  assessments: ClassOverviewAssessmentStatus[];
+}
+
+/** DEC-20261102-04 Class 360: read-only academic operations counts of one class. */
+export interface ClassOverview {
+  classId: string;
+  /** Istanbul calendar day the roster, roll call and assignments refer to (YYYY-MM-DD). */
+  date: string;
+  generatedAt: string;
+  /** Active, non-deleted students whose enrollment in the class covers the date (the attendance roster rule). */
+  rosterCount: number;
+  /** Present only when the class has a scheduled lesson on the date. */
+  rollCall?: {
+    state: ClassOverviewRollCallState;
+    lessonCount: number;
+    markedCount: number;
+  };
+  homework: {
+    openCount: number;
+    waitingSubmissionCount: number;
+  };
+  gradeEntry: {
+    assessmentCount: number;
+    missingEntryAssessmentCount: number;
+    unpublishedDraftAssessmentCount: number;
+  };
+  teacherAssignments: ClassOverviewTeacherAssignment[];
 }
 
 export interface ReportErrorBooklet {

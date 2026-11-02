@@ -80,6 +80,7 @@ const files = {
   "apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx": readFileSync("apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx": readFileSync("apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/classes-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/classes-page.tsx", "utf8"),
   "apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardians-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", "utf8"),
@@ -2682,6 +2683,36 @@ requireNoTokens("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", [
   "?? detail.record.campusId",
   "?? detail.record.gradeLevelId",
   "uh-crud-page__table-shell",
+]);
+
+// DEC-20261102-04 Sınıf 360: academic:manage rolüne sayılar; taslak puan veya ortalama asla (ADR-0011).
+requireTokens("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", [
+  '{activeSection === "overview" ? overviewPanels : null}',
+]);
+requireTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", [
+  'hasCapabilityForRoles(roles, "academic:manage")',
+  "/overview`",
+  'aria-label="Sınıf akademik durumu"',
+  '<InfoGrid aria-label="Sınıf akademik durum özeti" role="region">',
+  'caption="Öğretmen başına not girişi"',
+  'caption="Değerlendirme giriş durumu"',
+  'mobilePriority: "primary"',
+  'sticky: "left"',
+  "isClassOverview",
+]);
+requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
+  "dashboard.academicOps",
+  "academicOps?.rollCallMissingClassCount ?? 0",
+  "academicOps?.missingGradeEntryAssessmentCount ?? 0",
+  "academicOps?.unpublishedDraftAssessmentCount ?? 0",
+  'href: "/kurum/not-defteri"',
+  "key={item.title}",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", [
+  ".score",
+  "average",
+  "assessment.assessmentId}</",
+  "assignment.courseId ??",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [

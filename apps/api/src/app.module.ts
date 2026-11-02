@@ -3,6 +3,7 @@ import { AuditLogModule } from "./audit-log/audit-log.module.js";
 import { AnnouncementModule } from "./announcement/announcement.module.js";
 import { AttendanceModule } from "./attendance/attendance.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ClassOverviewModule } from "./class-overview/class-overview.module.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
 import { DevelopmentModule } from "./development/development.module.js";
 import { GradebookModule } from "./gradebook/gradebook.module.js";
@@ -45,6 +46,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     AnnouncementModule,
     AuthModule,
     AttendanceModule,
+    ClassOverviewModule,
     DevelopmentModule,
     GradebookModule,
     ExamModule,
