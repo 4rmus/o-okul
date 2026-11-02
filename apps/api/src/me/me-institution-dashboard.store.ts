@@ -3,7 +3,11 @@ import type { InstitutionDashboardReportSummary, InstitutionDashboardSummary } f
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
-/** campusIds set: only rows attributable to these campuses are counted; unattributable tenant-wide counters read 0. */
+/**
+ * campusIds set: only rows attributable to these campuses are counted; unattributable tenant-wide counters read 0, and
+ * the latest exam is left out because exams and report snapshots are tenant-wide (the exam module serves them to
+ * tenant-wide staff only).
+ */
 export interface InstitutionDashboardScope {
   campusIds?: readonly string[];
 }
@@ -34,7 +38,6 @@ interface InstitutionDashboardRow {
   attendedParticipantCount: number;
   absentParticipantCount: number;
   report: unknown;
-  scopedClassIds: string[] | null;
 }
 
 export class InMemoryInstitutionDashboardStore implements InstitutionDashboardStore {
@@ -79,6 +82,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
            WHERE "tenantId" = $1
              AND "status" = 'PUBLISHED'
              AND "deletedAt" IS NULL
+             AND $3::text[] IS NULL
            ORDER BY COALESCE("startsAt", "createdAt") DESC, "createdAt" DESC
            LIMIT 1
          ),
@@ -150,14 +154,18 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
                AND ticket."deletedAt" IS NULL
                AND (
                  $3::text[] IS NULL
+                 -- Same attribution as the support-ticket service: ticket campus, else the live class's campus, else
+                 -- the live student's live class campus; nothing attributable is not counted.
                  OR COALESCE(
                    ticket."campusId",
                    (SELECT ticket_class."campusId" FROM "Class" ticket_class
-                     WHERE ticket_class."tenantId" = $1 AND ticket_class."id" = ticket."classId"),
+                     WHERE ticket_class."tenantId" = $1 AND ticket_class."id" = ticket."classId"
+                       AND ticket_class."deletedAt" IS NULL),
                    (SELECT student_class."campusId" FROM "Student" ticket_student
                      INNER JOIN "Class" student_class
                        ON student_class."tenantId" = ticket_student."tenantId" AND student_class."id" = ticket_student."classId"
-                     WHERE ticket_student."tenantId" = $1 AND ticket_student."id" = ticket."studentId")
+                     WHERE ticket_student."tenantId" = $1 AND ticket_student."id" = ticket."studentId"
+                       AND ticket_student."deletedAt" IS NULL AND student_class."deletedAt" IS NULL)
                  ) = ANY($3::text[])
                )
            ) AS "openSupportTicketCount",
@@ -167,10 +175,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
            COALESCE(participants."registeredParticipantCount", 0)::int AS "registeredParticipantCount",
            COALESCE(participants."attendedParticipantCount", 0)::int AS "attendedParticipantCount",
            COALESCE(participants."absentParticipantCount", 0)::int AS "absentParticipantCount",
-           report."report",
-           CASE WHEN $3::text[] IS NULL THEN NULL
-             ELSE ARRAY(SELECT "id" FROM "scopedClass" ORDER BY "id")
-           END AS "scopedClassIds"
+           report."report"
          FROM "Tenant" tenant
          LEFT JOIN "latestExam" exam ON true
          LEFT JOIN LATERAL (
@@ -191,7 +196,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
       );
       const row = result.rows[0];
       if (!row) throw new Error("INSTITUTION_DASHBOARD_NOT_FOUND");
-      return toInstitutionDashboard(row);
+      return toInstitutionDashboard(row, campusIds !== null);
     });
   }
 }
@@ -202,8 +207,11 @@ export function createInstitutionDashboardStore(): InstitutionDashboardStore {
     : new InMemoryInstitutionDashboardStore();
 }
 
-function toInstitutionDashboard(row: InstitutionDashboardRow): Omit<InstitutionDashboardSummary, "generatedAt"> {
-  const latestExam = row.examId && row.examTitle
+function toInstitutionDashboard(
+  row: InstitutionDashboardRow,
+  campusScoped: boolean,
+): Omit<InstitutionDashboardSummary, "generatedAt"> {
+  const latestExam = !campusScoped && row.examId && row.examTitle
     ? {
         examId: row.examId,
         title: row.examTitle,
@@ -212,7 +220,7 @@ function toInstitutionDashboard(row: InstitutionDashboardRow): Omit<InstitutionD
         attendedParticipantCount: row.attendedParticipantCount,
         absentParticipantCount: row.absentParticipantCount,
         reportStatus: isRecord(row.report) ? "READY" as const : "MISSING" as const,
-        ...(isRecord(row.report) ? { report: toReportSummary(row.report, row.scopedClassIds) } : {}),
+        ...(isRecord(row.report) ? { report: toReportSummary(row.report) } : {}),
       }
     : undefined;
 
@@ -233,11 +241,8 @@ function toInstitutionDashboard(row: InstitutionDashboardRow): Omit<InstitutionD
   };
 }
 
-// scopedClassIds set: only those per-class rows survive, the tenant-wide averages are dropped, and resultCount is the
-// in-scope class total, so a campus-scoped viewer never sees another campus's numbers.
-function toReportSummary(report: Record<string, unknown>, scopedClassIds: string[] | null): InstitutionDashboardReportSummary {
-  const scoped = scopedClassIds ? new Set(scopedClassIds) : undefined;
-  const averages = !scoped && isRecord(report.averages) ? report.averages : {};
+function toReportSummary(report: Record<string, unknown>): InstitutionDashboardReportSummary {
+  const averages = isRecord(report.averages) ? report.averages : {};
   const classes = Array.isArray(report.classes) ? report.classes : [];
   const questionCount = readQuestionCount(averages);
   const successRate = readSuccessRate(averages, questionCount);
@@ -245,7 +250,6 @@ function toReportSummary(report: Record<string, unknown>, scopedClassIds: string
 
   const classSummaries = classes.flatMap((value) => {
     if (!isRecord(value)) return [];
-    if (scoped && !scoped.has(readString(value.classId) ?? "")) return [];
     const classAverages = isRecord(value.averages) ? value.averages : {};
     const classQuestionCount = readQuestionCount(classAverages);
     const classSuccessRate = readSuccessRate(classAverages, classQuestionCount);
@@ -263,9 +267,7 @@ function toReportSummary(report: Record<string, unknown>, scopedClassIds: string
   return {
     snapshotId: readString(report.snapshotId) ?? "",
     ...(readString(report.generatedAt) ? { generatedAt: readString(report.generatedAt) } : {}),
-    resultCount: scoped
-      ? classSummaries.reduce((total, summary) => total + summary.resultCount, 0)
-      : readNumber(report.resultCount) ?? 0,
+    resultCount: readNumber(report.resultCount) ?? 0,
     ...(successRate !== undefined ? { successRate } : {}),
     ...(net !== undefined ? { net } : {}),
     ...(questionCount !== undefined ? { questionCount } : {}),

@@ -281,6 +281,88 @@ describe("SmsBatchService", () => {
     });
   });
 
+  describe("kampüs kapsamlı gönderici", () => {
+    const createSplitCampusService = (producer = new FakeProducer()) => new SmsBatchService(
+      new FakeMessageTemplateService() as unknown as MessageTemplateService,
+      new FakeAnnouncementStore() as unknown as AnnouncementStore,
+      new SplitCampusClassStore() as unknown as ClassStore,
+      new FakeSmsBatchDeliveryReportStore(),
+      new FakeGuardianStore() as unknown as GuardianStore,
+      new FakeGuardianStudentStore(true) as unknown as GuardianStudentStore,
+      producer,
+      new FakeScheduleStore() as unknown as ScheduleStore,
+      new FakeStudentStore() as unknown as StudentStore,
+    );
+    const campusContext = (campusIds: string[]) => ({
+      tenantId: "tenant-a",
+      userId: "user-operations",
+      roles: ["OPERATIONS_STAFF"],
+      bypassRls: false,
+      campusScope: { scopeMode: "CAMPUSES" as const, campusIds },
+    });
+
+    it("filtresiz önizlemede yalnız kapsamdaki sınıfların velilerini döndürür", async () => {
+      const service = createSplitCampusService();
+      const tenantWide = await service.previewRecipients(
+        { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+        { studentStatus: "ACTIVE" },
+      );
+      const main = await service.previewRecipients(campusContext(["campus-main"]), { studentStatus: "ACTIVE" });
+      const north = await service.previewRecipients(campusContext(["campus-north"]), {});
+      const other = await service.previewRecipients(campusContext(["campus-other"]), {});
+
+      expect(tenantWide.recipients.map((recipient) => recipient.to)).toEqual(["5000000001", "5000000002"]);
+      expect(main.recipients.map((recipient) => recipient.to)).toEqual(["5000000001"]);
+      expect(north.recipients.map((recipient) => recipient.to)).toEqual(["5000000002"]);
+      expect(other).toEqual({ recipients: [], recipientCount: 0 });
+    });
+
+    it("kapsam dışı kampüs, sınıf ve duyuruyu reddeder; okul geneli duyuru gönderilemez", async () => {
+      const service = createSplitCampusService();
+      const north = campusContext(["campus-north"]);
+
+      await expect(service.previewRecipients(north, { campusId: "campus-main" })).rejects.toThrow("SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN");
+      await expect(service.previewRecipients(north, { classId: "class-a" })).rejects.toThrow("SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN");
+      await expect(service.previewRecipients(north, { classId: "class-missing" })).rejects.toThrow("SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN");
+      await expect(service.previewRecipients(north, { announcementId: "announcement-a" }))
+        .rejects.toThrow("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+      await expect(service.previewRecipients(north, { announcementId: "announcement-school" }))
+        .rejects.toThrow("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+      await expect(service.previewRecipients(north, { classId: "class-b" })).resolves.toMatchObject({ recipientCount: 1 });
+      await expect(service.previewRecipients(campusContext(["campus-main"]), { announcementId: "announcement-a" }))
+        .resolves.toMatchObject({ recipientCount: 1 });
+      await expect(service.previewRecipients(
+        { tenantId: "tenant-a", userId: "user-operations", roles: ["OPERATIONS_STAFF"], bypassRls: false },
+        {},
+      )).rejects.toThrow("SMS_BATCH_CAMPUS_SCOPE_MISSING");
+    });
+
+    it("kapsam dışı veliye veya duyuruya SMS kuyruğa alınmaz", async () => {
+      const producer = new FakeProducer();
+      const service = createSplitCampusService(producer);
+      const north = campusContext(["campus-north"]);
+
+      await expect(service.enqueue(north, {
+        recipientScope: {},
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      })).rejects.toThrow("SMS_BATCH_RECIPIENT_NOT_ELIGIBLE");
+      await expect(service.enqueue(north, {
+        recipientScope: { announcementId: "announcement-a" },
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      })).rejects.toThrow("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+      expect(producer.inputs).toHaveLength(0);
+
+      await expect(service.enqueue(north, {
+        recipientScope: {},
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000002" }],
+      })).resolves.toMatchObject({ recipientCount: 1, status: "queued" });
+      expect(producer.inputs).toHaveLength(1);
+    });
+  });
+
   it("SMS_ENABLED açık değilse önizleme üretmez", async () => {
     process.env.SMS_ENABLED = "false";
     const service = new SmsBatchService(
@@ -324,6 +406,16 @@ class FakeMessageTemplateService {
 
 class FakeAnnouncementStore {
   async findById(id: string) {
+    if (id === "announcement-school") {
+      return {
+        id,
+        tenantId: "tenant-a",
+        title: "Okul geneli",
+        body: "Tüm kampüsler.",
+        audience: "GUARDIANS",
+        publishedAt: "2026-06-08T09:00:00.000Z",
+      };
+    }
     if (id !== "announcement-a") return undefined;
     return {
       id,
@@ -387,6 +479,15 @@ class FakeClassStore {
     return [
       { id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8" },
       { id: "class-b", tenantId: "tenant-a", name: "7-B", campusId: "campus-main", gradeLevelId: "grade-7" },
+    ];
+  }
+}
+
+class SplitCampusClassStore {
+  async list() {
+    return [
+      { id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8" },
+      { id: "class-b", tenantId: "tenant-a", name: "7-B", campusId: "campus-north", gradeLevelId: "grade-7" },
     ];
   }
 }

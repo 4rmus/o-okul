@@ -12,7 +12,8 @@ import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import type { StudentStatus } from "@o-okul/shared-types";
+import { campusScopedClassIds, isCampusInScope, resolveCampusRestriction } from "../tenant/tenant-access.js";
+import type { ClassRecord, StudentStatus } from "@o-okul/shared-types";
 import {
   smsBatchDeliveryReportStoreToken,
   type SmsBatchDeliveryReportRecord,
@@ -100,12 +101,16 @@ export class SmsBatchService {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
 
-    const effectiveInput = await this.resolveRecipientPreviewInput(context.tenantId, input);
+    const restriction = smsCampusRestriction(context);
     const classes = (await this.classStore.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
     const classesById = new Map(classes.map((record) => [record.id, record]));
+    const effectiveInput = await this.resolveRecipientPreviewInput(context.tenantId, input, restriction, classesById);
+    // A campus-scoped sender only reaches guardians of students in classes on its campuses.
+    const allowedClassIds = restriction ? campusScopedClassIds(context, restriction, classes) : undefined;
     const scheduledClassIds = await this.resolveScheduledClassIds(context.tenantId, effectiveInput);
     const students = (await this.studentStore.list())
       .filter((student) => student.tenantId === context.tenantId)
+      .filter((student) => !allowedClassIds || Boolean(student.classId && allowedClassIds.has(student.classId)))
       .filter((student) => !effectiveInput.studentStatus || student.status === effectiveInput.studentStatus)
       .filter((student) => !effectiveInput.classId || student.classId === effectiveInput.classId)
       .filter((student) => scheduledClassIds === undefined || Boolean(student.classId && scheduledClassIds.has(student.classId)))
@@ -157,7 +162,12 @@ export class SmsBatchService {
   private async resolveRecipientPreviewInput(
     tenantId: string,
     input: SmsBatchRecipientPreviewInput,
+    restriction: ReadonlySet<string> | undefined,
+    classesById: Map<string, ClassRecord>,
   ): Promise<SmsBatchRecipientPreviewInput> {
+    if (restriction && !isCampusTargetInScope(restriction, input, classesById)) {
+      throw new ForbiddenException("SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN");
+    }
     if (!input.announcementId) {
       return input;
     }
@@ -165,6 +175,14 @@ export class SmsBatchService {
     const announcement = await this.announcementStore.findById(input.announcementId);
     if (!announcement || announcement.tenantId !== tenantId || announcement.deletedAt) {
       throw new NotFoundException("ANNOUNCEMENT_NOT_FOUND");
+    }
+    // Same gate as announcement deliveries: a campus-scoped sender may only reach an announcement attributable to an
+    // in-scope campus; school-wide announcements stay read-only for it.
+    if (
+      restriction &&
+      (!(announcement.campusId || announcement.classId) || !isCampusTargetInScope(restriction, announcement, classesById))
+    ) {
+      throw new ForbiddenException("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
     }
 
     return {
@@ -277,6 +295,25 @@ export class SmsBatchService {
       status: "queued",
     };
   }
+}
+
+function smsCampusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+  try {
+    return resolveCampusRestriction(context);
+  } catch {
+    throw new ForbiddenException("SMS_BATCH_CAMPUS_SCOPE_MISSING");
+  }
+}
+
+/** Every campus or class target must resolve to an in-scope campus; a class that no longer resolves fails closed. */
+function isCampusTargetInScope(
+  restriction: ReadonlySet<string>,
+  target: { campusId?: string; classId?: string },
+  classesById: Map<string, ClassRecord>,
+): boolean {
+  if (target.campusId && !isCampusInScope(restriction, target.campusId)) return false;
+  if (target.classId && !isCampusInScope(restriction, classesById.get(target.classId)?.campusId)) return false;
+  return true;
 }
 
 function assertSmsEnabled(): void {

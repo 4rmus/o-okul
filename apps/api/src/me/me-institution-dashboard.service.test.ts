@@ -176,7 +176,7 @@ describe("PostgresInstitutionDashboardStore", () => {
 });
 
 describe("PostgresInstitutionDashboardStore kampüs kapsamı", () => {
-  it("sayımları kampüs sınıflarıyla sınırlar, kapsam dışı sınıfı ve kurum geneli ortalamayı düşürür", async () => {
+  it("sayımları kampüs sınıflarıyla sınırlar, kurum geneli son sınavı ve rapor sayılarını hiç döndürmez", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
@@ -208,7 +208,6 @@ describe("PostgresInstitutionDashboardStore kampüs kapsamı", () => {
                 { className: "Sınıfsız", resultCount: 2, averages: { net: 10 } },
               ],
             },
-            scopedClassIds: ["class-a"],
           }] as T[],
         };
       },
@@ -227,12 +226,12 @@ describe("PostgresInstitutionDashboardStore kampüs kapsamı", () => {
     expect(businessQuery?.sql).toContain('attendance."studentId" IN (SELECT "id" FROM "scopedStudent")');
     expect(businessQuery?.sql).toContain('participant."studentId" IN (SELECT "id" FROM "scopedStudent")');
     expect(businessQuery?.sql).toMatch(/quarantine\."deletedAt" IS NULL\s+AND \$3::text\[\] IS NULL/);
-    expect(result.latestExam?.report).toEqual({
-      snapshotId: "snapshot-a",
-      resultCount: 5,
-      classes: [{ classId: "class-a", className: "8-A", resultCount: 5, successRate: 76.25, net: 61, questionCount: 80 }],
-    });
-    expect(JSON.stringify(result)).not.toContain("class-b");
+    // The latest exam is picked tenant-wide, so a campus-scoped viewer gets neither the exam nor its report numbers,
+    // even if a row carried them.
+    expect(businessQuery?.sql).toMatch(/FROM "Exam"[\s\S]*?"deletedAt" IS NULL\s+AND \$3::text\[\] IS NULL/);
+    expect(result).not.toHaveProperty("latestExam");
+    expect(result).toMatchObject({ activeStudentCount: 6, attention: { openSupportTicketCount: 1 } });
+    expect(JSON.stringify(result)).not.toContain("snapshot-a");
   });
 });
 

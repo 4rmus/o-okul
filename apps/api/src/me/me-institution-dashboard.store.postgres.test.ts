@@ -2,6 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { runWithRequestContext, type RequestContext } from "../context/request-context.js";
+import { PostgresClassStore } from "../school/class-store.js";
+import { PostgresStudentStore } from "../student/student-store.js";
+import { PostgresSupportTicketStore } from "../support-ticket/support-ticket-store.js";
+import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
 import { PostgresInstitutionDashboardStore } from "./me-institution-dashboard.store.js";
 
 const appUrl = process.env.INSTITUTION_DASHBOARD_POSTGRES_TEST_URL, adminUrl = process.env.INSTITUTION_DASHBOARD_POSTGRES_ADMIN_URL;
@@ -17,12 +21,30 @@ const today = "2026-11-02";
 const run = appUrl && adminUrl ? describe : describe.skip;
 
 // SEC-CAMPUS: the dashboard counts only rows attributable to the viewer's campuses; tenant-wide figures that cannot be
-// attributed (import quarantine, report averages) are left out instead of shown.
+// attributed (import quarantine, the latest exam and its report) are left out instead of shown.
 run("institution dashboard campus scope with restricted app role and RLS", () => {
   const app = new pg.Pool({ connectionString: appUrl }), admin = new pg.Pool({ connectionString: adminUrl });
   const [tenantA, tenantB] = ["a", "b"].map((suffix) => `institution-dashboard-${randomUUID()}-${suffix}`) as [string, string];
   const id = (tenant: string, name: string) => `${tenant}-${name}`;
   const context = (tenantId: string): RequestContext => ({ userId: "fixture", tenantId, roles: ["ASSISTANT_ADMIN"], bypassRls: false });
+  const campusContext = (tenantId: string, campusIds: string[]): RequestContext => ({
+    ...context(tenantId),
+    campusScope: { scopeMode: "CAMPUSES", campusIds },
+  });
+  // Only the stores the staff list path reads; the dashboard counter and the list must share one attribution rule.
+  const supportTickets = () => new SupportTicketService(
+    new PostgresSupportTicketStore(app),
+    {} as never,
+    {} as never,
+    new PostgresClassStore(app),
+    {} as never,
+    {} as never,
+    {} as never,
+    new PostgresStudentStore(app),
+    {} as never,
+    {} as never,
+    {} as never,
+  );
 
   beforeAll(async () => {
     const db = await admin.connect();
@@ -72,9 +94,11 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
         );
         await db.query('INSERT INTO "RawImport" (id,"tenantId","examId","sourceType","fileName","s3Key",sha256,"parserConfigVersion","updatedAt") VALUES ($1,$2,$3,\'TXT\',\'a.txt\',\'k\',\'s\',\'v1\',now())', [t("raw"), tenant, t("exam")]);
         await db.query('INSERT INTO "ImportQuarantine" (id,"tenantId","examId","rawImportId","rowNumber","rawRow",reason,status,"updatedAt") VALUES ($1,$2,$3,$4,1,\'{}\'::jsonb,\'NO_MATCH\',\'OPEN\',now())', [t("quarantine"), tenant, t("exam"), t("raw")]);
-        // t1 names campus-1, t2 a campus-2 class, t3 a campus-1 student, t4 nothing attributable.
+        // t1 names campus-1, t2 a campus-2 class, t3 a campus-1 student, t4 nothing attributable, t5 a campusless class
+        // and a campus-1 student (falls through to the student's class campus).
         const tickets: Array<[string, string | null, string | null, string | null]> = [
           ["t1", t("campus-1"), null, null], ["t2", null, t("c2"), null], ["t3", null, null, t("s1")], ["t4", null, null, null],
+          ["t5", null, t("c3"), t("s1")],
         ];
         for (const [ticket, campusId, classId, studentId] of tickets) {
           await db.query(
@@ -109,7 +133,7 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
 
     expect(dashboard).toMatchObject({
       activeStudentCount: 4,
-      attention: { attendanceAlertCount: 3, openImportQuarantineCount: 1, openSupportTicketCount: 4 },
+      attention: { attendanceAlertCount: 3, openImportQuarantineCount: 1, openSupportTicketCount: 5 },
       latestExam: {
         registeredParticipantCount: 3,
         attendedParticipantCount: 2,
@@ -120,7 +144,7 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
     expect(dashboard.latestExam?.report?.classes).toHaveLength(3);
   });
 
-  it("a campus-scoped viewer sees only its campus rows and no tenant averages", async () => {
+  it("a campus-scoped viewer sees only its campus rows and no tenant-wide latest exam", async () => {
     const store = new PostgresInstitutionDashboardStore(app);
     const dashboard = await runWithRequestContext(
       context(tenantA),
@@ -129,15 +153,30 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
 
     expect(dashboard).toMatchObject({
       activeStudentCount: 1,
-      attention: { attendanceAlertCount: 1, openImportQuarantineCount: 0, openSupportTicketCount: 2 },
-      latestExam: { registeredParticipantCount: 1, attendedParticipantCount: 1, absentParticipantCount: 0 },
+      attention: { attendanceAlertCount: 1, openImportQuarantineCount: 0, openSupportTicketCount: 3 },
     });
-    expect(dashboard.latestExam?.report).toEqual({
-      snapshotId: id(tenantA, "snapshot"),
-      generatedAt: expect.any(String),
-      resultCount: 1,
-      classes: [expect.objectContaining({ classId: id(tenantA, "c1"), resultCount: 1 })],
-    });
+    expect(dashboard).not.toHaveProperty("latestExam");
+    expect(JSON.stringify(dashboard)).not.toContain(id(tenantA, "snapshot"));
+  });
+
+  it("the open-ticket counter equals what the same campus scope can list", async () => {
+    const store = new PostgresInstitutionDashboardStore(app);
+    const service = supportTickets();
+    for (const campusIds of [[id(tenantA, "campus-1")], [id(tenantA, "campus-2")], [id(tenantB, "campus-1")]]) {
+      const scoped = campusContext(tenantA, campusIds);
+      const dashboard = await runWithRequestContext(scoped, () => store.load(tenantA, today, { campusIds }));
+      const listed = await runWithRequestContext(scoped, () => service.list(scoped));
+      const open = listed.filter((ticket) => ticket.status === "OPEN" || ticket.status === "IN_PROGRESS");
+      expect(open.length).toBe(dashboard.attention.openSupportTicketCount);
+    }
+    const campusOne = campusContext(tenantA, [id(tenantA, "campus-1")]);
+    const listed = await runWithRequestContext(campusOne, () => service.list(campusOne));
+    expect(listed.map((ticket) => ticket.id).sort()).toEqual([id(tenantA, "t1"), id(tenantA, "t3"), id(tenantA, "t5")]);
+
+    const tenantWide = context(tenantA);
+    const all = await runWithRequestContext(tenantWide, () => service.list(tenantWide));
+    const dashboard = await runWithRequestContext(tenantWide, () => store.load(tenantA, today));
+    expect(all).toHaveLength(dashboard.attention.openSupportTicketCount);
   });
 
   it("an empty or foreign campus scope counts nothing", async () => {
@@ -147,8 +186,8 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
       expect(dashboard).toMatchObject({
         activeStudentCount: 0,
         attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
-        latestExam: { registeredParticipantCount: 0, report: { resultCount: 0, classes: [] } },
       });
+      expect(dashboard).not.toHaveProperty("latestExam");
     }
   });
 });
