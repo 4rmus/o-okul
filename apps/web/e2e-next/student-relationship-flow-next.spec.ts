@@ -232,6 +232,44 @@ test.describe("Öğrenci ilişki haritası", () => {
     });
   }
 
+  test("Öğrenci 360 başlığındaki Düzenle listedeki öğrenci formunu açar ve aynı güncellemeyi gönderir", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, { requestedPaths, section: "overview" });
+    // The form's class/level/teacher lists load only when it opens.
+    expect(requestedPaths).not.toContain("/grade-levels");
+    const updates: string[] = [];
+    await page.route("**/api/v1/students/student-a", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      updates.push(route.request().postData() ?? "");
+      await fulfillData(route, { ...createStudentProfile(), lastName: "Kaya Yıldız" });
+    });
+
+    await expect(page.getByLabel("Öğrenci profil kartı")).toContainText("Sınıfı, kayıt durumunu veya iletişim bilgilerini değiştirmek için üstteki Düzenle'yi kullanın.");
+    await page.locator(".next-student-detail-actions").getByRole("button", { name: "Düzenle" }).click();
+    const dialog = page.getByRole("dialog", { name: "Öğrenci düzenle" });
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => requestedPaths.includes("/grade-levels")).toBe(true);
+    await expect(dialog.getByLabel("Ad", { exact: true })).toHaveValue("Ada");
+    await expect(dialog.getByLabel("Soyad", { exact: true })).toHaveValue("Kaya");
+    await expect(dialog.getByRole("region", { name: "Kayıt işlemleri" })).toBeVisible();
+    await expect(dialog).toContainText("Kayıtlı: ••• ••• ••33");
+    await expectNoVisibleTextValues(page, "student-detail-edit-dialog", rawStudentDetailPiiValues);
+
+    const overviewRequests = () => requestedPaths.filter((path) => path === "/students/student-a/overview").length;
+    const overviewRequestsBeforeSave = overviewRequests();
+    await dialog.getByLabel("Soyad", { exact: true }).fill("Kaya Yıldız");
+    await dialog.getByRole("button", { name: "Kaydet" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(updates).toHaveLength(1);
+    expect(JSON.parse(updates[0] ?? "{}")).toMatchObject({ classId: "class-11a", firstName: "Ada", lastName: "Kaya Yıldız", status: "ACTIVE" });
+    // No contact field was typed, so the profile endpoint is not written; the page reloads its overview.
+    expect(requestedPaths).not.toContain("/students/student-a/profile");
+    await expect.poll(overviewRequests).toBeGreaterThan(overviewRequestsBeforeSave);
+  });
+
   test("finance yetkisi olmayan rolde ödeme ve finans görünürlüğü açılmaz", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 768, height: 1024 }, { requestedPaths, roles: ["ASSISTANT_ADMIN"] });

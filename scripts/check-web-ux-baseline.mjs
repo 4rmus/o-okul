@@ -68,6 +68,7 @@ const files = {
   "apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogrenciler/students-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/program/schedule-lessons-page.tsx": readFileSync("apps/web/app/(app)/kurum/program/schedule-lessons-page.tsx", "utf8"),
@@ -1941,19 +1942,37 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "const unassignedClassCount = rows.filter((student) => !student.classId).length;",
   "Sorumlu öğretmen",
   "Toplu dönem geçişi",
-  "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
-  "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
-  "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
   '<InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">',
   '<InfoItem label="Başarı" value={formatPercentNumber(reportSuccessRate(detail?.report?.total))} />',
   '<InfoItem label="Soru" value={formatNumber(reportQuestionCount(detail?.report?.total))} />',
-  "function maskEmail",
   "classNameById={classNameById}",
   'caption="Kayıt geçmişi"',
   "formatStudentClassLabel",
   "Sınıf eşleşmedi",
   "Dönem eşleşmedi",
+  // The create/edit form lives in student-form-modal.tsx, shared with Student 360.
+  "<StudentFormModal",
+  "onCreated={setEditingStudent}",
+]);
+
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
+  "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
+  "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
+  "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
+  "function maskEmail",
   "next-form-actions",
+  "onCreated?.(savedStudent);",
+  'queryKey: ["next-student-refs", auth?.session.tenantId ?? "anonymous"]',
+]);
+// Unsaved grades: in-app links (sidebar, bottom nav, breadcrumbs) wait for the page's confirm; the palette asks before navigating.
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  "export function useInAppNavigationGuard(when: boolean, canLeave: LeaveCheck)",
+  'document.addEventListener("click", handleClick, true);',
+  'data-navigation-guard="manual"',
+  "void confirmInAppNavigation().then((canNavigate) => {",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
+  "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
@@ -2063,6 +2082,11 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "Sınıf kaydı",
   "Dönem kaydı",
   "Rapor tarihi yok",
+  // Student 360 edits the student with the list's form, for the same student:manage capability.
+  "{canManageStudent && detail ? (",
+  "<StudentFormModal",
+  "student={detail.profile}",
+  "üstteki Düzenle'yi kullanın.",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
@@ -2092,6 +2116,7 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "güvenli referans metinleriyle",
   'header: "Bağlam"',
   'useState<"overview" | "records">("records")',
+  "öğrenci listesinde Düzenle'yi kullanın.",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx", [
