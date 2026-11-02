@@ -80,12 +80,14 @@ export function canAccessExamWorkspace(
   roles: readonly string[],
   activePersona?: "STAFF" | "TEACHER" | "STUDENT" | "GUARDIAN",
 ): boolean {
-  const allowedRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
-  const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));
-  return hasAllowedRole && (
-    activePersona === "STAFF"
-    || (activePersona === undefined && roles.length === 1)
-  );
+  const adminRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
+  if (roles.some((role) => adminRoles.includes(role))) {
+    return activePersona === "STAFF" || (activePersona === undefined && roles.length === 1);
+  }
+  // DEC-20261102-03: OPERATIONS_STAFF opens the workspace only in the STAFF persona. The session carries no campus
+  // scope, so the API rejects a campus-scoped membership. A user who also holds TEACHER keeps teacher-narrowed exam
+  // reads, so that combination stays outside the workspace until its own security slice.
+  return activePersona === "STAFF" && roles.includes("OPERATIONS_STAFF") && !roles.includes("TEACHER");
 }
 
 // FINANCE_STAFF rank kalıtımı almaz (apps/api/src/rbac/roles.ts); başka kurum rolü yoksa

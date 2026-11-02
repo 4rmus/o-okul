@@ -7,6 +7,12 @@ import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
+import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
+import {
+  campusOperationsStaffEmail,
+  registerExamOperationsStaff,
+  tenantWideOperationsStaffEmail,
+} from "./exam-operations-staff.test-support.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {
   answerKeyRepositoryToken,
@@ -31,6 +37,8 @@ describe("AnswerKeyController", () => {
   let snapshots: FakeReportSnapshotStore;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    registerExamOperationsStaff();
     repository = new FakeAnswerKeyRepository();
     snapshots = new FakeReportSnapshotStore();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -57,6 +65,7 @@ describe("AnswerKeyController", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   it("TENANT_ADMIN cevap anahtarı oluşturur ve tenant context body yerine oturumdan gelir", async () => {
@@ -411,6 +420,53 @@ describe("AnswerKeyController", () => {
     });
     expect(repository.records).toHaveLength(0);
     expect(snapshots.markStaleInputs).toEqual([]);
+  });
+
+  it("tenant geneli OPERATIONS_STAFF cevap anahtarını yükler, listeler ve yayınlar; kampüs kapsamlı 403 alır (DEC-20261102-03)", async () => {
+    const ops = await login(tenantWideOperationsStaffEmail);
+    const campus = await login(campusOperationsStaffEmail);
+    const body = {
+      version: "v1",
+      fileBase64: await createAnswerKeyWorkbookBase64(),
+      scoringConfig: { wrongPenalty: 0.333333 },
+    };
+
+    for (const path of ["/exams/exam-a/answer-keys/imports/dry-run", "/exams/exam-a/answer-keys/imports"]) {
+      const rejected = await request(server)
+        .post(path)
+        .set("Authorization", `Bearer ${campus.accessToken}`)
+        .send(body)
+        .expect(403);
+      expect(rejected.body.error.code).toBe("ANSWER_KEY_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    await request(server).get("/exams/exam-a/answer-keys").set("Authorization", `Bearer ${campus.accessToken}`).expect(403);
+    expect(repository.records).toHaveLength(0);
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys/imports/dry-run")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .send(body)
+      .expect(201);
+    const imported = await request(server)
+      .post("/exams/exam-a/answer-keys/imports")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .send(body)
+      .expect(201);
+    expect(imported.body).toMatchObject({ imported: true, answerKey: { version: "v1", questionCount: 90 } });
+    const list = await request(server)
+      .get("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .expect(200);
+    expect(list.body).toEqual([expect.objectContaining({ tenantId: "tenant-a", version: "v1", status: "DRAFT" })]);
+    const published = await request(server)
+      .post("/exams/exam-a/answer-keys/v1/publish")
+      .set("Authorization", `Bearer ${ops.accessToken}`)
+      .expect(201);
+    expect(published.body).toMatchObject({ version: "v1", status: "PUBLISHED" });
+    await request(server)
+      .post("/exams/exam-a/answer-keys/v1/publish")
+      .set("Authorization", `Bearer ${campus.accessToken}`)
+      .expect(403);
   });
 
   it("auth yoksa reddeder", async () => {

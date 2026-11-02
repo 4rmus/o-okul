@@ -60,8 +60,34 @@ for (const mode of ["error", "malformed"] as const) {
   });
 }
 
+// DEC-20261102-03: tenant geneli OPERATIONS_STAFF, STAFF personasında yönetici ile aynı çalışma alanını açar.
+// Kampüs kapsamı oturumda yoktur; kampüs kapsamlı üyelik API'de 403 alır ve çerçeve nötr başlıkta kalır.
+test("Gate C operasyon çalışanı STAFF personasında listeden çalışma alanını açar", async ({ page }) => {
+  const evidence = await installGateCApi(page, "enabled", {
+    activePersona: "STAFF",
+    membershipId: "membership-operations-gate-c",
+    roles: ["OPERATIONS_STAFF"],
+    userId: "operations-gate-c",
+  });
+  await page.goto(`/kurum/sinavlar?examId=${examId}`, { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("link", { name: "Sınav çalışma alanını aç" })).toHaveAttribute("href", `/kurum/sinavlar/${examId}`);
+  const examTable = page.getByRole("table", { name: "Sınav yönetimi" });
+  await examTable.getByRole("link", { name: "Gate C Denemesi" }).click();
+  await expect(page).toHaveURL(`${appOrigin}/kurum/sinavlar/${examId}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Gate C Denemesi" })).toBeVisible();
+  const steps = page.getByRole("navigation", { name: "Sınav adımları" });
+  await expect(steps.getByRole("listitem")).toHaveCount(8);
+  await expect(steps.getByRole("link", { name: /Katılımcılar/ })).toHaveAttribute("href", `/kurum/sinavlar?examId=${examId}&from=workspace`);
+  await expect(page.getByRole("group", { name: "Sonraki önerilen iş" }).getByRole("link", { name: "Optik düzeni onayla" }))
+    .toHaveAttribute("href", `/kurum/sinavlar/${examId}/optik/duzen`);
+  expect(evidence.workspaceRequests).toBeGreaterThan(0);
+  expect(evidence.mutationRequests).toEqual([]);
+  expect(evidence.unknownRequests).toEqual([]);
+});
+
 for (const sessionCase of [
-  { label: "operations staff", roles: ["OPERATIONS_STAFF"], activePersona: "STAFF" },
+  { label: "operations staff with teacher role", roles: ["OPERATIONS_STAFF", "TEACHER"], activePersona: "STAFF" },
   { label: "teacher persona", roles: ["TENANT_ADMIN", "TEACHER"], activePersona: "TEACHER" },
 ] as const) {
   test(`Gate C ${sessionCase.label} için linki ve doğrudan workspace erişimini kapatır`, async ({ page }) => {
