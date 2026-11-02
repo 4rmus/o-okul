@@ -388,6 +388,87 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
   });
 });
 
+// R2-WEB: destek talebi açma izni fail closed — izin okunmadan, okunamadan veya false iken form açılmaz;
+// izin yüklenirken finans ve destek özeti "Kapalı" değil "Yükleniyor…" gösterir.
+test.describe("Veli destek ve finans izni yükleme durumları", () => {
+  const preferencesPath = /\/me\/guardian\/students\/student-a\/notification-preferences$/;
+
+  test("/veli/destek izin okunamazsa form kapalı kalır, Tekrar dene izni okuyunca form açılır", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    let preferenceReads = 0;
+    const beforeGoto = () => page.route("**/api/v1/**", async (route) => {
+      const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
+      if (route.request().method() !== "GET" || !preferencesPath.test(pathName)) return route.fallback();
+      preferenceReads += 1;
+      if (preferenceReads === 1) {
+        return route.fulfill({
+          body: JSON.stringify({ error: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 500,
+        });
+      }
+      return fulfillData(route, { ...createGuardianPreferences("student-a", false), canOpenSupportTickets: true });
+    });
+    await openGuardianPortal(page, { height: 844, width: 390 }, { beforeGoto, path: "/veli/destek", requestedPaths });
+
+    const support = page.getByRole("region", { exact: true, name: "Destek talepleri" });
+    await expect(support.getByRole("alert")).toContainText("Destek talepleri şu an alınamadı");
+    await expect(support.getByLabel("Konu", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
+    expect(preferenceReads).toBe(1);
+
+    await support.getByRole("button", { name: "Tekrar dene" }).click();
+    await expect(support.getByLabel("Konu", { exact: true })).toBeVisible();
+    await expect(support.getByLabel("Mesaj", { exact: true })).toBeVisible();
+    expect(preferenceReads).toBe(2);
+  });
+
+  test("/veli/destek izin false iken form açılmaz ve izin kapalı yazar", async ({ page }) => {
+    await openGuardianPortal(page, { height: 844, width: 390 }, { path: "/veli/destek" });
+
+    const support = page.getByRole("region", { exact: true, name: "Destek talepleri" });
+    await expect(support).toContainText("Veli destek talebi izni kapalı.");
+    await expect(support.getByLabel("Konu", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
+  });
+
+  test("izin yüklenirken destek ve finans Yükleniyor gösterir, Kapalı yazmaz", async ({ page }) => {
+    let releasePreferences: () => void = () => undefined;
+    const preferencesReleased = new Promise<void>((resolve) => {
+      releasePreferences = resolve;
+    });
+    await page.setViewportSize({ height: 900, width: 1024 });
+    await installGuardianApiMocks(page, { financeVisibility: "false" });
+    await page.route("**/api/v1/**", async (route) => {
+      const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
+      if (route.request().method() !== "GET" || !preferencesPath.test(pathName)) return route.fallback();
+      await preferencesReleased;
+      return route.fallback();
+    });
+    await page.addInitScript(() => {
+      document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+    });
+    await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+    await page.goto("/veli?examId=exam-demo-isem-lgs-1");
+
+    const guardianActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
+    const supportAction = guardianActions.getByRole("link", { name: /^Destek talebini takip et:/ });
+    const financeAction = guardianActions.getByRole("link", { name: /^Ödeme durumunu gör:/ });
+    await expect(supportAction).toHaveAccessibleName(/^Destek talebini takip et: Yükleniyor…/);
+    await expect(supportAction).not.toHaveAccessibleName(/Kapalı/);
+    await expect(financeAction).toHaveAccessibleName(/^Ödeme durumunu gör: Yükleniyor…/);
+    await expect(financeAction).not.toHaveAccessibleName(/Kapalı/);
+    const support = page.getByRole("region", { exact: true, name: "Destek talepleri" });
+    await expect(support).toHaveAttribute("aria-busy", "true");
+    await expect(support.getByLabel("Konu", { exact: true })).toHaveCount(0);
+
+    releasePreferences();
+    await expect(supportAction).toHaveAccessibleName(/^Destek talebini takip et: Kapalı/);
+    await expect(financeAction).toHaveAccessibleName(/^Ödeme durumunu gör: Ödeme izni kapalı/);
+    await expect(support).toContainText("Veli destek talebi izni kapalı.");
+  });
+});
+
 async function expectStudentFocusMetrics(focus: Locator, itemCount: number) {
   const focusMetrics = focus.getByRole("region", { name: "Seçili öğrenci bilgileri" });
   await expect(focusMetrics).toHaveClass(/uh-info-grid/);
@@ -562,7 +643,10 @@ async function openGuardianPortal(
   options: {
     financeVisibility?: "false" | "true";
     mode?: "guardian" | "role-preview";
+    /** Mock'lardan sonra kurulur; Playwright'ta sonra eklenen route önce çalışır. */
+    beforeGoto?: () => Promise<unknown>;
     mutationRequests?: string[];
+    path?: string;
     paymentPlanRequests?: string[];
     requestedPaths?: string[];
     withReport?: boolean;
@@ -570,6 +654,7 @@ async function openGuardianPortal(
 ) {
   await page.setViewportSize(viewport);
   await installGuardianApiMocks(page, options);
+  await options.beforeGoto?.();
   await page.addInitScript((mode) => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
     if (mode === "role-preview") {
@@ -577,7 +662,7 @@ async function openGuardianPortal(
     }
   }, options.mode ?? "guardian");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/veli?rolePreview=1" : options.withReport === false ? "/veli" : "/veli?examId=exam-demo-isem-lgs-1");
+  await page.goto(options.path ?? (options.mode === "role-preview" ? "/veli?rolePreview=1" : options.withReport === false ? "/veli" : "/veli?examId=exam-demo-isem-lgs-1"));
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 

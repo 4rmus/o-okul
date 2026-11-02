@@ -115,8 +115,10 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const developmentQuery = usePortalPanelQuery(panelKey("development"), studentReady && panels.student, get<DevelopmentTrendItem[]>("/development-assessments"));
   // Finans yalnız ilişki izni okunup canViewFinance === true çıktıktan sonra istenir; izin yoksa istek hiç gitmez.
   // Önbellekteki eski izin kullanılmaz: izin yeniden okunurken (sayfa geçişinde) finans beklenir ve gösterilmez.
-  const financePermissionFresh = preferencesQuery.isSuccess && !preferencesQuery.isFetching;
-  const canViewFinance = financePermissionFresh && preferencesQuery.data?.canViewFinance === true;
+  // Destek talebi açma da aynı kuralla açılır (fail closed): izin okunamadıysa, gelmediyse veya yenileniyorsa form kapalıdır.
+  const permissionFresh = preferencesQuery.isSuccess && !preferencesQuery.isFetching;
+  const canViewFinance = permissionFresh && preferencesQuery.data?.canViewFinance === true;
+  const canOpenSupportTickets = permissionFresh && preferencesQuery.data?.canOpenSupportTickets === true;
   const paymentPlansQuery = usePortalPanelQuery(
     panelKey("payment-plans"),
     studentReady && panels.payments && canViewFinance,
@@ -244,17 +246,18 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const reportSuccess = reportSuccessRate(reportTotal);
   const unreadAnnouncements = (data?.announcements ?? []).filter((announcement) => !announcement.readAt).length;
   const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
-  // İzin okunamazsa veya henüz gelmediyse destek talebi açma kapalı kalır (fail closed).
-  const canOpenSupportTickets = panels.notifications && !preferencesQuery.isSuccess
-    ? false
-    : data?.notificationPreferences?.canOpenSupportTickets !== false;
   const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
   const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
   const attendanceStatus = formatAttendanceSummary(data?.attendanceSummary);
-  const supportStatus = canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
-  const financeStatus = canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
-  const supportReadOnly = isRolePreview || !canOpenSupportTickets;
+  // İzin okunurken finans ve destek "Kapalı" değil "Yükleniyor…" gösterir; kapalı yalnız okunan izin false ise yazılır.
   const financeLoading = preferencesQuery.isLoading || (panels.payments && preferencesQuery.isFetching) || paymentPlansQuery.isLoading;
+  const supportPermissionLoading = preferencesQuery.isLoading || (panels.support && preferencesQuery.isFetching);
+  const supportLoading = supportPermissionLoading || supportTicketsQuery.isLoading;
+  const supportStatus = supportLoading
+    ? panelLoadingValue
+    : canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
+  const financeStatus = financeLoading ? panelLoadingValue : canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
+  const supportReadOnly = isRolePreview || !canOpenSupportTickets;
   const selectedStudentLabel = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Seçilmedi";
   const selectedStudentDetail = data?.profile?.className ?? "Bağlı öğrenci";
   const portalSubtitle = guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti");
@@ -293,24 +296,26 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       value: homeworkStatus,
     },
     {
-      actionLabel: canViewFinance ? "Takip" : "Kapalı",
+      actionLabel: financeLoading ? "Bekle" : canViewFinance ? "Takip" : "Kapalı",
       contextLabel: "Finans",
-      detail: canViewFinance ? "İzinli finans görünümü" : "Finans görünürlüğü kapalı",
+      detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "İzinli finans görünümü" : "Finans görünürlüğü kapalı",
       href: guardianPortalHref("/veli/odemeler", isRolePreview),
       key: "finance",
       label: "Ödeme durumunu gör",
-      statusLabel: canViewFinance ? "İzinli" : "Kapalı",
+      statusLabel: financeLoading ? "Yükleniyor" : canViewFinance ? "İzinli" : "Kapalı",
       tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
       value: financeLoading ? panelLoadingValue : canViewFinance ? financeStatus : "Ödeme izni kapalı",
     },
     {
-      actionLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
+      actionLabel: supportLoading && !isRolePreview ? "Bekle" : supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
       contextLabel: "Destek",
-      detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı") : "Veli destek kapsamı",
+      detail: supportLoading && !isRolePreview
+        ? permissionLoadingDetail
+        : supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı") : "Veli destek kapsamı",
       href: guardianPortalHref("/veli/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
-      statusLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
+      statusLabel: supportLoading && !isRolePreview ? "Yükleniyor" : supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
       tone: !supportReadOnly && openSupportTickets > 0 ? "warning" : "neutral",
       value: supportStatus,
     },
@@ -341,7 +346,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
     <PortalFrame
       title="Veli Portalı"
       subtitle={portalSubtitle}
-      context={guardianPortalContext(view, portalSubtitle, selectedStudentLabel, canViewFinance, isRolePreview)}
+      context={guardianPortalContext(view, portalSubtitle, selectedStudentLabel, canViewFinance, financeLoading, isRolePreview)}
     >
       <SegmentedControl className="next-segmented" id="portal-student-picker" label="Öğrenci seçimi">
         {students.map((student) => (
@@ -360,7 +365,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           <PortalDailyBrief
             summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
             scope={{
-              detail: canViewFinance ? "Finans görünürlüğü açık" : "Finans görünürlüğü kapalı",
+              detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "Finans görünürlüğü açık" : "Finans görünürlüğü kapalı",
               label: "Bağlı öğrenci",
               value: selectedStudentLabel,
             }}
@@ -386,13 +391,13 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               {
                 label: "Ödeme",
                 value: financeLoading ? panelLoadingValue : canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Ödeme izni kapalı",
-                detail: canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
+                detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
                 tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
               },
               {
                 label: "Destek",
-                value: preferencesQuery.isLoading || supportTicketsQuery.isLoading ? panelLoadingValue : canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı",
-                detail: canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
+                value: supportStatus,
+                detail: supportLoading ? permissionLoadingDetail : canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
                 tone: canOpenSupportTickets && openSupportTickets > 0 ? "warning" : "success",
               },
               {
@@ -418,8 +423,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
               { label: "Net", value: formatNetNumber(reportTotal?.net) },
               { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
-              { label: "Ödeme planı", value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
-              { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
+              { label: "Ödeme planı", value: financeLoading ? panelLoadingValue : canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
+              { label: "Bekleyen ödeme", value: financeStatus },
             ]}
           />
         </>
@@ -510,10 +515,11 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               </PortalPanelGate>
             </div> : null}
             {view === "overview" || view === "support" ? <div id="portal-support">
-              <PortalPanelGate label="Destek talepleri" queries={[supportTicketsQuery]} subject="Destek talepleri" title="Destek Talepleri">
+              {/* Talep açma izni okunmadan form açılmaz: izin yüklenirken panel yükleniyor, okunamazsa "Tekrar dene"li hata gösterir. */}
+              <PortalPanelGate label="Destek talepleri" queries={[preferencesQuery, supportTicketsQuery]} subject="Destek talepleri" title="Destek Talepleri">
                 <SupportTicketsPanel
                   readOnly={supportReadOnly}
-                  readOnlyMessage={isRolePreview ? undefined : "Veli destek talebi izni kapalı."}
+                  readOnlyMessage={isRolePreview ? undefined : supportPermissionLoading ? "Destek talebi izni kontrol ediliyor…" : "Veli destek talebi izni kapalı."}
                   tickets={data?.supportTickets ?? []}
                   onCreate={(input) =>
                     auth && resolvedStudentId && !isRolePreview && canOpenSupportTickets
@@ -591,6 +597,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
 }
 
 const panelLoadingValue = "Yükleniyor…";
+const permissionLoadingDetail = "İzin kontrol ediliyor";
 
 function guardianPortalPanels(view: GuardianPortalView) {
   const overview = view === "overview";
@@ -601,7 +608,8 @@ function guardianPortalPanels(view: GuardianPortalView) {
     announcements: overview || view === "announcements",
     homework,
     lookups: student || reports || homework,
-    notifications: overview || student || view === "notifications" || view === "payments",
+    // Finans ve destek izinleri ilişki tercihlerinden okunur; bu görünümler izni okumadan finans/destek açmaz.
+    notifications: overview || student || view === "notifications" || view === "payments" || view === "support",
     overview,
     payments: overview || view === "payments",
     reports,
@@ -757,6 +765,7 @@ function guardianPortalContext(
   label: string,
   selectedStudentLabel: string,
   canViewFinance: boolean,
+  financeLoading: boolean,
   isRolePreview: boolean,
 ) {
   const detailByView: Record<GuardianPortalView, string> = {
@@ -764,7 +773,7 @@ function guardianPortalContext(
     homework: `${selectedStudentLabel} için ödev ve materyal takibi`,
     notifications: "Bildirim, finans ve destek izinleri",
     overview: `${selectedStudentLabel} için günlük veli özeti`,
-    payments: canViewFinance ? "İzinli taksit ve alacak takibi" : "Finans görünürlüğü kapalı",
+    payments: financeLoading ? permissionLoadingDetail : canViewFinance ? "İzinli taksit ve alacak takibi" : "Finans görünürlüğü kapalı",
     reports: `${selectedStudentLabel} için başarı %, net ve soru bağlamı`,
     student: `${selectedStudentLabel} için öğrenci profili ve kayıt geçmişi`,
     support: "Veli destek talepleri ve yanıt durumu",

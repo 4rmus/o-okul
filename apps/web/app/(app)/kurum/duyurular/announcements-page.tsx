@@ -40,7 +40,7 @@ import type {
 import { Bell, Mail, Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
-import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
@@ -147,6 +147,9 @@ export function AnnouncementsPage() {
   const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const termNames = useMemo(() => new Map(references.terms.map((record) => [record.id, record.name])), [references.terms]);
   const recipientReport = reportDataQuery.data?.recipientReport;
+  // Kampüs kapsamlı kullanıcı kampüsü dışındaki (veya kurum geneli) duyurunun alıcı/teslim bilgisini alamaz (API 403);
+  // genel hata yerine kapsam mesajı gösterilir ve gönderim eylemleri açılmaz.
+  const selectedOutOfCampusScope = isAnnouncementCampusScopeError(reportDataQuery.error) || isAnnouncementCampusScopeError(deliveryReportsQuery.error);
   const announcementSummaryItems = buildAnnouncementSummaryItems({
     listTotal: announcementsQuery.data?.meta?.total ?? rows.length,
     recipientReport,
@@ -286,7 +289,9 @@ export function AnnouncementsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
-      setFormError(apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
+      setFormError(isAnnouncementCampusScopeError(submitError)
+        ? announcementCreateCampusScopeMessage
+        : apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
     } finally {
       setIsPublishing(false);
     }
@@ -406,7 +411,9 @@ export function AnnouncementsPage() {
       setDeliveryStatus(`${channelName} gönderimi kuyruğa alındı (${formatCount(result.recipientCount)} hedef). Teslim sonucu raporda güncellenir.`);
       void deliveryReportsQuery.refetch();
     } catch (sendError) {
-      setDeliveryError(apiErrorMessage(sendError, `${channelName} gönderimi başlatılamadı.`));
+      setDeliveryError(isAnnouncementCampusScopeError(sendError)
+        ? announcementCampusScopeMessage
+        : apiErrorMessage(sendError, `${channelName} gönderimi başlatılamadı.`));
     } finally {
       setSendingChannel(null);
     }
@@ -473,6 +480,10 @@ export function AnnouncementsPage() {
         >
           {reportDataQuery.isPending ? (
             <Alert title="Rapor yükleniyor">Alıcı raporu hazırlanıyor.</Alert>
+          ) : selectedOutOfCampusScope ? (
+            <Alert tone="warning" title="Kampüs kapsamı dışında">
+              {announcementCampusScopeMessage}
+            </Alert>
           ) : reportDataQuery.isError ? (
             <Alert tone="danger" title="Alıcı raporu alınamadı">
               {apiErrorMessage(reportDataQuery.error, "Alıcı raporu alınamadı.")}
@@ -480,7 +491,7 @@ export function AnnouncementsPage() {
           ) : reportDataQuery.data?.recipientReport ? (
             <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}
-          {canManageAnnouncements && selectedAnnouncement ? (
+          {canManageAnnouncements && selectedAnnouncement && !selectedOutOfCampusScope ? (
             <Panel
               aria-label="Duyuru bildirim gönderimi"
               title="Push ve e-posta gönderimi"
@@ -718,6 +729,16 @@ async function createAnnouncement(accessToken: string, input: AnnouncementFormPa
     headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
+}
+
+const announcementCampusScopeCode = "ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN";
+const announcementCampusScopeMessage =
+  "Bu duyuru çalışma kampüsünüzün dışında. Alıcı raporu ve bildirim gönderimi yalnız çalışma kampüsünüze ait duyurularda açılır.";
+const announcementCreateCampusScopeMessage =
+  "Seçilen hedef çalışma kampüsünüzün dışında. Duyuruyu çalışma kampüsünüze veya oradaki bir sınıfa yönlendirin.";
+
+function isAnnouncementCampusScopeError(error: unknown) {
+  return error instanceof ApiRequestError && error.status === 403 && error.code === announcementCampusScopeCode;
 }
 
 async function sendAnnouncementDelivery(
