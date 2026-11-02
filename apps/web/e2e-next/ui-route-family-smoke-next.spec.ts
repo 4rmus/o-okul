@@ -96,6 +96,7 @@ const routeCases = [
   route("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "tenantAdmin", { role: "region", name: "Operasyon ve kanıt araçları" }),
   route("/kurum/program", "Ders Programı", "assistantAdmin", { role: "region", name: "Ders programı yönetimi" }),
   route("/kurum/raporlar", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/raporlar/seviyeler", "Seviye Analitiği", "assistantAdmin", { role: "region", name: "Seviye analitiği" }),
   route("/kurum/rol-onizleme", "Rol Önizleme", "tenantAdmin", { role: "region", name: "Rol görünüm önizleme" }),
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
@@ -398,7 +399,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 98) throw new Error(`Route manifest must contain exactly 98 entries; found ${manifest.length}.`);
+  if (manifest.length !== 99) throw new Error(`Route manifest must contain exactly 99 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);

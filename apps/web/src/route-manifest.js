@@ -175,6 +175,8 @@ export const institutionRoutes = [
   navRoute("/kurum/gelisim-kriterleri", "Gelişim Kriterleri", "Akademik", "ClipboardCheck", { capability: "academic:manage", keywords: ["gelişim", "mentör", "değerlendirme"] }),
   navRoute("/kurum/sinavlar", "Sınavlar", "Sınav", "FileText", { capability: "academic:manage", detailParent: true }),
   navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" }),
+  // DEC-20261102-08 (G3): opened from Raporlar; not a rail entry and not a hub tab, so the Raporlar frame is unchanged.
+  navRoute("/kurum/raporlar/seviyeler", "Seviye Analitiği", "Sınav", "BarChart3", { capability: "academic:manage", hiddenFromRail: true, keywords: ["seviye", "başarı", "gidiş"] }),
   navRoute("/kurum/kazanimlar", "Kazanımlar", "Sınav", "ClipboardList", { capability: "academic:manage" }),
   // Optik okuma menüden çıktı; sınav çalışma alanından açılır (§4).
   navRoute("/kurum/optik", "Optik Okuma", "Sınav", "ScanLine", { capability: "academic:manage", hiddenFromRail: true }),

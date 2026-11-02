@@ -220,4 +220,44 @@ describe("ReportSnapshotStore", () => {
     expect(businessQuery?.sql).toContain("student - 'displayName' - 'studentNo'");
     expect(businessQuery?.values).toEqual(["tenant-a", "student-a"]);
   });
+
+  it("Postgres seviye analitiği yalnız seviye snapshot projeksiyonunu tenant ve yayın koşuluyla okur (DEC-20261102-08)", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresReportSnapshotStore(pool);
+
+    await expect(runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.listGradeLevelAnalytics("tenant-a", { gradeLevelId: "grade-8", examType: "LGS" }),
+    )).resolves.toEqual({ snapshots: [], examsWithoutLevelReport: [] });
+
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
+    expect(businessQueries).toHaveLength(2);
+    for (const query of businessQueries) {
+      expect(query.values).toEqual(["tenant-a", "grade-8", "LGS", null, "EXAM_RESULT_SUMMARY"]);
+      expect(query.sql).toContain('exam."tenantId" = $1');
+      expect(query.sql).toContain(`exam."status" = 'PUBLISHED'`);
+      expect(query.sql).toContain('snapshot."gradeLevelId" = $2');
+      expect(query.sql).toContain('snapshot."classId" IS NULL');
+      expect(query.sql).toContain('snapshot."campusId" IS NULL');
+      expect(query.sql).toContain('snapshot."courseId" IS NULL');
+      expect(query.sql).toContain('snapshot."deletedAt" IS NULL');
+    }
+    expect(businessQueries[0]?.sql).toContain('snapshot."tenantId" = $1');
+    // Projection: only averages and resultCount leave the snapshot JSON; the student array is never read.
+    expect(businessQueries[0]?.sql).not.toContain("students");
+    expect(businessQueries[0]?.sql).not.toMatch(/snapshot\."snapshotData",/);
+  });
+
+  it("in-memory seviye analitiği varsayılan demo snapshot'ını seviye rakamı saymaz", async () => {
+    const store = new InMemoryReportSnapshotStore();
+
+    await expect(store.listGradeLevelAnalytics("tenant-a", { gradeLevelId: "grade-8" }))
+      .resolves.toEqual({ snapshots: [], examsWithoutLevelReport: [] });
+  });
 });

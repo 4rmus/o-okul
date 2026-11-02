@@ -2807,6 +2807,41 @@ const reportStudentProgressSchema = objectSchema({
   standardScoreDelta: numberSchema(),
 }, ["tenantId", "examId", "studentId", "points"]);
 
+// DEC-20261102-08 (G3): level analytics read from level snapshots only; Başarı % is primary, Net/Soru context.
+const gradeLevelAnalyticsExamRefProperties = {
+  examId: stringSchema(),
+  examTitle: stringSchema(),
+  examType: stringSchema(),
+  startsAt: stringSchema({ format: "date-time" }),
+};
+
+const gradeLevelAnalyticsPointSchema = objectSchema({
+  ...gradeLevelAnalyticsExamRefProperties,
+  snapshotId: stringSchema(),
+  generatedAt: stringSchema({ format: "date-time" }),
+  participantCount: integerSchema({ minimum: 0 }),
+  successRate: numberSchema(),
+  net: numberSchema(),
+  questionCount: numberSchema(),
+}, ["examId", "examTitle", "snapshotId", "participantCount"]);
+
+const gradeLevelAnalyticsSchema = objectSchema({
+  tenantId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  examType: stringSchema(),
+  termId: stringSchema(),
+  series: arraySchema(objectSchema({
+    examType: stringSchema(),
+    points: arraySchema(gradeLevelAnalyticsPointSchema),
+  }, ["points"])),
+  needsRefresh: arraySchema(objectSchema({
+    ...gradeLevelAnalyticsExamRefProperties,
+    snapshotId: stringSchema(),
+    staleAt: stringSchema({ format: "date-time" }),
+  }, ["examId", "examTitle", "snapshotId"])),
+  withoutLevelReport: arraySchema(objectSchema(gradeLevelAnalyticsExamRefProperties, ["examId", "examTitle"])),
+}, ["tenantId", "gradeLevelId", "series", "needsRefresh", "withoutLevelReport"]);
+
 const reportStudentSnapshotSchema = objectSchema({
   tenantId: stringSchema(),
   institutionName: stringSchema(),
@@ -4092,6 +4127,14 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/exams/{examId}/reports/snapshots/{snapshotId}/students/{studentId}/error-booklet": {
     responseBody: reportErrorBookletSchema,
+  },
+  "get /api/v1/reports/grade-level-analytics": {
+    responseBody: gradeLevelAnalyticsSchema,
+    queryParameters: [
+      { name: "gradeLevelId", required: true, schema: stringSchema({ minLength: 1, maxLength: 128 }) },
+      { name: "examType", schema: stringSchema({ maxLength: 32 }) },
+      { name: "termId", schema: stringSchema({ maxLength: 128 }) },
+    ],
   },
   ...portalReportOperationContracts,
   "post /api/v1/students": {

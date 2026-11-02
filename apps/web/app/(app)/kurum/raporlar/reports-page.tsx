@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -715,6 +716,10 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
       }
     >
       {reportWorkspace}
+      {/* DEC-20261102-08 (G3): below the workspace so the report frame above it stays unchanged; hidden in print. */}
+      <nav className="next-list-controls" aria-label="Diğer rapor görünümleri">
+        <Link className="uh-button uh-button--secondary uh-button--md" href="/kurum/raporlar/seviyeler">Seviye analitiği</Link>
+      </nav>
     </PageFrame>
   );
 }
