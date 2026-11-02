@@ -11,19 +11,44 @@ on:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   # Only pull requests cancel their superseded runs; every main push keeps its own CI evidence (2026-11-01).
+  # The group stays shared across draft and ready payloads: the surviving run re-reads the live draft state
+  # in `changes`, so a later draft-payload run that cancels a ready_for_review run still runs the full suite (2026-11-02).
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Docs-only pull requests run the light doc checks instead of the full suite (2026-10-12, UAT batching).
   # Pushes to main always run the full suite so deploy evidence stays complete.
-  # Draft pull requests skip CI entirely; marking the PR ready for review triggers the full run (2026-10-13).
+  # Draft pull requests must never pass required checks by skipping them (PR #232, 2026-11-02): `changes` always
+  # runs and fails while the PR is still a draft, so every dependent required job is skipped behind a failed
+  # required check. The event payload's draft flag can be stale (a push racing `gh pr ready`), so a draft payload
+  # is re-checked against the live pull request before failing. Marking the PR ready for review runs the full suite.
   changes:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       code: ${{ steps.classify.outputs.code }}
     steps:
+      - name: Require a ready-for-review pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if ! live_draft="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.draft')"; then
+            echo "::error title=Draft state unknown::Could not read the live draft state of PR #$PR_NUMBER; failing closed."
+            exit 1
+          fi
+          if [ "$live_draft" != "false" ]; then
+            echo "::error title=Draft pull request::PR #$PR_NUMBER is a draft. CI does not run for drafts and required checks must not pass; mark the PR ready for review to run CI."
+            echo "draft pull request: CI blocked until ready for review" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "event payload was draft but PR #$PR_NUMBER is ready for review now; running CI" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

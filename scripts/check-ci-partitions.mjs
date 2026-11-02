@@ -53,6 +53,25 @@ if (/run: pnpm run ci\b/.test(workflow)) {
   failures.push(".github/workflows/ci.yml pnpm run ci zincirini tek job'da çalıştırmamalı; parçalar paralel koşar.");
 }
 
+// A skipped required check counts as passing, so a draft PR must fail `changes` instead of skipping it (PR #232).
+const changesJob = workflow.match(/\n  changes:\n([\s\S]*?)\n\n  [a-z-]+:\n/)?.[1] ?? "";
+if (!changesJob) failures.push(".github/workflows/ci.yml changes job'u eksik.");
+if (/^    if:/m.test(changesJob)) {
+  failures.push(".github/workflows/ci.yml changes job'u job seviyesinde if taşımamalı; draft PR'da atlanırsa zorunlu check'ler geçmiş sayılır.");
+}
+for (const pin of [
+  "name: Require a ready-for-review pull request",
+  "if: github.event_name == 'pull_request' && github.event.pull_request.draft == true",
+  "pull-requests: read",
+  'gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq \'.draft\'',
+  'if [ "$live_draft" != "false" ]; then',
+]) {
+  if (!changesJob.includes(pin)) failures.push(`.github/workflows/ci.yml changes draft kapısı eksik: ${pin}`);
+}
+if (workflow.includes("github.event.pull_request.draft == false")) {
+  failures.push(".github/workflows/ci.yml draft PR'ı job if ile atlamamalı (github.event.pull_request.draft == false).");
+}
+
 if (failures.length > 0) {
   console.error("CI parça kontrolü başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);
