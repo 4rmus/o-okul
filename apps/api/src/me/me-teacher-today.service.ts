@@ -1,11 +1,12 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
-import type { TeacherTodaySummary } from "@o-okul/shared-types";
+import type { GradeAssessmentRecord, TeacherAuthoringScope, TeacherTodaySummary } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { GradebookService } from "../gradebook/gradebook.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
 import { SchoolService } from "../school/school.service.js";
+import { StudentService } from "../student/student.service.js";
 import { TeacherService } from "../teacher/teacher.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { type TeacherTodayInboxCounts, type TeacherTodayStore, teacherTodayStoreToken } from "./me-teacher-today.store.js";
@@ -25,6 +26,7 @@ export class MeTeacherTodayService {
     private readonly school: SchoolService,
     private readonly gradebook: GradebookService,
     private readonly announcements: AnnouncementService,
+    private readonly students: StudentService,
     @Inject(teacherTodayStoreToken) private readonly store: TeacherTodayStore,
   ) {}
 
@@ -33,7 +35,7 @@ export class MeTeacherTodayService {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
     const tenantId = context.tenantId;
-    const [teacher, lessons, homework, reports, classes, assessments, announcements] = await Promise.all([
+    const [teacher, lessons, homework, reports, classes, assessments, authoringScopes, announcements, students] = await Promise.all([
       this.teachers.findCurrentTeacher(context),
       this.schedules.listCurrentTeacherLessons(context),
       this.homework.list(context),
@@ -42,7 +44,10 @@ export class MeTeacherTodayService {
       this.reportIndex.listForTeacher(context).catch(() => []),
       this.school.listClasses(context).catch(() => undefined),
       this.gradebook.listAssessments(context, {}).catch(() => undefined),
+      this.gradebook.listTeacherAuthoringScopes(context).catch(() => undefined),
       this.announcements.listCurrentTeacher(context).catch(() => undefined),
+      // HomeworkService.listSubmissions shows only students the teacher may see (StudentService.list).
+      this.students.list(context).catch(() => undefined),
     ]);
     const today = istanbulDate(now);
     const todayClassIds = [...new Set(lessons.filter((lesson) => istanbulDate(new Date(lesson.startsAt)) === today).map((lesson) => lesson.classId))];
@@ -51,8 +56,12 @@ export class MeTeacherTodayService {
         tenantId,
         date: today,
         classIds: todayClassIds,
-        homeworkIds: homework.map((item) => item.id),
-        ...(assessments ? { assessmentIds: assessments.map((assessment) => assessment.id) } : {}),
+        // A homework closed at the homework level no longer waits for submission checks.
+        homeworkIds: homework.filter((item) => !item.checkedAt).map((item) => item.id),
+        ...(students ? { studentIds: students.map((student) => student.id) } : {}),
+        ...(assessments && authoringScopes
+          ? { assessmentIds: assessments.filter((assessment) => isAuthorable(assessment, authoringScopes)).map((assessment) => assessment.id) }
+          : {}),
       })
       .catch(() => undefined);
     return buildTeacherTodaySummary({
@@ -113,10 +122,20 @@ export function buildTeacherTodaySummary(input: {
     latestReport: latest
       ? { examId: latest.examId, latestGeneratedAt: latest.latestGeneratedAt, title: latest.title, ...(latest.startsAt ? { startsAt: latest.startsAt } : {}) }
       : null,
-    ...(input.inbox ? { pendingSubmissionCount: input.inbox.pendingSubmissionCount } : {}),
+    ...(input.inbox?.pendingSubmissionCount !== undefined ? { pendingSubmissionCount: input.inbox.pendingSubmissionCount } : {}),
     ...(input.inbox?.unpublishedGradeDraftCount !== undefined ? { unpublishedGradeDraftCount: input.inbox.unpublishedGradeDraftCount } : {}),
     ...(input.unreadAnnouncementCount !== undefined ? { unreadAnnouncementCount: input.unreadAnnouncementCount } : {}),
   };
+}
+
+// Drafts wait on whoever may publish them: the same rule as GradebookService.assertCanAuthor (a CLASS_TEACHER or
+// BRANCH_TEACHER assignment naming the class, compatible course and term), not the wider read scope.
+function isAuthorable(assessment: GradeAssessmentRecord, scopes: readonly TeacherAuthoringScope[]): boolean {
+  return scopes.some((scope) =>
+    scope.classId === assessment.classId &&
+    (!scope.courseId || scope.courseId === assessment.courseId) &&
+    (!scope.termId || scope.termId === assessment.termId),
+  );
 }
 
 function istanbulDate(now: Date): string {

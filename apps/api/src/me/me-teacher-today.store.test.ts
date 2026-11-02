@@ -39,6 +39,7 @@ describe("PostgresTeacherTodayStore", () => {
       date: "2026-10-01",
       classIds: ["class-a", "class-b"],
       homeworkIds: ["homework-a"],
+      studentIds: ["student-a"],
       assessmentIds: ["assessment-a"],
     }));
 
@@ -49,8 +50,10 @@ describe("PostgresTeacherTodayStore", () => {
     expect(attendance?.values).toEqual(["tenant-a", "2026-10-01", ["class-a", "class-b"]]);
     expect(attendance?.sql).toContain('attendance."deletedAt" IS NULL');
     const submissions = queries.find((query) => query.sql.includes('FROM "HomeworkSubmission"'));
-    expect(submissions?.values).toEqual(["tenant-a", ["homework-a"]]);
+    expect(submissions?.values).toEqual(["tenant-a", ["homework-a"], ["student-a"]]);
+    expect(submissions?.sql).toContain('submission."studentId" = ANY($3::text[])');
     expect(submissions?.sql).toContain('submission."checkedAt" IS NULL');
+    expect(submissions?.sql).toContain('homework."checkedAt" IS NULL');
     expect(submissions?.sql).toContain('student."classId" = homework."classId"');
     const drafts = queries.find((query) => query.sql.includes('FROM "GradeEntry"'));
     expect(drafts?.values).toEqual(["tenant-a", ["assessment-a"]]);
@@ -58,7 +61,7 @@ describe("PostgresTeacherTodayStore", () => {
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 
-  it("boş kapsamda sorgu çalıştırmaz, okunamayan not defteri kapsamında taslak sayısını düşürür", async () => {
+  it("boş kapsamda sorgu çalıştırmaz, okunamayan öğrenci ve not defteri kapsamında sayaçları düşürür", async () => {
     const { pool, queries } = createPool(() => []);
     const store = new PostgresTeacherTodayStore(pool);
 
@@ -69,8 +72,18 @@ describe("PostgresTeacherTodayStore", () => {
       homeworkIds: [],
     }));
 
-    expect(result).toEqual({ attendanceClassIds: [], pendingSubmissionCount: 0 });
+    expect(result).toEqual({ attendanceClassIds: [] });
     expect(queries.filter((query) => /FROM "(Attendance|HomeworkSubmission|GradeEntry)"/.test(query.sql))).toEqual([]);
+
+    const noVisibleStudents = await runWithRequestContext(teacherContext, () => store.loadInbox({
+      tenantId: "tenant-a",
+      date: "2026-10-01",
+      classIds: [],
+      homeworkIds: ["homework-a"],
+      studentIds: [],
+    }));
+    expect(noVisibleStudents).toEqual({ attendanceClassIds: [], pendingSubmissionCount: 0 });
+    expect(queries.filter((query) => query.sql.includes('FROM "HomeworkSubmission"'))).toEqual([]);
   });
 });
 
