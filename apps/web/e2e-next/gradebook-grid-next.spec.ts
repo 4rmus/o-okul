@@ -207,6 +207,57 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toContainText("2. Yazılı");
     await expect.poll(() => beforeUnloadBlocked(page)).toBe(false);
   });
+
+  test("kaydedilmemiş not varken menü, gezinme yolu ve komut paleti bağlantıları onay ister", async ({ page }) => {
+    await open(page, "admin", "/kurum/not-defteri", { saves: [] });
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    const sessionsLink = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Oturumlar" });
+
+    // Nothing typed yet: the link leaves without a confirm.
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toBeVisible();
+    await sessionsLink.click();
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.goto("/kurum/not-defteri");
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+
+    await sessionsLink.click();
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+    await expect(dialog).toContainText("1 değişiklik kaydedilmedi.");
+    await dialog.getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await page.getByRole("navigation", { name: "Gezinme yolu" }).getByRole("link", { name: "Kurum Özeti" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Komut paleti" });
+    await palette.getByRole("combobox", { name: "Komut ara" }).fill("Öğrenciler");
+    await palette.getByRole("combobox", { name: "Komut ara" }).press("Enter");
+    await expect(palette).toHaveCount(0);
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await sessionsLink.click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+  });
+
+  test("öğretmen alt gezinmesi kaydedilmemiş notta onay ister", async ({ page }) => {
+    const panel = await openTeacher(page, { saves: [] }, { width: 375, height: 812 });
+    await panel.getByLabel("Değerlendirme").selectOption("ga-1");
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+
+    await page.getByRole("navigation", { name: "Portal kısayolları" }).getByRole("link", { name: "Ödevler" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/ogretmen\/not-defteri$/);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+  });
 });
 
 /** In the viewport and not covered by another layer (the portal bottom tab bar is fixed below 1024 px). */

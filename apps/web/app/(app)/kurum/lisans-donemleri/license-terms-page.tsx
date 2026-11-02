@@ -9,6 +9,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { TrialStatusBanner } from "../_shared/trial-status.js";
+import { formatDate } from "../../_shared/format.js";
 
 export function LicenseTermsPage() {
   const { auth } = useAuth();
@@ -74,10 +75,6 @@ export function LicenseTermsPage() {
     {auth && auth.session.activePersona === "STAFF" && !auth.session.roles.includes("SYSTEM_ADMIN") && auth.session.roles.some((role) => ["TENANT_ADMIN", "TENANT_OWNER"].includes(role)) ? <ResetRequestPanel key={`${auth.session.tenantId}:${auth.session.userId}:${auth.session.id}`} auth={auth} /> : null}
     </>
   );
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("tr-TR");
 }
 
 function formatCount(value: number) {

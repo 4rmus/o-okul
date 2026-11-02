@@ -2722,7 +2722,13 @@ export interface InstitutionDashboardSummary {
     openImportQuarantineCount: number;
     openSupportTicketCount: number;
   };
+  /** Tenant-wide viewers only; a campus-scoped dashboard never carries it (exams and reports are tenant-wide). */
   latestExam?: InstitutionDashboardExamSummary;
+  /**
+   * Present for a campus-scoped membership: counts cover only its campuses, tenant-wide figures that cannot be
+   * attributed to a campus (import quarantine, the latest exam and its report) read 0 or are left out.
+   */
+  campusScoped?: boolean;
 }
 
 export interface ReportErrorBooklet {

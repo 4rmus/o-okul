@@ -98,6 +98,53 @@ export function requireTenantWideStaffContext(
   return context.tenantId;
 }
 
+export interface CampusAttributedClass extends TenantResource {
+  id: string;
+  campusId?: string | null;
+  deletedAt?: string | null;
+}
+
+/**
+ * Membership campus scope for staff reads and writes. `undefined` means no campus restriction (tenant-wide staff,
+ * teachers, portal subjects, system admin bypass); a set means only rows attributable to these campuses. An
+ * OPERATIONS_STAFF context without a campus scope fails closed, as in the school and student services.
+ */
+export function resolveCampusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+  if (context.bypassRls && isSystemAdmin(context.roles)) {
+    return undefined;
+  }
+
+  if (context.campusScope?.scopeMode === "CAMPUSES") {
+    return new Set(context.campusScope.campusIds);
+  }
+
+  if (!context.campusScope && context.roles.includes("OPERATIONS_STAFF")) {
+    throw new Error("CAMPUS_SCOPE_MISSING");
+  }
+
+  return undefined;
+}
+
+/** A row without an attributable campus is outside every restricted scope. */
+export function isCampusInScope(
+  restriction: ReadonlySet<string> | undefined,
+  campusId: string | null | undefined,
+): boolean {
+  return !restriction || Boolean(campusId && restriction.has(campusId));
+}
+
+export function campusScopedClassIds(
+  context: RequestContext,
+  restriction: ReadonlySet<string>,
+  classes: CampusAttributedClass[],
+): Set<string> {
+  return new Set(
+    filterTenantResources(context, classes)
+      .filter((schoolClass) => !schoolClass.deletedAt && isCampusInScope(restriction, schoolClass.campusId))
+      .map((schoolClass) => schoolClass.id),
+  );
+}
+
 export function assertTeacherScopedStudentAccess(context: RequestContext, resource: TeacherScopedStudentResource): void {
   assertTenantResourceAccess(context, resource);
 

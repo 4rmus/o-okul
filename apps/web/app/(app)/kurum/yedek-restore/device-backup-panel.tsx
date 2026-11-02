@@ -5,6 +5,7 @@ import { Button, Field, Input, Panel } from "@o-okul/ui";
 import type { TenantDeviceBackupPreview, TenantDeviceRestoreOperation } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetchOnce } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
+import { formatDateTime, formatTime } from "../../_shared/format.js";
 
 const impactMessages: Record<string,string> = {
   DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED: "Plan için gerekli kaynak bilgileri eksiksiz doğrulanamadı.",
@@ -111,8 +112,8 @@ export function DeviceBackupPanel() {
     {error ? <p role="alert">{error}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {preview ? <div role="status">
-      {preview.plan ? <p>Veritabanı önizleme planı {new Date(preview.plan.expiresAt).toLocaleTimeString("tr-TR")} saatine kadar yeniden doğrulanabilir. Bu bir geri yükleme onayı değildir.</p> : null}
-      <p>Bu kuruma ait paket bütünlüğü doğrulandı. Yedek tarihi: {new Date(preview.createdAt).toLocaleString("tr-TR")}</p>
+      {preview.plan ? <p>Veritabanı önizleme planı {formatTime(preview.plan.expiresAt)} saatine kadar yeniden doğrulanabilir. Bu bir geri yükleme onayı değildir.</p> : null}
+      <p>Bu kuruma ait paket bütünlüğü doğrulandı. Yedek tarihi: {formatDateTime(preview.createdAt)}</p>
       <p>{Object.values(preview.tableCounts).reduce((sum,count) => sum+count,0)} kayıt ve {preview.fileCount} dosya.</p>
       <p>{preview.schemaCompatible ? "Veri sürümü eşleşiyor." : "Bu yedeğin veri sürümü mevcut kurumla uyumlu değil."}</p>
       {preview.impact ? <div aria-label="Geri yükleme etki önizlemesi">

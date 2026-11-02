@@ -1375,6 +1375,130 @@ Etkilenen ADR: Yok.
 Açık soru: Yok.
 Son kontrol: 2026-10-25
 
+### DEC-20261102-01 — UI/UX wave-2 kapsamı: DEC-20261010-01'e sınırlı istisna
+
+Durum: Onaylı (ürün sahibi, 2026-11-02); DEC-20261010-01'in "yeni özellik dilimi yalnız UAT veya görüşme
+bulgusundan açılır" maddesine yalnız aşağıdaki dilimler için istisnadır
+Karar: UI/UX iyileştirme kapılarının ikinci dalgası şu kapsamla açılır.
+- Wave-2a (karar gerektirmez): main'de zaten var olan kampüs ve destek kapsamı açıklarının kapatılması,
+  taslak PR CI açığı, Türkçe biçimlendirme katmanı, portal sayfalarında panel başına yükleme, Öğrenci 360'tan
+  düzenleme ve kaydedilmemiş not gezinme koruması.
+- Wave-2b: kabuk Kampüs/Dönem seçicisinin kaldırılması (DEC-20261102-02), OPERATIONS_STAFF'ın sınav çalışma
+  alanı (DEC-20261102-03), personel sekmelerinin tutarlılığı (F-21; hesap e-postası bağlandıktan sonra esas,
+  iş e-postası İK alanı olarak kalır; "Kullanıcı hesapları" sekmesi kalkar ve Çalışanlar'a yönlenir), Sınıf 360
+  ve dashboard akademik operasyon sayıları (DEC-20261102-04), dar gelişim değerlendirmesi yazma ekranı
+  (DEC-20261102-05), portal okunmamış duyuru göstergesi (DEC-20261102-06), landing ve fiyat sayfasının metin
+  ve sıra düzeni (DEC-20261102-07), "Yeni dönem açılışı" komutunun ilk kurulum sihirbazını açmaması.
+- Ertelenen: tam dönem geçişi sihirbazı (aktif dönem atomikliği, mezuniyetin geri alınamazlığı, kota ve
+  öğretmen ataması devri soruları açık), seviye analitiği G3 (süzgeçsiz snapshot'ın seviye rakamı gibi
+  gösterilmesi yanlış rapor riski taşır; H2/H3), öğretmen oluşturulunca Çalışan kaydının kopyalanması (Çalışan
+  tablosunda KVKK imha yolu yok), tablo dışa aktarma (KVKK DEC'i gerekir), devamsızlık takvimi, Öğrenci 360
+  zaman çizelgesi, landing ürün görselleri (staging UAT'tan sonra).
+- Son ve tek başına: CSS konsolidasyonu piksel aynı kalır; golden'lar değişmez, karne bölgesine dokunulmaz.
+Kaynak: Ürün sahibi 2026-11-02'de kapsam belgesindeki önerilen seçenekleri kabul etti. Belge 10 madde için
+salt okur keşif, bağımsız çürütme ve tamlık denetiminden geçti.
+Kanıt: LOCAL_STATIC (kod okuması). Main'deki açıklar üç bağımsız güvenlik çürütücüsüyle 3/3 doğrulandı.
+Etkilenen ADR: Yok
+Açık soru: Mayıs 2027 satış başlangıcı ve S1 UAT takvimi değişmez; dalga S1 kontrol noktasını (2026-11-14)
+bekletmez.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-02 — Kabuktaki Kampüs/Dönem seçicisi kaldırılır
+
+Durum: Onaylı (ürün sahibi, 2026-11-02); UI-01'in kabuk ContextBar niyetinin yerini alır
+(`docs/ui-ux-berrak-redesign-plan.md`, almanac planı §6.2/§15.3)
+Karar: Her kurum sayfasında görünen kabuk Kampüs/Dönem seçicisi kaldırılır. Seçimi yalnız Finans ve Destek
+okuyordu ve ikisinin aynı URL anahtarlarına bağlı kendi filtresi var; menüde gezinince seçim kayboluyordu.
+Finans, Destek ve Raporlar'daki sayfa filtreleri kalır. Gerekçe "tek kampüs" değil, kabuk kontrolünün veriyi
+süzmemesidir: çok kampüslü kurum için konsolide rapor ihtiyacı (strateji planı) ayrı bir dilimdir.
+Kaynak: Kapsam belgesi W1, seçenek C.
+Kanıt: `apps/web/app/(app)/app-shell.tsx`, `_shell/top-bar.tsx`, `finans/finance-page.tsx`,
+`destek/support-tickets-page.tsx` (LOCAL_STATIC).
+Etkilenen ADR: Yok
+Açık soru: `ContextBar` primitifi tüketicisiz kalır; temizliği CSS konsolidasyonuna bırakılır.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-03 — Tenant geneli OPERATIONS_STAFF sınav çalışma alanına girer
+
+Durum: Onaylı (ürün sahibi, 2026-11-02)
+Karar: Tenant geneli OPERATIONS_STAFF, STAFF personasında sınav çalışma alanını (genel bakış, Stepper,
+`GET /exams/:id/workspace`) kullanır; capability matrisi değişmez. Katılımcı adımının 403 vermemesi için
+sınava özel bir kural yazılır; OPERATIONS_STAFF öğretmen atama baypasına (`canBypassTeacherAssignment`)
+eklenmez, çünkü o yardımcı yoklama, ödev, not defteri, öğretmen notu, gelişim ve veli yollarında okuma ve
+yazma kapsamını genişletir. Kampüs kısıtlı OPERATIONS_STAFF sınav servislerinden bugünkü gibi dışarıda kalır.
+Gate C güvenlik sınırı bu kayıtla daralan biçimde güncellenir.
+Kaynak: Kapsam belgesi W2, seçenek A; çürütmenin eklediği iki karar (baypas yok, kampüs kısıtlı hariç).
+Kanıt: DEC-20260801-01 (OPERATIONS_STAFF: kayıt, öğrenci, sınıf, sınav, devam, duyuru); LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: OPERATIONS_STAFF+TEACHER çift rollü kullanıcının STAFF personasında öğretmen atamasıyla
+daralan okumaları ayrı bir güvenlik diliminde ele alınır.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-04 — Sınıf 360 ve dashboard akademik operasyon sayıları
+
+Durum: Onaylı (ürün sahibi, 2026-11-02)
+Karar: Sınıf detayı ve kurum dashboard'u salt okunur akademik operasyon sayıları gösterir: yoklama, ödev,
+not girişi durumu ve öğretmen başına not giriş tamamlanma. Görenler academic:manage rolleridir
+(TENANT_OWNER, TENANT_ADMIN, ASSISTANT_ADMIN, OPERATIONS_STAFF) ve sayılar kampüs kapsamına göre süzülür;
+dashboard'un mevcut sayıları da aynı kapsamla süzülür. "Eksik not girişi" mevcut verilerden türetilir
+(değerlendirme açılmamış ya da girişleri mevcuttan az veya yayınlanmamış); değerlendirme planı tablosu
+yoktur. Taslak notlardan yalnız sayılar ve yayın sürümü gösterilir, taslak puan veya ortalama asla
+gösterilmez (ADR-0011).
+Kaynak: Kapsam belgesi W5, önerilen seçenekler.
+Kanıt: LOCAL_STATIC.
+Etkilenen ADR: ADR-0011 (taslak yayın semantiği değişmez)
+Açık soru: Gate'in varsayılanları, ürün sahibi değiştirebilir: "yoklama alınmamış sınıf" yalnız o gün
+programında dersi olan sınıflar için sayılır; sınıf mevcudu yoklamadaki gibi aktif kayıt tarih aralığından
+alınır; silinmiş öğretmen ve süresi biten üyelik listede yer almaz.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-05 — Dar gelişim değerlendirmesi yazma ekranı (G8)
+
+Durum: Onaylı (ürün sahibi, 2026-11-02); RK-6'nın istediği gizlilik kaydıdır, rehberlik notunu açmaz
+Karar: Öğretmen için gelişim değerlendirmesi yazma ekranı ve kurum için gelişim kriterleri ekranı mevcut API
+üzerinde açılır; şema değişmez. Yazabilenler CLASS_TEACHER ve GUIDANCE_COUNSELOR atamaları ile
+TENANT_OWNER, TENANT_ADMIN ve ASSISTANT_ADMIN'dir; BRANCH_TEACHER ve RESPONSIBLE_TEACHER yazamaz.
+Kayıtlar yalnız eklenir ve değiştirilmez; düzeltme yeni bir kayıttır. Varsayılan görünürlük INTERNAL'dır ve
+INTERNAL kayıtları yalnız rehberlik ve yönetici rolleri ile yazarı okur (RK-6). Form özel nitelikli veri
+(sağlık vb.) yazılmaması uyarısı ve `mentorNote` uzunluk sınırı taşır. Servis kampüs kapsamını uygular.
+Kaynak: Kapsam belgesi W7, önerilen seçenekler; RK-6 önlem listesi.
+Kanıt: `apps/api/src/development/**` (LOCAL_STATIC).
+Etkilenen ADR: Yok
+Açık soru: Öğrenci verisi imha edilirken `mentorNote`'un silinmesi ve Idempotency tablosunda yanıt
+gövdesiyle saklanan `mentorNote` aynı gate'te ele alınır; ele alınamazsa ekran yayına çıkmaz.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-06 — Portalda okunmamış duyuru göstergesi
+
+Durum: Onaylı (ürün sahibi, 2026-11-02)
+Karar: Öğrenci ve veli portal kabuğunda "Okunmamış duyurular" göstergesi (zil) yer alır; mevcut duyuru ve
+okundu uçlarını kullanır, yeni tablo ve uç yoktur. Gösterge yalnız kullanıcının bugün portalda görebildiği
+duyuruları sayar; görünürlük ve rıza kuralları değişmez. Birden çok çocuklu velide aynı duyuru bir kez
+sayılır. Öğretmen kapsam dışıdır, çünkü "Bugün" sayfası aynı sayıyı gösteriyor. Salt okunur lisansta sayı
+görünür, okundu işaretleme kapalıdır. Otomatik bildirimlerin (devamsızlık, ödeme, not) geçmişi bu kayıtta
+yoktur.
+Kaynak: Kapsam belgesi W8, seçenek A.
+Kanıt: LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: Veli duyuru görünürlüğünün esas alanı (DEC-20261003-01'deki StudentContact ile GuardianStudent
+bayrağı) ayrı bir gizlilik incelemesinde netleşir; gösterge mevcut listeleme kuralını izler.
+Son kontrol: 2026-11-02
+
+### DEC-20261102-07 — Landing ve fiyat sayfasında öğrenci odaklı sıra
+
+Durum: Onaylı (ürün sahibi, 2026-11-02)
+Karar: Landing'de öğrenci haftası akışı ikinci bölüm olur; optik TXT/DAT akışı üçüncü bölüme
+"Deneme sınavı yapan kurumlar için" başlığıyla taşınır, kilitli adım metinleri korunur. Fiyat sayfasındaki
+"Her pakette" listesi öğrenci kaydıyla başlar (deneme, okul notu, devamsızlık, ödev), ardından kurum
+operasyonu, finans takibi ve roller gelir. Bu dalgada görsel eklenmez; ürün ekran görüntüleri staging
+UAT'tan sonra, kurgusal veri setiyle yerel kurulumda üretilir ve insan PII incelemesinden geçer. Eski
+sentetik görseller kalır. `docs/marketing-claims.md` aynı değişiklikte güncellenir.
+Kaynak: Kapsam belgesi W9, önerilen seçenekler.
+Kanıt: LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: Yok
+Son kontrol: 2026-11-02
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği

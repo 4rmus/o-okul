@@ -12,6 +12,7 @@ import { PageFrame } from "./_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryItem } from "./_shared/operation-summary.js";
 import { TrialStatusBanner } from "./_shared/trial-status.js";
 import { useKurumAnnouncementsQuery, useKurumDashboardDataQuery } from "./kurum-dashboard-data.js";
+import { formatDate } from "../_shared/format.js";
 
 interface DashboardAttentionItem {
   description: string;
@@ -347,10 +348,6 @@ function formatPercent(value: number | undefined): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("tr-TR");
 }
 
 function readCookie(name: string): string {

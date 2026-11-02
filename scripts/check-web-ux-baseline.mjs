@@ -34,6 +34,8 @@ const files = {
   "apps/web/app/manifest.ts": readFileSync("apps/web/app/manifest.ts", "utf8"),
   "apps/web/public/push-sw.js": readFileSync("apps/web/public/push-sw.js", "utf8"),
   "apps/web/app/(app)/portals/_shared/progress-series-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/portal-panel-state.tsx": readFileSync("apps/web/app/(app)/portals/_shared/portal-panel-state.tsx", "utf8"),
+  "apps/web/e2e-next/portal-panel-isolation-next.spec.ts": readFileSync("apps/web/e2e-next/portal-panel-isolation-next.spec.ts", "utf8"),
   // Shell v3 (Berrak G5) app-shell.tsx + _shell/* dosyalarına bölündü; pin'ler shell kaynağının bütününe uygulanır.
   "apps/web/app/(app)/app-shell.tsx": ["apps/web/app/(app)/app-shell.tsx", ...readdirSync("apps/web/app/(app)/_shell").sort().map((name) => `apps/web/app/(app)/_shell/${name}`)]
     .map((path) => readFileSync(path, "utf8"))
@@ -68,6 +70,7 @@ const files = {
   "apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogrenciler/students-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/program/schedule-lessons-page.tsx": readFileSync("apps/web/app/(app)/kurum/program/schedule-lessons-page.tsx", "utf8"),
@@ -267,7 +270,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -1941,19 +1944,37 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "const unassignedClassCount = rows.filter((student) => !student.classId).length;",
   "Sorumlu öğretmen",
   "Toplu dönem geçişi",
-  "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
-  "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
-  "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
   '<InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">',
   '<InfoItem label="Başarı" value={formatPercentNumber(reportSuccessRate(detail?.report?.total))} />',
   '<InfoItem label="Soru" value={formatNumber(reportQuestionCount(detail?.report?.total))} />',
-  "function maskEmail",
   "classNameById={classNameById}",
   'caption="Kayıt geçmişi"',
   "formatStudentClassLabel",
   "Sınıf eşleşmedi",
   "Dönem eşleşmedi",
+  // The create/edit form lives in student-form-modal.tsx, shared with Student 360.
+  "<StudentFormModal",
+  "onCreated={setEditingStudent}",
+]);
+
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
+  "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
+  "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
+  "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
+  "function maskEmail",
   "next-form-actions",
+  "onCreated?.(savedStudent);",
+  'queryKey: ["next-student-refs", auth?.session.tenantId ?? "anonymous"]',
+]);
+// Unsaved grades: in-app links (sidebar, bottom nav, breadcrumbs) wait for the page's confirm; the palette asks before navigating.
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  "export function useInAppNavigationGuard(when: boolean, canLeave: LeaveCheck)",
+  'document.addEventListener("click", handleClick, true);',
+  'data-navigation-guard="manual"',
+  "void confirmInAppNavigation().then((canNavigate) => {",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
+  "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
@@ -2063,6 +2084,11 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "Sınıf kaydı",
   "Dönem kaydı",
   "Rapor tarihi yok",
+  // Student 360 edits the student with the list's form, for the same student:manage capability.
+  "{canManageStudent && detail ? (",
+  "<StudentFormModal",
+  "student={detail.profile}",
+  "üstteki Düzenle'yi kullanın.",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
@@ -2092,6 +2118,7 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "güvenli referans metinleriyle",
   'header: "Bağlam"',
   'useState<"overview" | "records">("records")',
+  "öğrenci listesinde Düzenle'yi kullanın.",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx", [
@@ -3122,6 +3149,10 @@ requireTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
   'tone="success"',
   'tone="warning"',
   'title="SMS gönderimi başladı"',
+  // R2-WEB: kampüs kapsamı 403'ü genel hata yerine açık kapsam mesajı gösterir, gönderim eylemlerini açmaz.
+  '"ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN"',
+  'title="Kampüs kapsamı dışında"',
+  "canManageAnnouncements && selectedAnnouncement && !selectedOutOfCampusScope",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
@@ -4235,7 +4266,7 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "Finans görünürlüğü kapalı",
   "selectedStudentDetail",
   'label: "Ödeme planı"',
-  'value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı"',
+  'value: financeLoading ? panelLoadingValue : canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı"',
   "StudentFocusPanel",
   '<div id="portal-focus">\n        <StudentFocusPanel',
   "PortalWorkspace",
@@ -4244,8 +4275,12 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "/me/guardian/students/${encodeURIComponent(studentId)}/homework/material-assignments",
   "homeworkAssignments,",
   "supportReadOnly",
-  'actionLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı")',
-  'detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı")',
+  'supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı")',
+  'supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı")',
+  // R2-WEB: destek talebi açma yalnız taze okunmuş izinle (fail closed); izin yüklenirken "Kapalı" yerine yükleniyor.
+  "const canOpenSupportTickets = permissionFresh && preferencesQuery.data?.canOpenSupportTickets === true;",
+  'queries={[preferencesQuery, supportTicketsQuery]}',
+  'view === "payments" || view === "support"',
   "Veli destek talebi izni kapalı.",
   "auth && resolvedStudentId && !isRolePreview",
 ]);
@@ -4304,7 +4339,29 @@ requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
   'ariaLabel="Gelişimim"',
   "<StudentHomeworkFeed",
   'studentHomeworkFeedGroup(item, now) === "today"',
-  "function PanelLoadError(",
+  // Panel bazlı yükleme: her panel kendi sorgusu ve kendi "Tekrar dene"si.
+  "<PortalPanelGate",
+  "usePortalPanelQuery(",
+  "allPanelsFailed(panelQueries)",
+]);
+
+requireTokens("apps/web/app/(app)/portals/_shared/portal-panel-state.tsx", [
+  "export function usePortalPanelQuery<T>(",
+  "export function PanelLoadError(",
+  "export function PanelLoading(",
+  "export function PortalPanelGate(",
+  "export function retryFailedPanels(",
+  "export function allPanelsFailed(",
+  '<Panel aria-busy="true" aria-label={label} id={id} title={title}>',
+]);
+
+requireTokens("apps/web/e2e-next/portal-panel-isolation-next.spec.ts", [
+  "Portal panel yalıtımı",
+  'getByRole("button", { name: "Tekrar dene" })',
+  "yeniden istenmemeli",
+  "/me/student/announcements",
+  "/me/guardian/students/student-a/homework/material-assignments",
+  "/me/teacher/schedule",
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", [
@@ -4689,8 +4746,8 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "AttendanceRoster",
   'label="Öğretmen günlük yoklama listesi"',
   "TeacherSectionError",
-  "failedSections",
-  'if (attempted > 0 && failed === attempted) throw new Error("TEACHER_PORTAL_UNAVAILABLE");',
+  "sectionQueries",
+  "allPanelsFailed(Object.values(sectionQueries))",
   'id="portal-teacher-actions"',
   'className="next-teacher-action-grid"',
   'as="form"',

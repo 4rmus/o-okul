@@ -1,7 +1,11 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
+import { InMemoryClassStore } from "../school/class-store.js";
+import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
+import { InMemoryTeacherStore } from "../school/teacher-store.js";
+import { InMemoryStudentStore } from "../student/student-store.js";
 import { DevelopmentService } from "./development.service.js";
 import { InMemoryDevelopmentStore } from "./development-store.js";
 
@@ -118,6 +122,60 @@ describe("DevelopmentService", () => {
     await expect(setup.service.listCurrentGuardianStudent(guardianContext, "student-b")).rejects.toThrow(ForbiddenException);
   });
 });
+
+describe("DevelopmentService kampüs kapsamı", () => {
+  it("başka kampüs öğrencisinin değerlendirmesini listelemez, yenisini reddeder; kurum geneli okuma değişmez", async () => {
+    const service = createCampusService(new InMemoryClassStore());
+    const criterion = await service.createCriterion(adminContext, { name: "Odak" });
+    const input = { studentId: "student-a", teacherId: "teacher-a", periodLabel: "2026 Kasım", scores: [{ criterionId: criterion.id, score: 3 }] };
+    const assessment = await service.createAssessment(adminContext, input);
+
+    expect((await service.listAssessments(adminContext)).map((record) => record.id)).toEqual([assessment.id]);
+    expect((await service.listAssessments(campusContext("campus-main"))).map((record) => record.id)).toEqual([assessment.id]);
+    await expect(service.listAssessments(campusContext("campus-other"))).resolves.toEqual([]);
+    await expect(service.listAssessments(campusContext("campus-other"), "student-a")).resolves.toEqual([]);
+    await expect(service.createAssessment(campusContext("campus-other"), input)).rejects.toThrow("DEVELOPMENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(service.createAssessment(campusContext("campus-main"), input)).resolves.toMatchObject({ studentId: "student-a" });
+  });
+
+  it("sınıf bilgisi çözülemeyen kayıtta kampüs kapsamlı kullanıcı için fail-closed davranır", async () => {
+    const service = createCampusService(undefined);
+    const criterion = await service.createCriterion(adminContext, { name: "Odak" });
+    await service.createAssessment(adminContext, {
+      studentId: "student-a",
+      teacherId: "teacher-a",
+      periodLabel: "2026 Kasım",
+      scores: [{ criterionId: criterion.id, score: 3 }],
+    });
+
+    await expect(service.listAssessments(campusContext("campus-main"))).resolves.toEqual([]);
+    await expect(service.listAssessments(adminContext)).resolves.toHaveLength(1);
+    await expect(service.listAssessments({ ...adminContext, roles: ["OPERATIONS_STAFF"] })).rejects.toThrow("DEVELOPMENT_CAMPUS_SCOPE_MISSING");
+  });
+});
+
+function createCampusService(classStore: InMemoryClassStore | undefined) {
+  return new DevelopmentService(
+    new InMemoryDevelopmentStore(),
+    new InMemoryStudentStore(),
+    new InMemoryTeacherStore(),
+    new InMemoryTeacherAssignmentStore(),
+    new InMemoryGuardianStudentStore(),
+    undefined,
+    undefined,
+    classStore,
+  );
+}
+
+function campusContext(campusId: string): RequestContext {
+  return {
+    userId: "assistant-tenant-a",
+    tenantId: "tenant-a",
+    roles: ["ASSISTANT_ADMIN"],
+    bypassRls: false,
+    campusScope: { scopeMode: "CAMPUSES", campusIds: [campusId] },
+  };
+}
 
 function createService() {
   const auditRecords: unknown[] = [];

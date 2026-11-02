@@ -557,7 +557,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expectMobileDataCells(programTable, [
       { key: "title", label: "Ders", text: "Geometri tekrar" },
       { key: "classId", label: "Sınıf", text: "8-A" },
-      { key: "startsAt", label: "Başlangıç", text: "2026-06-19 09:30" },
+      { key: "startsAt", label: "Başlangıç", text: "19.06.2026 09:30" },
     ]);
     await programRegion.getByRole("button", { name: "Ders ekle" }).click();
     let planningDialog = page.getByRole("dialog");

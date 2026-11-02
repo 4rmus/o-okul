@@ -13,6 +13,7 @@ import { formatCourseName, formatOutcomeCode } from "../../_shared/academic-labe
 import { OUTCOME_TABLE_INITIAL_LIMIT, OutcomeRowLimitToggle, sortOutcomesWeakestFirst } from "../../_shared/outcome-net-table.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDate } from "../../_shared/format.js";
 
 interface ClassDetailData {
   campusName?: string;
@@ -531,7 +532,7 @@ function toClassOutcomeRows(snapshot: ReportSnapshotRecord | null, classId: stri
 
 function formatSnapshotLabel(snapshot: ReportSnapshotRecord) {
   const date = snapshot.generatedAt ?? snapshot.snapshotData?.generatedAt ?? snapshot.createdAt;
-  return formatDateLabel(date) ?? "Rapor tarihi yok";
+  return formatDate(date, "Rapor tarihi yok");
 }
 
 function formatNumber(value: number | undefined) {
@@ -593,9 +594,3 @@ function studentNameLabel(studentId: string, studentNameById: ReadonlyMap<string
   return studentNameById.get(studentId) ?? "Öğrenci";
 }
 
-function formatDateLabel(value: string | undefined) {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return new Intl.DateTimeFormat("tr-TR").format(date);
-}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DataTable, Field, Input, Panel, SegmentedControl, Select, Textarea, type DataTableColumn } from "@o-okul/ui";
@@ -60,6 +60,15 @@ import {
   RolePreviewNotice,
   readRolePreviewToken,
 } from "./_shared/portal-shell.js";
+import {
+  PortalPanelGate,
+  allPanelsFailed,
+  emptyList,
+  panelStatus,
+  retryFailedPanels,
+  usePortalPanelQuery,
+  type PanelQuery,
+} from "./_shared/portal-panel-state.js";
 import { ReportPanel } from "./_shared/report-panel.js";
 import { StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
@@ -73,7 +82,8 @@ import {
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
-// Her bölüm kendi isteğine bağlıdır; biri düşerse yalnız o bölüm "Bu bölüm yüklenemedi" satırına döner.
+// Her bölüm kendi sorgusudur; biri düşerse yalnız o bölüm "Bu bölüm yüklenemedi" satırına döner ve
+// "Tekrar dene" yalnız o bölümün isteğini yeniler.
 type TeacherPortalSection =
   | "announcements"
   | "attendance"
@@ -89,7 +99,6 @@ type TeacherPortalSection =
   | "teacherNotes";
 
 interface TeacherPortalData {
-  failedSections: TeacherPortalSection[];
   teacher?: TeacherRecord;
   announcements: AnnouncementRecord[];
   schedule: ScheduleLessonRecord[];
@@ -163,13 +172,70 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const requestedStudentId = readRequestedStudentId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
-  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
-  const query = useQuery({
-    queryKey,
-    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
-    enabled: canReadPortal,
-    refetchOnWindowFocus: false,
-  });
+  const accessToken = auth?.accessToken ?? "";
+  const sections = teacherPortalSections(view);
+  const sectionKey = (section: TeacherPortalSection, ...rest: string[]) =>
+    ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", section, ...rest];
+  const get = <T,>(path: string) => () => readOnlyRequest<T>(accessToken, `${apiBaseUrl}${path}`, rolePreviewToken);
+  const profileQuery = usePortalPanelQuery(sectionKey("profile"), canReadPortal, get<TeacherRecord>("/me/teacher"));
+  const announcementsQuery = usePortalPanelQuery(sectionKey("announcements"), canReadPortal && sections.announcements, get<AnnouncementRecord[]>("/me/teacher/announcements"));
+  const scheduleQuery = usePortalPanelQuery(sectionKey("schedule"), canReadPortal && sections.schedule, get<ScheduleLessonRecord[]>("/me/teacher/schedule"));
+  const studentsQuery = usePortalPanelQuery(sectionKey("students"), canReadPortal && sections.students, get<StudentRecord[]>("/me/teacher/students"));
+  const attendanceQuery = usePortalPanelQuery(sectionKey("attendance"), canReadPortal && sections.attendance, get<AttendanceRecord[]>("/me/teacher/attendance"));
+  const homeworkQuery = usePortalPanelQuery(sectionKey("homework"), canReadPortal && sections.homework, get<HomeworkRecord[]>("/me/teacher/homework"));
+  const materialsQuery = usePortalPanelQuery(sectionKey("materials"), canReadPortal && sections.materials, get<HomeworkMaterialRecord[]>("/me/teacher/homework/materials"));
+  const materialAssignmentsQuery = usePortalPanelQuery(
+    sectionKey("materialAssignments"),
+    canReadPortal && sections.materials,
+    get<HomeworkMaterialAssignmentRecord[]>("/me/teacher/homework/material-assignments"),
+  );
+  const teacherNotesQuery = usePortalPanelQuery(sectionKey("teacherNotes"), canReadPortal && sections.attendance, get<TeacherNoteRecord[]>("/me/teacher/teacher-notes"));
+  const supportTicketsQuery = usePortalPanelQuery(sectionKey("supportTickets"), canReadPortal && sections.supportTickets, get<SupportTicketRecord[]>("/me/teacher/support-tickets"));
+  const reportsQuery = usePortalPanelQuery(
+    sectionKey("reports", reportExamId),
+    canReadPortal && sections.reports,
+    () => loadTeacherReports(accessToken, rolePreviewToken, reportExamId),
+  );
+  const lookupsQuery = usePortalPanelQuery(sectionKey("lookups"), canReadPortal && sections.lookups, get<TeacherPortalLookupsResponse>("/me/teacher/lookups"));
+  const sectionQueries: Record<TeacherPortalSection, PanelQuery> = {
+    announcements: announcementsQuery,
+    attendance: attendanceQuery,
+    homework: homeworkQuery,
+    lookups: lookupsQuery,
+    materialAssignments: materialAssignmentsQuery,
+    materials: materialsQuery,
+    profile: profileQuery,
+    reports: reportsQuery,
+    schedule: scheduleQuery,
+    students: studentsQuery,
+    supportTickets: supportTicketsQuery,
+    teacherNotes: teacherNotesQuery,
+  };
+  const students = studentsQuery.data ?? emptyList<StudentRecord>();
+  const lookups = lookupsQuery.data;
+  const reportSnapshots = reportsQuery.data?.snapshots ?? emptyList<ReportSnapshotRecord>();
+  const data: TeacherPortalData = {
+    teacher: profileQuery.data,
+    announcements: announcementsQuery.data ?? emptyList<AnnouncementRecord>(),
+    schedule: scheduleQuery.data ?? emptyList<ScheduleLessonRecord>(),
+    students,
+    attendance: attendanceQuery.data ?? emptyList<AttendanceRecord>(),
+    homework: homeworkQuery.data ?? emptyList<HomeworkRecord>(),
+    materials: materialsQuery.data ?? emptyList<HomeworkMaterialRecord>(),
+    materialAssignments: materialAssignmentsQuery.data ?? emptyList<HomeworkMaterialAssignmentRecord>(),
+    attendanceClassIds: lookups?.attendanceClassIds ?? emptyList<string>(),
+    campuses: lookups?.campuses ?? emptyList<CampusRecord>(),
+    classes: lookups?.classes ?? emptyList<ClassRecord>(),
+    courses: lookups?.courses ?? emptyList<CourseRecord>(),
+    gradeLevels: lookups?.gradeLevels ?? emptyList<GradeLevelRecord>(),
+    terms: lookups?.terms ?? emptyList<AcademicTermRecord>(),
+    classReports: selectTeacherClassReports(reportSnapshots, students),
+    reportIndex: reportsQuery.data?.reportIndex ?? emptyList<PortalReportIndexItem>(),
+    reportSnapshots,
+    selectedReportExamId: reportsQuery.data?.selectedReportExamId ?? "",
+    supportTickets: supportTicketsQuery.data ?? emptyList<SupportTicketRecord>(),
+    teacherNotes: teacherNotesQuery.data ?? emptyList<TeacherNoteRecord>(),
+  };
   // Bugün ekranındaki "Yoklama al" bağlantısı dersin sınıfını ve gününü taşır.
   const requestedAttendanceClassId = searchParams.get("classId")?.trim() ?? "";
   const requestedAttendanceDate = readDateKeyParam(searchParams.get("date"));
@@ -202,22 +268,26 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const [rosterClassId, setRosterClassId] = useState("");
   const [selectedHomeworkId, setSelectedHomeworkId] = useState("");
 
+  // Form varsayılanları her bölüm geldikçe yeniden çözülür; bölümler birbirini beklemez.
   useEffect(() => {
-    if (!query.isSuccess) return;
-    const firstStudentId = query.data.students[0]?.id ?? "";
-    const firstMaterialId = query.data.materials[0]?.id ?? "";
-    const firstCourseId = query.data.schedule.find((lesson) => lesson.courseId)?.courseId ?? "";
-    const firstTermId = query.data.schedule.find((lesson) => lesson.termId)?.termId ?? "";
-    const firstClassId = query.data.classes.find((record) => query.data.attendanceClassIds.includes(record.id))?.id ?? "";
-    const visibleStudentIds = new Set(query.data.students.map((student) => student.id));
-    const visibleCourseIds = new Set(query.data.schedule.map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId)));
-    const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
+    if (!studentsQuery.data && !materialsQuery.data && !scheduleQuery.data && !lookupsQuery.data) return;
+    const schedule = scheduleQuery.data ?? [];
+    const visibleStudents = studentsQuery.data ?? [];
+    const attendanceClassIds = lookupsQuery.data?.attendanceClassIds ?? [];
+    const firstStudentId = visibleStudents[0]?.id ?? "";
+    const firstMaterialId = materialsQuery.data?.[0]?.id ?? "";
+    const firstCourseId = schedule.find((lesson) => lesson.courseId)?.courseId ?? "";
+    const firstTermId = schedule.find((lesson) => lesson.termId)?.termId ?? "";
+    const firstClassId = (lookupsQuery.data?.classes ?? []).find((record) => attendanceClassIds.includes(record.id))?.id ?? "";
+    const visibleStudentIds = new Set(visibleStudents.map((student) => student.id));
+    const visibleCourseIds = new Set(schedule.map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId)));
+    const visibleTermIds = new Set(schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
       // İstenen sınıf atanmış sınıflardan değilse başka bir sınıfa sessizce düşülmez; form boş kalır ve uyarı görünür.
       classId: current.classId
         || (requestedAttendanceClassId
-          ? (query.data.attendanceClassIds.includes(requestedAttendanceClassId) ? requestedAttendanceClassId : "")
+          ? (attendanceClassIds.includes(requestedAttendanceClassId) ? requestedAttendanceClassId : "")
           : firstClassId),
     }));
     setNoteForm((current) => ({
@@ -233,25 +303,24 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
       courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
       termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
-  }, [query.data, query.isSuccess, requestedAttendanceClassId, requestedStudentId]);
+  }, [lookupsQuery.data, materialsQuery.data, requestedAttendanceClassId, requestedStudentId, scheduleQuery.data, studentsQuery.data]);
 
   useEffect(() => {
     setAttendanceNotice("");
   }, [attendanceForm.classId, attendanceForm.date]);
 
   // Bugün ekranından "#portal-teacher-attendance" ile gelindiğinde form ancak veri yüklenince oluşur; tarayıcının
-  // ilk kaydırması hedefi bulamaz, bu yüzden yükleme bitince form görünür kılınıp odaklanır.
+  // ilk kaydırması hedefi bulamaz, bu yüzden Ders akışı bölümleri yerleşince form görünür kılınıp odaklanır.
+  const rollCallReady = lookupsQuery.isSuccess && !scheduleQuery.isLoading && !profileQuery.isLoading && !studentsQuery.isLoading;
   useEffect(() => {
-    if (!query.isSuccess || window.location.hash !== "#portal-teacher-attendance") return;
+    if (!rollCallReady || window.location.hash !== "#portal-teacher-attendance") return;
     const target = document.getElementById("portal-teacher-attendance");
     if (!target) return;
     target.scrollIntoView({ block: "start" });
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
     target.focus({ preventScroll: true });
-  }, [query.isSuccess]);
+  }, [rollCallReady]);
 
-  const data = query.data;
-  const students = data?.students ?? [];
   const teacherDailyAttendanceQuery = useQuery({
     queryKey: ["next-teacher-daily-attendance", auth?.session.userId ?? "anonymous", attendanceForm.classId, attendanceForm.date],
     queryFn: () => loadTeacherDailyAttendance(auth?.accessToken ?? "", attendanceForm.classId, attendanceForm.date),
@@ -262,7 +331,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const attendanceClassIds = new Set(data?.attendanceClassIds ?? []);
   const attendanceClassOptions = (data?.classes ?? []).filter((record) => attendanceClassIds.has(record.id));
   const requestedAttendanceClassDenied = Boolean(
-    requestedAttendanceClassId && data && !data.attendanceClassIds.includes(requestedAttendanceClassId),
+    requestedAttendanceClassId && lookupsQuery.isSuccess && !data.attendanceClassIds.includes(requestedAttendanceClassId),
   );
   const attendanceRosterComplete = attendanceRoster.length > 0 && attendanceRoster.every((student) => Boolean(attendanceStatuses[student.id]));
   const scheduleCourseIds = useMemo(
@@ -337,26 +406,14 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     return <AccessPanel title="Öğretmen Portalı" />;
   }
 
-  if (query.isPending) {
-    return (
-      <PortalFrame title="Öğretmen Portalı" subtitle="Ders programı">
-        <PortalStatePanel
-          state="loading"
-          title="Öğretmen portal verileri hazırlanıyor"
-          description="Ders programı, öğrenciler, yoklama ve raporlar yükleniyor."
-        />
-      </PortalFrame>
-    );
-  }
-
-  if (query.isError) {
+  if (allPanelsFailed(Object.values(sectionQueries))) {
     return (
       <PortalFrame title="Öğretmen Portalı" subtitle="Ders programı">
         <PortalStatePanel
           state="error"
           title="Öğretmen portal verisi alınamadı"
           description="Portal bilgileri şu anda gösterilemiyor. Bağlantınızı kontrol edip tekrar deneyin."
-          onRetry={() => void query.refetch()}
+          onRetry={() => retryFailedPanels(...Object.values(sectionQueries))}
         />
       </PortalFrame>
     );
@@ -405,7 +462,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         })),
       });
       // Yoklama kayıtları Öğrenci takibi görünümündedir; o görünüm bir sonraki açılışta yeniden okunur.
-      await queryClient.invalidateQueries({ queryKey: ["next-teacher-portal"], refetchType: "none" });
+      await queryClient.invalidateQueries({ queryKey: sectionKey("attendance"), refetchType: "none" });
       await queryClient.invalidateQueries({
         queryKey: ["next-teacher-daily-attendance", auth.session.userId, attendanceForm.classId, attendanceForm.date],
       });
@@ -435,8 +492,8 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
 
     try {
       const note = await createTeacherNote(auth.accessToken, parsedForm.data);
-      queryClient.setQueryData<TeacherPortalData>(queryKey, (current) =>
-        current ? { ...current, teacherNotes: [note, ...current.teacherNotes] } : current,
+      queryClient.setQueryData<TeacherNoteRecord[]>(sectionKey("teacherNotes"), (current) =>
+        current ? [note, ...current] : current,
       );
       setNoteForm((current) => ({ ...current, body: "", developmentStatus: "" }));
     } catch {
@@ -454,13 +511,8 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     setActionError("");
     try {
       const record = await updateHomeworkCheckStatus(auth.accessToken, homework.id, !homework.checkedAt);
-      queryClient.setQueryData<TeacherPortalData>(queryKey, (current) =>
-        current
-          ? {
-              ...current,
-              homework: current.homework.map((candidate) => (candidate.id === record.id ? record : candidate)),
-            }
-          : current,
+      queryClient.setQueryData<HomeworkRecord[]>(sectionKey("homework"), (current) =>
+        current?.map((candidate) => (candidate.id === record.id ? record : candidate)),
       );
     } catch {
       setActionError("Ödev kontrol durumu kaydedilemedi.");
@@ -484,13 +536,8 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
 
     try {
       const assignment = await createMaterialAssignment(auth.accessToken, parsedForm.data);
-      queryClient.setQueryData<TeacherPortalData>(queryKey, (current) =>
-        current
-          ? {
-              ...current,
-              materialAssignments: [assignment, ...current.materialAssignments],
-            }
-          : current,
+      queryClient.setQueryData<HomeworkMaterialAssignmentRecord[]>(sectionKey("materialAssignments"), (current) =>
+        current ? [assignment, ...current] : current,
       );
       setMaterialForm((current) => ({ ...current, note: "", dueAt: "" }));
     } catch {
@@ -543,12 +590,30 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const showStudentTracking = view === "student";
   const showRollCall = view === "schedule";
   const portalSubtitle = teacherPortalSubtitle(view);
-  const failedSections = new Set(data?.failedSections ?? []);
-  const sectionFailed = (section: TeacherPortalSection) => failedSections.has(section);
+  const sectionReady = (section: TeacherPortalSection) => panelStatus(sectionQueries[section]) === "ready";
   const sectionError = (section: TeacherPortalSection, label: string, title: string, id?: string) =>
-    sectionFailed(section) ? (
-      <TeacherSectionError id={id} label={label} onRetry={() => void query.refetch()} retrying={query.isFetching} title={title} />
+    sectionQueries[section].isError ? (
+      <TeacherSectionError
+        id={id}
+        label={label}
+        onRetry={() => void sectionQueries[section].refetch()}
+        retrying={sectionQueries[section].isFetching}
+        title={title}
+      />
     ) : null;
+  // Bölüm yüklenirken yer tutucu, düşünce yalnız o bölümü yenileyen "Tekrar dene" satırı gösterilir.
+  const sectionGate = (section: TeacherPortalSection | TeacherPortalSection[], label: string, title: string, content: ReactNode, id?: string) => (
+    <PortalPanelGate
+      error={(retry, retrying) => <TeacherSectionError id={id} label={label} onRetry={retry} retrying={retrying} title={title} />}
+      id={id}
+      label={label}
+      queries={(Array.isArray(section) ? section : [section]).map((key) => sectionQueries[key])}
+      subject={title}
+      title={title}
+    >
+      {content}
+    </PortalPanelGate>
+  );
   const visibleHomework = data?.homework ?? [];
   const activeHomeworkId = resolveSubmissionHomeworkId(visibleHomework, selectedHomeworkId);
 
@@ -560,7 +625,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     });
   }
 
-  const attendancePanel = sectionError("lookups", "Yoklama kaydet", "Yoklama", "portal-teacher-attendance") ?? (
+  const attendancePanel = sectionGate("lookups", "Yoklama kaydet", "Yoklama", (
     <Panel
       as="form"
       aria-label="Yoklama kaydet"
@@ -620,7 +685,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         <p className="next-field-hint">Yoklama listesi için sınıf seçin.</p>
       )}
     </Panel>
-  );
+  ), "portal-teacher-attendance");
 
   return (
     <PortalFrame
@@ -634,13 +699,13 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         </div>
       ) : null}
       {view === "schedule" ? <div id="portal-teacher-today-schedule">
-        {sectionError("schedule", "Bugünkü dersler", "Bugünkü Dersler") ?? <TeacherTodaySchedulePanel
+        {sectionGate("schedule", "Bugünkü dersler", "Bugünkü Dersler", <TeacherTodaySchedulePanel
           classNames={classNameById}
           courseNames={courseNameById}
           lessons={todayLessons}
           nextLesson={nextLesson}
           termNames={termNameById}
-        />}
+        />)}
       </div> : null}
       {showRollCall && !isRolePreview ? (
         <section className="next-teacher-action-grid" aria-label="Öğretmen günlük işlemleri" id="portal-teacher-actions">
@@ -653,17 +718,17 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         </section>
       ) : null}
       {view === "announcements" ? <div id="portal-teacher-announcements">
-        {sectionError("announcements", "Duyurular", "Duyurular") ?? <AnnouncementsPanel
+        {sectionGate("announcements", "Duyurular", "Duyurular", <AnnouncementsPanel
           announcements={data?.announcements ?? []}
           readOnly={isRolePreview}
           onMarkRead={(announcement) =>
             auth && !isRolePreview
               ? markAnnouncementRead(auth.accessToken, `me/teacher/announcements/${encodeURIComponent(announcement.id)}/read`).then(() =>
-                  query.refetch(),
+                  announcementsQuery.refetch(),
                 )
               : undefined
           }
-        />}
+        />)}
       </div> : null}
       {showStudentWorkspace ? sectionError("lookups", "Sınıf ve ders bilgileri", "Sınıf ve Ders Bilgileri") : null}
       {showStudentWorkspace ? <section className="next-teacher-workspace" aria-label="Öğrenci çalışma alanı" id="portal-teacher-workspace">
@@ -674,7 +739,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
           </div>
           <p>{selectedStudentLabel}</p>
         </header> : null}
-        {showStudentTracking ? (sectionError("students", "Öğretmen öğrenci kapsamı", "Öğrenciler", "portal-teacher-student-picker") ?? <Panel
+        {showStudentTracking ? sectionGate("students", "Öğretmen öğrenci kapsamı", "Öğrenciler", <Panel
           aria-label="Öğretmen öğrenci kapsamı"
           description="Öğretmenin işlem yapabildiği öğrenci kapsamı; ad, soyad veya numarayla arayın."
           id="portal-teacher-student-picker"
@@ -720,7 +785,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
           ) : (
             <p className="next-field-hint">{students.length > 0 ? "Aramaya uyan öğrenci yok." : "Öğrenci kapsamı boş."}</p>
           )}
-        </Panel>) : null}
+        </Panel>, "portal-teacher-student-picker") : null}
         {showStudentTracking ? <div id="portal-teacher-focus">
           <TeacherFocusPanel
             campusNames={campusNameById}
@@ -735,7 +800,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
             termName={selectedTermName}
           />
         </div> : null}
-        {showStudentTracking && !isRolePreview && !sectionFailed("students") ? (
+        {showStudentTracking && !isRolePreview && sectionReady("students") ? (
           <section className="next-teacher-action-grid" aria-label="Öğretmen günlük işlemleri" id="portal-teacher-actions">
             <Panel
               as="form"
@@ -896,12 +961,12 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
           </section>
         ) : null}
         {view === "support" ? <div id="portal-teacher-support">
-          {sectionError("supportTickets", "Destek talepleri", "Destek Talepleri") ?? <SupportTicketsPanel
+          {sectionGate("supportTickets", "Destek talepleri", "Destek Talepleri", <SupportTicketsPanel
             accessToken={auth?.accessToken}
             commentsPath="me/teacher/support-tickets"
             readOnly={isRolePreview}
             tickets={data?.supportTickets ?? []}
-            onTicketChange={() => query.refetch()}
+            onTicketChange={() => supportTicketsQuery.refetch()}
             studentOptions={students.map((student) => ({ id: student.id, label: formatTeacherStudentLabel(student, classNameById) }))}
             onCreate={(input) =>
               auth && !isRolePreview
@@ -909,14 +974,14 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
                     auth.accessToken,
                     "me/teacher/support-tickets",
                     withTeacherTicketStudentContext(input, students, data?.classes ?? []),
-                  ).then(() => query.refetch())
+                  ).then(() => supportTicketsQuery.refetch())
                 : undefined
             }
-          />}
+          />)}
         </div> : null}
         {view === "homework" ? <div id="portal-teacher-homework">
-          {auth && !isRolePreview ? <TeacherHomeworkCreatePanel accessToken={auth.accessToken} onCreated={() => void query.refetch()} /> : null}
-          {sectionError("homework", "Öğretmen ödev kontrolü", "Ödev Kontrolü") ?? <>
+          {auth && !isRolePreview ? <TeacherHomeworkCreatePanel accessToken={auth.accessToken} onCreated={() => void homeworkQuery.refetch()} /> : null}
+          {sectionGate("homework", "Öğretmen ödev kontrolü", "Ödev Kontrolü", <>
             <TeacherHomeworkPanel
               classNames={classNameById}
               homework={visibleHomework}
@@ -935,16 +1000,16 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
               selectedHomeworkId={activeHomeworkId}
               students={students}
             /> : null}
-          </>}
+          </>)}
         </div> : null}
         {view === "homework" || view === "student"
-          ? sectionError(sectionFailed("materialAssignments") ? "materialAssignments" : "materials", "Öğretmen materyal atamaları", "Materyal Atamaları") ?? <TeacherMaterialAssignmentsPanel
+          ? sectionGate(["materialAssignments", "materials"], "Öğretmen materyal atamaları", "Materyal Atamaları", <TeacherMaterialAssignmentsPanel
             assignments={(data?.materialAssignments ?? []).filter((assignment) => assignment.studentId === selectedStudentId)}
             courseNames={courseNameById}
             materials={data?.materials ?? []}
             students={students}
             termNames={termNameById}
-          />
+          />)
           : null}
         {showStudentTracking ? <StudentHistoryPanel
           enrollments={historyQuery.data?.enrollments ?? []}
@@ -952,7 +1017,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         /> : null}
         {historyQuery.isError ? <p className="next-form-error">Öğrenci geçmişi alınamadı.</p> : null}
         {view === "reports" ? <div id="portal-teacher-report">
-          {sectionError("reports", "Portal rapor özeti", "Sınav Raporu") ?? <>
+          {sectionGate("reports", "Portal rapor özeti", "Sınav Raporu", <>
             {(data?.reportIndex.length ?? 0) > 0 ? (
               <Field label="Sınav raporu">
                 <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
@@ -968,22 +1033,22 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
               report={reportQuery.data?.report ?? null}
               termNames={termNameById}
             />
-          </>}
+          </>)}
         </div> : null}
         {reportQuery.isError ? <p className="next-form-error">Öğrenci raporu alınamadı.</p> : null}
       </section> : null}
-      {view === "reports" && !sectionFailed("reports") ? <TeacherClassReportsPanel
+      {view === "reports" && sectionReady("reports") ? <TeacherClassReportsPanel
         courseNames={courseNameById}
         reports={data?.classReports ?? []}
         termNames={termNameById}
       /> : null}
       {showStudentTracking
-        ? sectionError("attendance", "Öğretmen yoklama kayıtları", "Yoklama Kayıtları") ?? <TeacherAttendancePanel records={data?.attendance ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />
+        ? sectionGate("attendance", "Öğretmen yoklama kayıtları", "Yoklama Kayıtları", <TeacherAttendancePanel records={data?.attendance ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />)
         : null}
       {showStudentTracking
-        ? sectionError("teacherNotes", "Öğretmen notları", "Öğretmen Notları") ?? <TeacherNotesPanel notes={data?.teacherNotes ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />
+        ? sectionGate("teacherNotes", "Öğretmen notları", "Öğretmen Notları", <TeacherNotesPanel notes={data?.teacherNotes ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />)
         : null}
-      {view === "schedule" ? (sectionError("schedule", "Ders programı", "Program") ?? <Panel
+      {view === "schedule" ? sectionGate("schedule", "Ders programı", "Program", <Panel
         aria-label="Ders programı"
         description="Öğretmenin portaldan izlediği ders, sınıf, branş ve dönem akışı."
         title="Program"
@@ -999,7 +1064,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         />
       </Panel>) : null}
       {view === "schedule" ? <div id="portal-teacher-profile">
-        {sectionError("profile", "Öğretmen profil özeti", "Profil Özeti") ?? <TeacherProfileSummaryPanel
+        {sectionGate("profile", "Öğretmen profil özeti", "Profil Özeti", <TeacherProfileSummaryPanel
           campusNames={campusNameById}
           classes={classById}
           classNames={classNameById}
@@ -1009,7 +1074,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
           students={students}
           teacher={data?.teacher}
           termNames={termNameById}
-        />}
+        />)}
       </div> : null}
     </PortalFrame>
   );
@@ -1022,97 +1087,43 @@ async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL
   return readData<T>(response);
 }
 
-async function loadTeacherPortal(
-  accessToken: string,
-  rolePreviewToken = "",
-  requestedReportExamId = "",
-  view: TeacherPortalView,
-): Promise<TeacherPortalData> {
-  const showStudent = view === "student";
-  const showRollCall = view === "schedule";
+function teacherPortalSections(view: TeacherPortalView) {
+  const student = view === "student";
+  const rollCall = view === "schedule";
+  const homework = view === "homework";
+  const support = view === "support";
   // Öğrenci takibindeki seçili öğrenci özeti Başarı % gösterir; rapor verisi orada da yüklenir.
-  const showReports = view === "reports" || showStudent;
-  const showHomework = view === "homework";
-  const showAnnouncements = view === "announcements";
-  const showSupport = view === "support";
+  const reports = view === "reports" || student;
   // Destek talebi ders/dönem bağlamını ders programından alır.
-  const showSchedule = showRollCall || showStudent || showHomework || showSupport;
+  const schedule = rollCall || student || homework || support;
   // Ders akışındaki profil özeti öğrenci sayısını gösterir.
-  const showStudents = showRollCall || showStudent || showReports || showHomework || showSupport;
-  const failedSections = new Set<TeacherPortalSection>();
-  let attempted = 0;
-  let failed = 0;
-  // Promise.allSettled eşdeğeri: her istek kendi bölümünü düşürür, sayfanın geri kalanı gösterilir.
-  async function loadSection<T>(section: TeacherPortalSection, enabled: boolean, load: () => Promise<T>, fallback: T): Promise<T> {
-    if (!enabled) return fallback;
-    attempted += 1;
-    try {
-      return await load();
-    } catch {
-      failed += 1;
-      failedSections.add(section);
-      return fallback;
-    }
-  }
+  const students = rollCall || student || reports || homework || support;
+  return {
+    announcements: view === "announcements",
+    attendance: student,
+    homework,
+    lookups: students || schedule,
+    materials: homework || student,
+    reports,
+    schedule,
+    students,
+    supportTickets: support,
+  };
+}
 
-  const reportIndex = await loadSection(
-    "reports",
-    showReports,
-    async () => await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/teacher/reports`, rolePreviewToken) ?? [],
-    [] as PortalReportIndexItem[],
-  );
+async function loadTeacherReports(accessToken: string, rolePreviewToken: string, requestedReportExamId: string) {
+  const reportIndex = await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/teacher/reports`, rolePreviewToken) ?? [];
   const selectedReportExamId = reportIndex.some((record) => record.examId === requestedReportExamId)
     ? requestedReportExamId
     : reportIndex[0]?.examId ?? "";
-  const [teacher, announcements, schedule, students, attendance, homework, materials, materialAssignments, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
-    loadSection<TeacherRecord | undefined>("profile", true, () => readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken), undefined),
-    loadSection("announcements", showAnnouncements, () => readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken), []),
-    loadSection("schedule", showSchedule, () => readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken), []),
-    loadSection("students", showStudents, () => readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/students`, rolePreviewToken), []),
-    loadSection("attendance", showStudent, () => readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/attendance`, rolePreviewToken), []),
-    loadSection("homework", showHomework, () => readOnlyRequest<HomeworkRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework`, rolePreviewToken), []),
-    loadSection("materials", showHomework || showStudent, () => readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/materials`, rolePreviewToken), []),
-    loadSection("materialAssignments", showHomework || showStudent, () => readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/material-assignments`, rolePreviewToken), []),
-    loadSection("teacherNotes", showStudent, () => readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/teacher-notes`, rolePreviewToken), []),
-    loadSection("supportTickets", showSupport, () => readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken), []),
-    loadSection(
-      "reports",
-      Boolean(selectedReportExamId),
-      () => readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(selectedReportExamId)}/snapshots`, rolePreviewToken),
-      [],
-    ),
-    loadSection<TeacherPortalLookupsResponse>(
-      "lookups",
-      showStudents || showSchedule,
-      () => readOnlyRequest<TeacherPortalLookupsResponse>(accessToken, `${apiBaseUrl}/me/teacher/lookups`, rolePreviewToken),
-      { attendanceClassIds: [], campuses: [], classes: [], courses: [], gradeLevels: [], terms: [] },
-    ),
-  ]);
-  // Hiçbir istek yanıt vermediyse (bağlantı, oturum) bölüm bölüm hata yerine tek sayfa hatası gösterilir.
-  if (attempted > 0 && failed === attempted) throw new Error("TEACHER_PORTAL_UNAVAILABLE");
-  return {
-    failedSections: [...failedSections],
-    teacher,
-    announcements,
-    schedule,
-    students,
-    attendance,
-    homework,
-    materials,
-    materialAssignments,
-    attendanceClassIds: lookups.attendanceClassIds,
-    campuses: lookups.campuses,
-    classes: lookups.classes,
-    courses: lookups.courses,
-    gradeLevels: lookups.gradeLevels,
-    terms: lookups.terms,
-    classReports: selectTeacherClassReports(snapshots, students),
-    reportIndex,
-    reportSnapshots: snapshots,
-    selectedReportExamId,
-    supportTickets,
-    teacherNotes,
-  };
+  const snapshots = selectedReportExamId
+    ? await readOnlyRequest<ReportSnapshotRecord[]>(
+        accessToken,
+        `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(selectedReportExamId)}/snapshots`,
+        rolePreviewToken,
+      )
+    : [];
+  return { reportIndex, selectedReportExamId, snapshots };
 }
 
 async function saveDailyAttendance(

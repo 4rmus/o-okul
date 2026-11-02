@@ -109,6 +109,14 @@ function chartToken(name: string) {
   return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
+// Uygulamadaki tarih katmanıyla aynı kural: Türkiye takvim günü (Europe/Istanbul).
+const chartDateFormat = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeZone: "Europe/Istanbul" });
+
+function formatChartDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : chartDateFormat.format(date);
+}
+
 function formatChartNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
 }
@@ -532,7 +540,7 @@ export function ProgressLineChart({
   // Ölçüm etiketi sınav adıdır; ad yoksa rapor tarihi, o da yoksa sıra numarası kullanılır.
   const rows = points.map((point, index) => {
     const examTitle = point.examTitle?.trim() || undefined;
-    const dateLabel = point.generatedAt ? new Date(point.generatedAt).toLocaleDateString("tr-TR") : undefined;
+    const dateLabel = point.generatedAt ? formatChartDate(point.generatedAt) : undefined;
     return {
       dateLabel: examTitle ? dateLabel : undefined,
       id: point.snapshotId ?? point.generatedAt ?? String(index),
