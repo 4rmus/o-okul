@@ -336,6 +336,8 @@ const employeeAccessSchema = objectSchema({
   employmentEndsAt: stringSchema({ format: "date-time" }),
   userId: stringSchema(),
   accountStatus: stringSchema(),
+  accountEmail: stringSchema({ format: "email", description: "Linked account e-mail (GET /employees); the contact of record once an account is bound." }),
+  teacherId: stringSchema({ description: "Teacher profile bound to this employee (GET /employees)." }),
   access: objectSchema({
     membershipId: stringSchema(),
     staffRole: { type: "string", enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
@@ -3610,7 +3612,7 @@ const operationContracts: Record<string, OperationContract> = {
       { name: "cursor", description: "Opaque cursor returned by the previous response.", schema: stringSchema() },
       { name: "direction", schema: { type: "string", enum: ["next", "previous"], default: "next" } },
       { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 50 }) },
-      { name: "q", description: "Case-insensitive employee name, employee number or work email search.", schema: stringSchema() },
+      { name: "q", description: "Case-insensitive employee name, employee number, work e-mail or account e-mail search.", schema: stringSchema() },
       { name: "sort", schema: { type: "string", enum: ["lastName", "-lastName", "firstName", "employeeNo"], default: "lastName" } },
     ],
   },

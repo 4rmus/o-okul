@@ -60,7 +60,7 @@ const files = {
   "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx": readFileSync("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kampusler/campuses-page.tsx": readFileSync("apps/web/app/(app)/kurum/kampusler/campuses-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx": readFileSync("apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/kullanicilar/users-page.tsx": readFileSync("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/kullanicilar/page.tsx": readFileSync("apps/web/app/(app)/kurum/kullanicilar/page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kvkk/kvkk-page.tsx": readFileSync("apps/web/app/(app)/kurum/kvkk/kvkk-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kurum-dashboard.tsx": readFileSync("apps/web/app/(app)/kurum/kurum-dashboard.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": readFileSync("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", "utf8"),
@@ -490,19 +490,14 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
 ]);
 
 requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
-  "mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir",
-  "kullanıcı ekranı davet tokenı göstermeden PII maskesini korur",
+  "emekli kullanıcı hesapları adresi aramayı koruyarak Çalışanlar'a yönlenir",
+  "emekli kullanıcı hesapları sekmesi Personel bölümlerinde yer almaz",
   "kurum kişi yönetimi ekranları mobil ve tablet operasyon sözleşmesini korur",
-  'getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" })',
-  'getByLabel("Admin Kullanıcı rolleri", { exact: true })',
-  'adminRoles.getByRole("checkbox")).toHaveCount(0)',
+  'url.pathname === "/kurum/calisanlar" && url.searchParams.get("employeesQ") === "admin"',
+  'staffTabs.getByRole("link", { name: "Kullanıcı hesapları" })).toHaveCount(0)',
+  "expect(captured.users).toEqual([])",
   "expect(captured.roleUpdates).toEqual([])",
-  'getByRole("button", { name: /rollerini kaydet/u })).toHaveCount(0)',
-  'getByRole("link", { name: "Çalışan erişimlerini yönet" })',
-  'getByRole("button", { name: "Davet oluştur" })).toHaveCount(0)',
-  'getByLabel("Son aktivasyon tokenı")).toHaveCount(0)',
   "activation-token-created-secret",
-  "activation-token-resent-secret",
   "POST",
   "PATCH",
   "öğrenci listesi mobil operasyon sözleşmesini korur",
@@ -2527,33 +2522,17 @@ requireTokens("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", [
   "Veli erişimi",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
-  "StatusBadge,",
-  "tenantRoleLabel",
-  'density="compact"',
-  "next-role-checks",
-  "Mevcut hesaplar",
-  "Roller Çalışanlar ekranında düzenlenir",
-  "Çalışan erişimlerini yönet",
-  'href="/kurum/calisanlar"',
-  "Kurumdaki giriş hesaplarını ve rollerini görün.",
-  'mobilePriority: "primary"',
-  'mobilePriority: "secondary"',
-  "maskEmail(user.email)",
+// DEC-20261102-01 (F-21): the "Kullanıcı hesapları" tab is retired; the old route only redirects to Çalışanlar.
+requireTokens("apps/web/app/(app)/kurum/kullanicilar/page.tsx", [
+  'import { redirect } from "next/navigation";',
+  '"/kurum/calisanlar"',
+  "employeesQ",
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
-  "Yazma kapalı",
-  "<label key={role.value}>",
-  'type="checkbox"',
-  "current.roles.includes(role.value)",
-  "RoleCheckboxGrid",
-  "toggleRole(",
-  "saveRoles(",
-  "Kullanıcı ekle",
-  "TC + telefon girişi",
-  '<div className="next-invitation-context" aria-label="Davet bağlamı">',
-  "<span>Davet hedefi</span>",
+requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/page.tsx", [
+  "UsersPage",
+  "CrudPage",
+  "/tenant-users",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx", [

@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import type { IdentityInvitationRecord, TeacherRecord } from "@o-okul/shared-types";
+import type { EmployeeAccessRecord, IdentityInvitationRecord, TeacherRecord } from "@o-okul/shared-types";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
 const webOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
@@ -13,6 +13,8 @@ const corsHeaders = {
 interface MockState {
   createError?: string;
   creates: Array<Record<string, unknown>>;
+  employeeRequests: number;
+  employees: EmployeeAccessRecord[];
   invitationListRequests: number;
   invitationQueries: string[];
   invitations: IdentityInvitationRecord[];
@@ -27,6 +29,8 @@ interface MockState {
 function mockState(overrides: Partial<MockState> = {}): MockState {
   return {
     creates: [],
+    employeeRequests: 0,
+    employees: [],
     invitationListRequests: 0,
     invitationQueries: [],
     invitations: [],
@@ -179,6 +183,38 @@ test("öğretmen listesi davet cursor'ı reddedilince taramayı bir kez baştan 
   expect(state.pagedInvitations?.cursors).toEqual(["", "page-1", "", "page-1"]);
 });
 
+// DEC-20261102-01 (F-21): the teacher detail links back to the employee row bound to this teacher.
+test("bağlı çalışan kaydı olan öğretmen detayı Çalışanlar satırına geri bağlantı verir", async ({ page }) => {
+  const state = mockState({
+    employees: [
+      { id: "employee-other", tenantId: "tenant-a", firstName: "Can", lastName: "Ak", status: "ACTIVE", teacherId: "teacher-other" },
+      { id: "employee-ayse", tenantId: "tenant-a", employeeNo: "P-014", firstName: "Ayşe", lastName: "Demir", status: "ACTIVE", teacherId: "teacher-a" },
+    ],
+  });
+  await openTeacherDetail(page, state, "teacher-a");
+  await expect(page.getByRole("link", { name: "Çalışan kaydı" })).toHaveAttribute("href", "/kurum/calisanlar?employeesQ=P-014");
+  await expect(page.getByRole("link", { name: "Öğretmenlere dön" })).toBeVisible();
+});
+
+test("çalışan kaydı bağlı olmayan öğretmende geri bağlantı görünmez", async ({ page }) => {
+  const state = mockState({ employees: [{ id: "employee-other", tenantId: "tenant-a", firstName: "Can", lastName: "Ak", status: "ACTIVE" }] });
+  await openTeacherDetail(page, state, "teacher-a");
+  await expect(page.getByRole("region", { name: "Öğretmen profil kartı" })).toBeVisible();
+  await expect.poll(() => state.employeeRequests).toBeGreaterThan(0);
+  await expect(page.getByRole("link", { name: "Çalışan kaydı" })).toHaveCount(0);
+});
+
+test("kullanıcı yönetimi yetkisi olmayan rol çalışan listesini istemez ve geri bağlantı görmez", async ({ page }) => {
+  const state = mockState({
+    roles: ["ASSISTANT_ADMIN"],
+    employees: [{ id: "employee-ayse", tenantId: "tenant-a", firstName: "Ayşe", lastName: "Demir", status: "ACTIVE", teacherId: "teacher-a" }],
+  });
+  await openTeacherDetail(page, state, "teacher-a");
+  await expect(page.getByRole("region", { name: "Öğretmen profil kartı" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Çalışan kaydı" })).toHaveCount(0);
+  expect(state.employeeRequests).toBe(0);
+});
+
 async function openTeacherDetail(page: Page, state: MockState, teacherId: string | undefined) {
   await page.route("**/*", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -246,6 +282,11 @@ async function openTeacherDetail(page: Page, state: MockState, teacherId: string
       state.revokes.push(revoke[1]!);
       state.invitations = state.invitations.filter((candidate) => candidate.id !== revoke[1]);
       await json(route, { ...invitation(revoke[1]!, "teacher-a"), status: "REVOKED" });
+      return;
+    }
+    if (path === "/employees" && request.method() === "GET") {
+      state.employeeRequests += 1;
+      await json(route, state.employees, { limit: 100 });
       return;
     }
     if (path === "/teachers" && request.method() === "GET") {
