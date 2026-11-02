@@ -11,7 +11,8 @@ import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
  * - Waiting submissions: submitted, unchecked submissions of open homework by live students of the homework class
  *   (HomeworkService.listSubmissions, teacher "Bugün").
  * - Assessments: those of the class whose live term covers the day; entries are counted per roster student, drafts only
- *   as presence. Scores, averages and draft values are never read (ADR-0011).
+ *   as presence. Only an assessment held on or before the day can miss entries; a later one is not due yet. Scores,
+ *   averages and draft values are never read (ADR-0011).
  * - Teacher assignments: active CLASS_TEACHER/BRANCH_TEACHER assignments of live teachers; a teacher with an account
  *   needs a live teacher membership.
  */
@@ -58,7 +59,8 @@ export type AcademicOpsCounts = Omit<InstitutionDashboardAcademicOps, "date">;
 export interface ClassOverviewStore {
   /** The class when it exists in the tenant and is not soft-deleted. */
   findLiveClass(tenantId: string, classId: string): Promise<ClassOverviewClass | undefined>;
-  loadSource(tenantId: string, classId: string, date: string): Promise<ClassOverviewSource>;
+  /** undefined: the sources cannot be read on this driver; the caller reports that instead of zero counts. */
+  loadSource(tenantId: string, classId: string, date: string): Promise<ClassOverviewSource | undefined>;
   /** campusIds set: only classes of these campuses count; undefined: every live class of the tenant. */
   loadAcademicOps(tenantId: string, date: string, campusIds?: readonly string[]): Promise<AcademicOpsCounts>;
 }
@@ -142,19 +144,30 @@ function demoClassOverviewMemoryData(): ClassOverviewMemoryData {
   };
 }
 
-/** In-memory twin of the Postgres store; the same rules over plain arrays. */
+/**
+ * In-memory twin of the Postgres store; the same rules over plain arrays. Without injected data it only knows the demo
+ * class ids: the other modules' in-memory stores are separate instances, so loadSource answers unavailable rather than
+ * false zeros (the institution dashboard memory driver leaves academicOps out for the same reason).
+ */
 export class InMemoryClassOverviewStore implements ClassOverviewStore {
+  private readonly data: ClassOverviewMemoryData;
+  private readonly sourcesAvailable: boolean;
+
   constructor(
-    private readonly data: ClassOverviewMemoryData = demoClassOverviewMemoryData(),
+    data?: ClassOverviewMemoryData,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.data = data ?? demoClassOverviewMemoryData();
+    this.sourcesAvailable = data !== undefined;
+  }
 
   async findLiveClass(tenantId: string, classId: string): Promise<ClassOverviewClass | undefined> {
     const record = this.data.classes.find((candidate) => candidate.tenantId === tenantId && candidate.id === classId && !candidate.deletedAt);
     return record ? { id: record.id, ...(record.campusId ? { campusId: record.campusId } : {}) } : undefined;
   }
 
-  async loadSource(tenantId: string, classId: string, date: string): Promise<ClassOverviewSource> {
+  async loadSource(tenantId: string, classId: string, date: string): Promise<ClassOverviewSource | undefined> {
+    if (!this.sourcesAvailable) return undefined;
     const roster = this.roster(tenantId, classId, date);
     const openHomework = this.data.homework.filter((homework) =>
       homework.tenantId === tenantId && homework.classId === classId && !homework.deletedAt && !homework.checkedAt);
@@ -238,6 +251,7 @@ export class InMemoryClassOverviewStore implements ClassOverviewStore {
     return {
       rollCallMissingClassCount,
       missingGradeEntryAssessmentCount: assessments.filter((assessment) => {
+        if (assessment.heldOn > date) return false;
         const roster = rosters.get(assessment.classId)!;
         const entered = new Set(entriesOf(assessment.id).filter((entry) => roster.has(entry.studentId)).map((entry) => entry.studentId));
         return roster.size > entered.size;
@@ -565,7 +579,7 @@ export class PostgresClassOverviewStore implements ClassOverviewStore {
              AND attendance."deletedAt" IS NULL
          ),
          "currentAssessment" AS (
-           SELECT assessment."id", assessment."classId"
+           SELECT assessment."id", assessment."classId", assessment."heldOn"
            FROM "GradeAssessment" assessment
            INNER JOIN "AcademicTerm" term
              ON term."tenantId" = assessment."tenantId"
@@ -587,7 +601,8 @@ export class PostgresClassOverviewStore implements ClassOverviewStore {
              SELECT COUNT(*)::int
              FROM "currentAssessment" current_assessment
              INNER JOIN "rosterSize" roster_size ON roster_size."classId" = current_assessment."classId"
-             WHERE roster_size."size" > (
+             WHERE current_assessment."heldOn" <= $2::date
+               AND roster_size."size" > (
                SELECT COUNT(DISTINCT entry."studentId")
                FROM "GradeEntry" entry
                INNER JOIN "roster" roster

@@ -1375,6 +1375,20 @@ function createClasses() {
 
 // DEC-20261102-04 Sınıf 360: yalnız sayılar ve yayın sürümü.
 function createClassOverview() {
+  const assessment = {
+    assessmentId: "assessment-written",
+    title: "1. yazılı",
+    kind: "WRITTEN",
+    heldOn: "2026-06-05",
+    courseId: "course-math",
+    courseName: "Matematik",
+    termId: "term-2026",
+    enteredCount: 2,
+    rosterCount: 2,
+    missingEntries: false,
+    hasUnpublishedDraft: false,
+    publishedVersion: 1,
+  };
   return {
     classId: "class-8a",
     date: "2026-06-10",
@@ -1382,6 +1396,7 @@ function createClassOverview() {
     rosterCount: 2,
     homework: { openCount: 1, waitingSubmissionCount: 0 },
     gradeEntry: { assessmentCount: 1, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
+    assessments: [assessment],
     teacherAssignments: [{
       assignmentId: "assignment-math",
       teacherId: "teacher-math",
@@ -1393,20 +1408,7 @@ function createClassOverview() {
       assessmentCount: 1,
       missingEntryAssessmentCount: 0,
       unpublishedDraftAssessmentCount: 0,
-      assessments: [{
-        assessmentId: "assessment-written",
-        title: "1. yazılı",
-        kind: "WRITTEN",
-        heldOn: "2026-06-05",
-        courseId: "course-math",
-        courseName: "Matematik",
-        termId: "term-2026",
-        enteredCount: 2,
-        rosterCount: 2,
-        missingEntries: false,
-        hasUnpublishedDraft: false,
-        publishedVersion: 1,
-      }],
+      assessments: [assessment],
     }],
   };
 }

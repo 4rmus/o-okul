@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import {
   istanbulDate,
   type ClassOverview,
@@ -36,12 +36,14 @@ export class ClassOverviewService {
     if (!klass || !isCampusInScope(restriction, klass.campusId)) throw new NotFoundException("CLASS_NOT_FOUND");
     const date = istanbulDate(now);
     const source = await this.store.loadSource(tenantId, klass.id, date);
+    // An unreadable source is reported as such, never as zero counts; scope is already checked, so nothing leaks.
+    if (!source) throw new ServiceUnavailableException("CLASS_OVERVIEW_UNAVAILABLE");
     return buildClassOverview(klass.id, date, now, source);
   }
 }
 
 export function buildClassOverview(classId: string, date: string, now: Date, source: ClassOverviewSource): ClassOverview {
-  const assessments = source.assessments.map((assessment) => toAssessmentStatus(assessment, source.rosterCount));
+  const assessments = source.assessments.map((assessment) => toAssessmentStatus(assessment, source.rosterCount, date));
   return {
     classId,
     date,
@@ -61,6 +63,8 @@ export function buildClassOverview(classId: string, date: string, now: Date, sou
       waitingSubmissionCount: source.waitingSubmissionCount,
     },
     gradeEntry: summarize(assessments),
+    // The full list: an assessment no live grade-writer assignment covers still shows up here and in gradeEntry.
+    assessments,
     teacherAssignments: source.assignments.map((assignment) => {
       // GradebookService.assertCanAuthor: an assignment without a course or term covers every course or term.
       const authored = assessments.filter((assessment) =>
@@ -84,7 +88,11 @@ export function buildClassOverview(classId: string, date: string, now: Date, sou
   };
 }
 
-function toAssessmentStatus(assessment: ClassOverviewAssessmentSource, rosterCount: number): ClassOverviewAssessmentStatus {
+function toAssessmentStatus(
+  assessment: ClassOverviewAssessmentSource,
+  rosterCount: number,
+  date: string,
+): ClassOverviewAssessmentStatus {
   // Counts and the published version only: draft scores and averages never leave the store (ADR-0011).
   return {
     assessmentId: assessment.id,
@@ -96,7 +104,8 @@ function toAssessmentStatus(assessment: ClassOverviewAssessmentSource, rosterCou
     termId: assessment.termId,
     enteredCount: assessment.enteredCount,
     rosterCount,
-    missingEntries: assessment.enteredCount < rosterCount,
+    // An assessment dated after the overview day is not due yet, so its empty entries are not missing.
+    missingEntries: assessment.heldOn <= date && assessment.enteredCount < rosterCount,
     hasUnpublishedDraft: assessment.hasDraft,
     ...(assessment.publishedVersion !== undefined ? { publishedVersion: assessment.publishedVersion } : {}),
   };
@@ -111,6 +120,8 @@ function summarize(assessments: readonly ClassOverviewAssessmentStatus[]): Class
 }
 
 function rollCallState(markedCount: number, rosterCount: number): ClassOverviewRollCallState {
+  // An empty roster has nothing to mark; it is neither taken nor missing.
+  if (rosterCount === 0) return "EMPTY_ROSTER";
   if (markedCount >= rosterCount) return "TAKEN";
   return markedCount === 0 ? "NOT_TAKEN" : "PARTIAL";
 }

@@ -2794,17 +2794,20 @@ export interface InstitutionDashboardAcademicOps {
   date: string;
   /** Classes with a scheduled lesson today and a non-empty roster where no roster student is marked yet. */
   rollCallMissingClassCount: number;
-  /** Current-term assessments whose entries cover fewer students than the class roster. */
+  /**
+   * Current-term assessments held on or before the date whose entries cover fewer students than the class roster; an
+   * assessment dated after the date is not yet due.
+   */
   missingGradeEntryAssessmentCount: number;
   /** Current-term assessments that carry at least one unpublished draft entry. */
   unpublishedDraftAssessmentCount: number;
 }
 
 /**
- * Roll call of a class on a day with a scheduled lesson: NOT_TAKEN when no roster student is marked, PARTIAL when some
- * are, TAKEN when every roster student is marked (or the roster is empty).
+ * Roll call of a class on a day with a scheduled lesson: EMPTY_ROSTER when the roster is empty (nothing to mark),
+ * NOT_TAKEN when no roster student is marked, PARTIAL when some are, TAKEN when every roster student is marked.
  */
-export type ClassOverviewRollCallState = "NOT_TAKEN" | "PARTIAL" | "TAKEN";
+export type ClassOverviewRollCallState = "EMPTY_ROSTER" | "NOT_TAKEN" | "PARTIAL" | "TAKEN";
 
 /** Grade-entry status of one current-term assessment; counts and the published version only (ADR-0011). */
 export interface ClassOverviewAssessmentStatus {
@@ -2818,6 +2821,7 @@ export interface ClassOverviewAssessmentStatus {
   /** Roster students with at least one entry (draft or published). */
   enteredCount: number;
   rosterCount: number;
+  /** Held on or before the overview date and entries cover fewer students than the roster; a future assessment is not due. */
   missingEntries: boolean;
   hasUnpublishedDraft: boolean;
   publishedVersion?: number;
@@ -2861,6 +2865,12 @@ export interface ClassOverview {
     missingEntryAssessmentCount: number;
     unpublishedDraftAssessmentCount: number;
   };
+  /**
+   * Every current-term assessment of the class, newest first, whether or not a live grade-writer assignment covers it;
+   * gradeEntry summarizes exactly this list.
+   */
+  assessments: ClassOverviewAssessmentStatus[];
+  /** Per-assignment view; an assessment appears under every assignment whose course and term scope covers it. */
   teacherAssignments: ClassOverviewTeacherAssignment[];
 }
 

@@ -159,6 +159,71 @@ describe("ClassOverviewService (DEC-20261102-04)", () => {
     }
   });
 
+  it("lists every current-term assessment at the top level, also those no live grade-writer assignment covers", async () => {
+    const data = fixture();
+    // a-chem-1 has no live assignment for its course: the branch teacher's only Kimya assignment ended yesterday.
+    data.courses.push({ id: "course-chem", tenantId: "tenant-a", name: "Kimya" });
+    data.assessments.push({ id: "a-chem-1", tenantId: "tenant-a", classId: "class-1", courseId: "course-chem", termId: "term-current", kind: "EXAM", title: "Kimya yazılı", heldOn: "2026-10-30" });
+    data.assignments.push({ id: "as-chem-ended", tenantId: "tenant-a", teacherId: "t-math", classId: "class-1", courseId: "course-chem", role: "BRANCH_TEACHER", endsAt: "2026-11-01" });
+    data.assignments.splice(data.assignments.findIndex((assignment) => assignment.id === "as-class"), 1);
+    const overview = await service(data).service.get(admin, "class-1", now);
+
+    expect(overview.assessments.map((assessment) => assessment.assessmentId)).toEqual(["a-chem-1", "a-math-2", "a-tr-1", "a-math-1"]);
+    expect(overview.assessments[0]).toEqual({
+      assessmentId: "a-chem-1",
+      title: "Kimya yazılı",
+      kind: "EXAM",
+      heldOn: "2026-10-30",
+      courseId: "course-chem",
+      courseName: "Kimya",
+      termId: "term-current",
+      enteredCount: 0,
+      rosterCount: 3,
+      missingEntries: true,
+      hasUnpublishedDraft: false,
+    });
+    expect(overview.gradeEntry).toEqual({ assessmentCount: 4, missingEntryAssessmentCount: 2, unpublishedDraftAssessmentCount: 2 });
+    // Per-teacher completion is unchanged: only as-math remains and it covers the Matematik assessments.
+    expect(overview.teacherAssignments.map((assignment) => assignment.assignmentId)).toEqual(["as-math"]);
+    const covered = overview.teacherAssignments.flatMap((assignment) => assignment.assessments.map((assessment) => assessment.assessmentId));
+    expect(covered).not.toContain("a-chem-1");
+    expect(covered).not.toContain("a-tr-1");
+  });
+
+  it("never counts an assessment dated after the overview day as missing entries but keeps it in the totals", async () => {
+    const data = fixture();
+    data.assessments.push(
+      { id: "a-future", tenantId: "tenant-a", classId: "class-1", courseId: "course-math", termId: "term-current", kind: "EXAM", title: "2. yazılı", heldOn: "2026-11-03" },
+      { id: "a-today", tenantId: "tenant-a", classId: "class-1", courseId: "course-math", termId: "term-current", kind: "QUIZ", title: "Bugünkü sınav", heldOn: today },
+    );
+    const overview = await service(data).service.get(admin, "class-1", now);
+
+    expect(overview.assessments.find((assessment) => assessment.assessmentId === "a-future")).toMatchObject({ enteredCount: 0, missingEntries: false });
+    expect(overview.assessments.find((assessment) => assessment.assessmentId === "a-today")).toMatchObject({ enteredCount: 0, missingEntries: true });
+    expect(overview.gradeEntry).toEqual({ assessmentCount: 5, missingEntryAssessmentCount: 2, unpublishedDraftAssessmentCount: 2 });
+    expect(overview.teacherAssignments.find((assignment) => assignment.assignmentId === "as-math")).toMatchObject({
+      assessmentCount: 4,
+      missingEntryAssessmentCount: 2,
+    });
+  });
+
+  it("reports EMPTY_ROSTER instead of TAKEN when a class with a lesson has nobody on the roster", async () => {
+    const data = fixture();
+    const overview = await service(data).service.get(admin, "class-free", now);
+    expect(overview.rosterCount).toBe(0);
+    expect(overview).not.toHaveProperty("rollCall");
+
+    data.lessons.push({ tenantId: "tenant-a", classId: "class-free", startsAt: "2026-11-02T07:30:00.000Z" });
+    expect((await service(data).service.get(admin, "class-free", now)).rollCall).toEqual({ state: "EMPTY_ROSTER", lessonCount: 1, markedCount: 0 });
+  });
+
+  it("answers 503 instead of zero counts on the demo in-memory driver, after the tenant and campus checks", async () => {
+    const overviews = new ClassOverviewService(new InMemoryClassOverviewStore());
+    await expect(overviews.get(admin, "class-a", now)).rejects.toMatchObject({ status: 503, message: "CLASS_OVERVIEW_UNAVAILABLE" });
+    await expect(overviews.get(admin, "class-b", now)).rejects.toMatchObject({ status: 404 });
+    await expect(overviews.get(admin, "class-missing", now)).rejects.toMatchObject({ status: 404 });
+  });
+
   it("leaves the roll call out on a day without a scheduled lesson", async () => {
     const data = fixture();
     data.lessons.length = 0;
@@ -218,6 +283,13 @@ describe("InMemoryClassOverviewStore academic ops", () => {
       missingGradeEntryAssessmentCount: 1,
       unpublishedDraftAssessmentCount: 3,
     });
+    // An assessment dated after today stays out of the missing count; one held today is due.
+    data.assessments.push(
+      { id: "a-future", tenantId: "tenant-a", classId: "class-1", courseId: "course-math", termId: "term-current", kind: "EXAM", title: "Gelecek", heldOn: "2026-11-03" },
+      { id: "a-today", tenantId: "tenant-a", classId: "class-1", courseId: "course-math", termId: "term-current", kind: "EXAM", title: "Bugün", heldOn: today },
+    );
+    await expect(store.loadAcademicOps("tenant-a", today)).resolves.toMatchObject({ missingGradeEntryAssessmentCount: 2 });
+    data.assessments.splice(-2, 2);
     await expect(store.loadAcademicOps("tenant-a", today, ["campus-2"])).resolves.toEqual({
       rollCallMissingClassCount: 1,
       missingGradeEntryAssessmentCount: 0,

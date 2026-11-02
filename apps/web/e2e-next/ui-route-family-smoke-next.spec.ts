@@ -649,6 +649,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
         rollCall: { state: "NOT_TAKEN", lessonCount: 1, markedCount: 0 },
         homework: { openCount: 1, waitingSubmissionCount: 0 },
         gradeEntry: { assessmentCount: 0, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
+        assessments: [],
         teacherAssignments: [],
       },
     };

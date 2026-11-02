@@ -2687,6 +2687,10 @@ requireTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels
   'mobilePriority: "primary"',
   'sticky: "left"',
   "isClassOverview",
+  // F1: the assessment table reads the top-level list, so an assessment without a live grade-writer assignment stays.
+  "sortAssessments(overview.assessments)",
+  "Array.isArray(record.assessments)",
+  'rollCall.state === "EMPTY_ROSTER"',
 ]);
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "dashboard.academicOps",
@@ -2701,6 +2705,8 @@ requireNoTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-pane
   "average",
   "assessment.assessmentId}</",
   "assignment.courseId ??",
+  "uniqueAssessments(overview.teacherAssignments)",
+  "açtığı değerlendirmeler",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
