@@ -84,10 +84,10 @@ export function canAccessExamWorkspace(
   if (roles.some((role) => adminRoles.includes(role))) {
     return activePersona === "STAFF" || (activePersona === undefined && roles.length === 1);
   }
-  // DEC-20261102-03: OPERATIONS_STAFF opens the workspace only in the STAFF persona. The session carries no campus
-  // scope, so the API rejects a campus-scoped membership. A user who also holds TEACHER keeps teacher-narrowed exam
-  // reads, so that combination stays outside the workspace until its own security slice.
-  return activePersona === "STAFF" && roles.includes("OPERATIONS_STAFF") && !roles.includes("TEACHER");
+  // DEC-20261102-03: OPERATIONS_STAFF opens the workspace only in the STAFF persona. A STAFF-persona session holds
+  // only the membership's staff role, so a membership that also has a teacher persona opens it here and stays outside
+  // in its TEACHER persona. The session carries no campus scope, so the API rejects a campus-scoped membership.
+  return activePersona === "STAFF" && roles.includes("OPERATIONS_STAFF");
 }
 
 // FINANCE_STAFF rank kalıtımı almaz (apps/api/src/rbac/roles.ts); başka kurum rolü yoksa

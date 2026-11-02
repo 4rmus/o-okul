@@ -12,9 +12,13 @@ import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import {
   campusOperationsStaffEmail,
+  dualPersonaOperationsStaffEmail,
+  dualPersonaOperationsStaffUserId,
+  registerDualPersonaOperationsStaff,
   registerExamOperationsStaff,
   tenantWideOperationsStaffEmail,
 } from "./exam-operations-staff.test-support.js";
+import { teacherStoreToken, type TeacherStore } from "../school/teacher-store.js";
 import {
   answerKeyRepositoryToken,
   type AnswerKeyRepository,
@@ -48,6 +52,7 @@ describe("ExamController", () => {
   beforeAll(async () => {
     resetInMemoryAuthUsers();
     registerExamOperationsStaff();
+    registerDualPersonaOperationsStaff();
     repository = new FakeExamRepository();
     participants = new FakeExamParticipantRepository();
     answerKeys = new FakeAnswerKeyRepository();
@@ -719,46 +724,116 @@ describe("ExamController", () => {
     expect(participants.participants.size).toBe(0);
   });
 
+  it("öğretmen personası da olan tenant geneli OPERATIONS_STAFF STAFF personasında çalışma alanını açar, TEACHER personasında 403 alır", async () => {
+    // DEC-20261102-03: the session roles come from the active persona (auth.service resolvePersonaSessionContext),
+    // so this membership is [OPERATIONS_STAFF] in STAFF and [TEACHER] in TEACHER; the two never share a context.
+    const teachers = app.get<TeacherStore>(teacherStoreToken);
+    if (!await teachers.findByUserId("tenant-a", dualPersonaOperationsStaffUserId)) {
+      await teachers.create({ tenantId: "tenant-a", firstName: "Operasyon", lastName: "Öğretmen", userId: dualPersonaOperationsStaffUserId });
+    }
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(examCreateBody("Çift Personalı Deneme"))
+      .expect(201);
+
+    const staff = await login(dualPersonaOperationsStaffEmail);
+    const staffProfile = await request(server).get("/me/profile").set("Authorization", `Bearer ${staff.accessToken}`).expect(200);
+    expect(staffProfile.body).toMatchObject({ activePersona: "STAFF", roles: ["OPERATIONS_STAFF"], availablePersonas: ["STAFF", "TEACHER"] });
+    const workspace = await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${staff.accessToken}`)
+      .expect(200);
+    expect(workspace.body).toMatchObject({ exam: { id: created.body.id, title: "Çift Personalı Deneme" } });
+
+    const switched = await request(server)
+      .post("/auth/persona/switch")
+      .set("Authorization", `Bearer ${staff.accessToken}`)
+      .set("Cookie", ["csrfToken=exam-dual-persona-csrf"])
+      .set("X-CSRF-Token", "exam-dual-persona-csrf")
+      .send({ activePersona: "TEACHER" })
+      .expect(200);
+    const teacherToken = (switched.body as { accessToken: string }).accessToken;
+    const teacherProfile = await request(server).get("/me/profile").set("Authorization", `Bearer ${teacherToken}`).expect(200);
+    expect(teacherProfile.body).toMatchObject({ activePersona: "TEACHER", roles: ["TEACHER"], subjectType: "TEACHER" });
+    // The TEACHER persona has no academic:manage: the capability guard rejects the workspace route first, and the
+    // service rule rejects the same persona context on its own.
+    const rejected = await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(403);
+    expect(rejected.body.error.code).toBe("FORBIDDEN");
+    await expect(app.get(ExamService).workspace({
+      userId: dualPersonaOperationsStaffUserId,
+      tenantId: "tenant-a",
+      activePersona: "TEACHER",
+      roles: ["TEACHER"],
+      subjectType: "TEACHER",
+      subjectId: teacherProfile.body.subjectId as string,
+      campusScope: { scopeMode: "TENANT", campusIds: [] },
+      bypassRls: false,
+    }, created.body.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .send(examCreateBody("Öğretmen Personası Denemesi"))
+      .expect(403);
+    expect([...repository.exams.values()].map((exam) => exam.title)).toEqual(["Çift Personalı Deneme"]);
+  });
+
   it("sınıf katılımcısı ekleyemeyecek çağıran için sınav yazılmaz ve düzenleme uygulanmaz", async () => {
     const exams = app.get(ExamService);
-    // Öğretmen rolü de olan operasyon çalışanı sınava özel kurala girmez; öğretmen ataması olmadan sınıf ekleyemez.
-    const dualRoleContext = {
-      userId: "ops-teacher",
+    // A TEACHER-persona context as verifyAccess builds it, with no assignment for class-a. The controller already
+    // rejects it (no academic:manage); the service still validates participant scope before any write.
+    const unassignedTeacherContext = {
+      userId: "teacher-unassigned-user",
       tenantId: "tenant-a",
-      activePersona: "STAFF" as const,
-      roles: ["OPERATIONS_STAFF", "TEACHER"],
+      activePersona: "TEACHER" as const,
+      roles: ["TEACHER"],
+      subjectType: "TEACHER" as const,
+      subjectId: "teacher-unassigned",
       campusScope: { scopeMode: "TENANT" as const, campusIds: [] },
       bypassRls: false,
     };
 
-    await expect(exams.create(dualRoleContext, {
+    await expect(exams.create(unassignedTeacherContext, {
       title: "Yetim Kalmamalı",
       classIds: ["class-a"],
       answerKey: { version: "answer-key-v1", fileBase64: Buffer.from("fake-xlsx").toString("base64") },
-    })).rejects.toThrow("TEACHER_CONTEXT_REQUIRED");
+    })).rejects.toThrow("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
     expect(repository.exams.size).toBe(0);
     expect(participants.participants.size).toBe(0);
     expect(answerKeys.records.size).toBe(0);
 
     const existing = await repository.create({ tenantId: "tenant-a", title: "Değişmemeli" });
-    await expect(exams.update(dualRoleContext, existing.id, { title: "Değişti", classIds: ["class-a"] }))
-      .rejects.toThrow("TEACHER_CONTEXT_REQUIRED");
+    await expect(exams.update(unassignedTeacherContext, existing.id, { title: "Değişti", classIds: ["class-a"] }))
+      .rejects.toThrow("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
     expect(repository.exams.get(existing.id)?.title).toBe("Değişmemeli");
     expect(participants.participants.size).toBe(0);
 
-    await expect(exams.workspace(dualRoleContext, existing.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+    await expect(exams.workspace(unassignedTeacherContext, existing.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+    // A STAFF-persona OPERATIONS_STAFF context opens the workspace only with an explicit tenant-wide scope, a persona
+    // and no role preview.
+    const operatorContext = {
+      userId: "ops-tenant",
+      tenantId: "tenant-a",
+      activePersona: "STAFF" as const,
+      roles: ["OPERATIONS_STAFF"],
+      campusScope: { scopeMode: "TENANT" as const, campusIds: [] },
+      bypassRls: false,
+    };
     for (const context of [
-      { ...dualRoleContext, roles: ["OPERATIONS_STAFF"], campusScope: undefined },
-      { ...dualRoleContext, roles: ["OPERATIONS_STAFF"], activePersona: undefined },
+      { ...operatorContext, campusScope: undefined },
+      { ...operatorContext, activePersona: undefined },
       {
-        ...dualRoleContext,
-        roles: ["OPERATIONS_STAFF"],
+        ...operatorContext,
         rolePreview: { id: "preview-a", actorUserId: "admin-a", mode: "READ_ONLY" as const, expiresAt: "2026-12-31T00:00:00.000Z" },
       },
     ]) {
       await expect(exams.workspace(context, existing.id)).rejects.toThrow();
     }
-    await expect(exams.workspace({ ...dualRoleContext, roles: ["OPERATIONS_STAFF"] }, existing.id))
+    await expect(exams.workspace(operatorContext, existing.id))
       .resolves.toMatchObject({ exam: { id: existing.id } });
   });
 

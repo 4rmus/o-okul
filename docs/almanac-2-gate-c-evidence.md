@@ -54,8 +54,14 @@ Yukarıdaki "operasyon çalışanı workspace'e yönlendirilmez" maddesi bu kay�
   OPERATIONS_STAFF paylaşılan öğretmen ataması baypasına (`canBypassTeacherAssignment`) eklenmez; yoklama,
   ödev, not defteri, öğretmen notu, gelişim ve veli yollarının kapsamı genişlemez.
 - Kampüs kapsamlı OPERATIONS_STAFF sınav servislerinden 403 ile dışarıda kalır. Kapsamı olmayan STAFF
-  oturumu, rol önizlemesi ve OPERATIONS_STAFF+TEACHER çift rollü kullanıcı workspace'e alınmaz; çift rollü
-  kullanıcının öğretmen atamasıyla daralan okumaları ayrı bir güvenlik dilimidir.
+  oturumu ve rol önizlemesi workspace'e alınmaz.
+- Oturum rolleri aktif personadan gelir (`resolvePersonaSessionContext`): STAFF personası yalnız üyeliğin
+  `staffRole` değerini, TEACHER personası yalnız `TEACHER` rolünü taşır; OPERATIONS_STAFF ve TEACHER aynı
+  oturumda birlikte bulunmaz. Bu yüzden üyeliğinde öğretmen personası da olan tenant geneli OPERATIONS_STAFF,
+  STAFF personasında workspace'i diğer tenant geneli operasyon çalışanlarıyla aynı kuralla açar; TEACHER
+  personasına geçtiğinde workspace ucu 403 döner (`academic:manage` yoktur, servis kuralı da reddeder) ve
+  okumaları öğretmen atamasıyla daralır. Kanıt: `exam.controller.e2e.test.ts` gerçek giriş ve persona
+  geçişiyle, `gate-c-exam-workspace-next.spec.ts` iki persona oturumuyla (LOCAL_TEST).
 - Web oturumu kampüs kapsamı taşımadığından web kuralı rol/persona ile açar; kampüs kapsamlı üyelikte
   API 403 döner ve çerçeve nötr başlıkta kalır.
 - `POST /exams` sınıf listesiyle çağrıldığında sınıflar ve çağıranın katılımcı kapsamı yazımdan önce

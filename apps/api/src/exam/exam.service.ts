@@ -688,12 +688,12 @@ function hasExamAdminRole(context: RequestContext): boolean {
 
 /**
  * DEC-20261102-03: OPERATIONS_STAFF in the STAFF persona with an explicit tenant-wide membership scope and
- * academic:manage. A campus-scoped or scope-less membership, a role preview and a user who also holds TEACHER
- * (teacher-narrowed exam reads) stay outside; the admin roles keep their own path.
+ * academic:manage. A STAFF-persona session carries only the membership's staff role, so a membership that also
+ * opens a teacher persona qualifies here and stays outside in its TEACHER persona. A campus-scoped or scope-less
+ * membership and a role preview stay outside; the admin roles keep their own path.
  */
 function isTenantWideExamOperator(context: RequestContext): boolean {
   return context.roles.includes("OPERATIONS_STAFF")
-    && !context.roles.includes("TEACHER")
     && context.activePersona === "STAFF"
     && context.campusScope?.scopeMode === "TENANT"
     && !context.bypassRls
