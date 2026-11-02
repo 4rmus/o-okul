@@ -1268,6 +1268,9 @@ ister; geri almak için `gh variable delete STAGING_AUTO_DEPLOY`. CI'da yalnız 
 `status.md`, `README.md`, `PLAN.md`; `docs/evidence-manifests` ve `docs/measurement-baselines` hariç)
 tam paket yerine `docs-check` işini (ops, plan, readiness, evidence şablonları, örnek PII, agents)
 koşar; `main` push'u her zaman tam CI koşar ve CI kanıtı yalnız çalışan (atlanmamış) işleri içerir.
+Draft PR'da `changes` işi her zaman koşar ve PR hâlâ draft ise başarısız olur; böylece atlanan zorunlu
+check'ler başarılı sayılıp auto-merge'i açamaz (PR #232, 2026-11-02). Olay yükündeki draft bayrağı push ile
+`gh pr ready` yarışında bayat kalabildiği için iş önce canlı PR durumunu okur; PR artık hazırsa tam paketi koşar.
 
 Linux runner için base64 değeri:
 
