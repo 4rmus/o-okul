@@ -114,7 +114,9 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const teacherNotesQuery = usePortalPanelQuery(panelKey("teacher-notes"), studentReady && panels.student, get<TeacherNoteRecord[]>("/teacher-notes"));
   const developmentQuery = usePortalPanelQuery(panelKey("development"), studentReady && panels.student, get<DevelopmentTrendItem[]>("/development-assessments"));
   // Finans yalnız ilişki izni okunup canViewFinance === true çıktıktan sonra istenir; izin yoksa istek hiç gitmez.
-  const canViewFinance = preferencesQuery.data?.canViewFinance === true;
+  // Önbellekteki eski izin kullanılmaz: izin yeniden okunurken (sayfa geçişinde) finans beklenir ve gösterilmez.
+  const financePermissionFresh = preferencesQuery.isSuccess && !preferencesQuery.isFetching;
+  const canViewFinance = financePermissionFresh && preferencesQuery.data?.canViewFinance === true;
   const paymentPlansQuery = usePortalPanelQuery(
     panelKey("payment-plans"),
     studentReady && panels.payments && canViewFinance,
@@ -252,7 +254,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const supportStatus = canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
   const financeStatus = canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
   const supportReadOnly = isRolePreview || !canOpenSupportTickets;
-  const financeLoading = preferencesQuery.isLoading || paymentPlansQuery.isLoading;
+  const financeLoading = preferencesQuery.isLoading || (panels.payments && preferencesQuery.isFetching) || paymentPlansQuery.isLoading;
   const selectedStudentLabel = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Seçilmedi";
   const selectedStudentDetail = data?.profile?.className ?? "Bağlı öğrenci";
   const portalSubtitle = guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti");
