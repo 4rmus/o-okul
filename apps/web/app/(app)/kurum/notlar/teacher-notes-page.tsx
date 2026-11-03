@@ -282,11 +282,11 @@ export function TeacherNotesPage() {
         }
         aria-label="Öğretmen notu yönetimi"
         columns={columns}
-        description="Öğretmen notlarını öğrenci, öğretmen, ders ve dönem bağlamıyla yönet."
+        description="Öğretmen notlarını öğrenci, öğretmen, ders ve dönem bağlamıyla yönetin."
         emptyState={
           <EmptyState
             title="Öğretmen notu yok"
-            description="Öğrenci gelişimini izlemek için ilk öğretmen notunu ekle."
+            description="Öğrenci gelişimini izlemek için ilk öğretmen notunu ekleyin."
             hint="Notlar iç kullanım veya veli/öğrenci görünümü olarak ayrılabilir."
             primaryAction={{ label: "Not ekle", onClick: openCreateForm }}
           />

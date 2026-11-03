@@ -255,12 +255,12 @@ export function ScheduleLessonsPage() {
         aria-label="Ders programı yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum ders programını sınıf, öğretmen ve ders bağlantısıyla yönet."
+        description="Kurum ders programını sınıf, öğretmen ve ders bağlantısıyla yönetin."
         emptyState={
           <EmptyState
             title="Ders programı boş"
-            description="Haftalık ders akışını oluşturmak için ilk dersi ekle."
-            hint="Sınıf, öğretmen ve ders kayıtları hazırsa programı buradan bağlayabilirsin."
+            description="Haftalık ders akışını oluşturmak için ilk dersi ekleyin."
+            hint="Sınıf, öğretmen ve ders kayıtları hazırsa programı buradan bağlayabilirsiniz."
             primaryAction={{ label: "Ders ekle", onClick: openCreateForm }}
           />
         }

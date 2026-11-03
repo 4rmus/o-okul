@@ -1549,6 +1549,24 @@ Açık soru: Dışa aktarılacak listeler ve zaman çizelgesindeki olay türleri
 Seviye analitiği seyrek başlar; seviye snapshot'ı üretilmeyen sınavlar "seviye raporu yok" görünür.
 Son kontrol: 2026-11-02
 
+### DEC-20261103-01 — Staging UAT (2026-11-03) bulgularının düzeltilmesi
+
+Durum: Onaylı (ürün sahibi, 2026-11-03: UAT bulgularını tek dalda düzeltme onayı "Evet, başla")
+Karar: Staging UAT raporundaki 20 bulgu tek dalda düzeltilir. İki madde ürün davranışını değiştirir:
+- Ödev görünümü: Öğrenci 360'taki "Açık ödev" kartı ve Ödevler paneli, öğrencinin sınıfına verilen ödevleri
+  de gösterir (bugün yalnız materyal atamalarını sayıyor). Veli portalı bağlı öğrencinin sınıf ödevlerini salt
+  okunur gösterir: başlık, açıklama, kaynak materyal adı, teslim tarihi ve öğrencinin teslim durumu (teslim
+  edildi, kontrol edildi, teslim edilmedi); ödev kaydında ders alanı olmadığı için ders gösterilmez. Öğretmenin kontrol notu ve puanı veliye gösterilmez. Yeni veli izni yoktur; veli
+  bağlantısı ve mevcut öğrenci kapsamı yeterlidir. Kampüs ve tenant kapsamı mevcut öğrenci okumasıyla aynıdır.
+- Dönem geçişi uygulaması, kayıt yenileme sayısını ve hedef yıl/dönemi gösteren açık bir onay penceresi ister;
+  mezuniyet onayı aynen kalır.
+Diğer bulgular (durum etiketi, sıralama, "siz" hitabı, sayaç tutarlılığı, adım göstergesi) hata düzeltmesidir.
+Kaynak: `claudedocs/staging-uat-2026-11-03.md` (U1–U20).
+Kanıt: STAGING gözlemi (uat-s1-okulu, 2026-11-03); kök neden kod okumasıyla doğrulandı (LOCAL_STATIC).
+Etkilenen ADR: Yok; ADR-0011 (yayınlanmış not satırı değişmez) ve ReportSnapshot sözleşmesi değişmez.
+Açık soru: Veli ödev görünümünde öğretmen kontrol notunun gösterilmesi istenirse ayrı DEC gerekir.
+Son kontrol: 2026-11-03
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği

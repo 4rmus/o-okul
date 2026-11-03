@@ -244,7 +244,7 @@ export function CampusesPage() {
         emptyState={
           <EmptyState
             title="Henüz kampüs yok"
-            description="Kampüs ekleyerek sınıf yapısını kurmaya başla."
+            description="Kampüs ekleyerek sınıf yapısını kurmaya başlayın."
             primaryAction={{ label: "Kampüs ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />

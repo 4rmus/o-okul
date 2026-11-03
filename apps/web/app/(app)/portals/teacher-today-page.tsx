@@ -14,6 +14,7 @@ import {
   PortalDailyBrief,
   PortalFrame,
   PortalStatePanel,
+  isPortalActionPending,
   readRolePreviewToken,
   RolePreviewNotice,
   type PortalActionItem,
@@ -83,13 +84,28 @@ export function TeacherTodayPage() {
   const unreadAnnouncementCount = today.unreadAnnouncementCount ?? 0;
   const nearestHomework = today.pendingHomework[0];
 
-  const attendanceAction: PortalActionItem = !attendanceKnown || lessons.length === 0
+  // UAT U18: ders yokken "Yoklama al" iş olarak gösterilmez; kart yalnız Ders akışına bağlantı olarak kalır.
+  const attendanceAction: PortalActionItem = lessons.length === 0
+    ? {
+        actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Aç",
+        detail: "Bugün planlı ders yok",
+        href: href("/ogretmen/ders-akisi"),
+        key: "attendance",
+        label: "Ders akışı",
+        pending: false,
+        statusLabel: "Ders yok",
+        tone: "neutral",
+        value: "0 ders",
+      }
+    : !attendanceKnown
     ? {
         actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklama al",
-        detail: nextLesson ? lessonDetail(nextLesson, now, { withTitle: true }) : lessons.length > 0 ? "Bugünkü dersler bitti" : "Bugün planlı ders yok",
+        detail: nextLesson ? lessonDetail(nextLesson, now, { withTitle: true }) : "Bugünkü dersler bitti",
         href: nextLesson ? attendanceHref(nextLesson) : href("/ogretmen/ders-akisi"),
         key: "attendance",
         label: "Yoklama al",
+        // Yoklama durumu bilinmiyorsa bekleyen iş sayılmaz; sayaç bilinmeyeni sıfır ya da iş diye göstermez.
+        pending: false,
         statusLabel: "Bugün",
         tone: nextLesson ? "info" : "neutral",
         value: `${lessons.length} ders`,
@@ -101,6 +117,7 @@ export function TeacherTodayPage() {
           href: attendanceHref(attendanceTarget),
           key: "attendance",
           label: "Yoklama al",
+          pending: true,
           statusLabel: overdueAttendance ? "Yoklama alınmadı" : "Yoklama bekliyor",
           tone: overdueAttendance ? "warning" : "info",
           value: `${lessonsWithoutAttendance.length} ders`,
@@ -111,6 +128,7 @@ export function TeacherTodayPage() {
           href: focusLesson ? attendanceHref(focusLesson) : href("/ogretmen/ders-akisi"),
           key: "attendance",
           label: "Yoklama al",
+          pending: false,
           statusLabel: "Tamam",
           tone: "success",
           value: "Tümü alındı",
@@ -126,6 +144,7 @@ export function TeacherTodayPage() {
           href: href("/ogretmen/odevler"),
           key: "submissions",
           label: "Teslim kontrolü",
+          pending: true,
           statusLabel: "Bekliyor",
           tone: "warning" as const,
           value: `${pendingSubmissionCount} teslim`,
@@ -138,6 +157,7 @@ export function TeacherTodayPage() {
           href: href("/ogretmen/not-defteri"),
           key: "gradeDrafts",
           label: "Not taslakları",
+          pending: true,
           statusLabel: "Yayımlanmadı",
           tone: "warning" as const,
           value: `${unpublishedGradeDraftCount} değerlendirme`,
@@ -150,6 +170,7 @@ export function TeacherTodayPage() {
           href: href("/ogretmen/duyurular"),
           key: "announcements",
           label: "Okunmamış duyurular",
+          pending: true,
           statusLabel: "Okunmadı",
           tone: "info" as const,
           value: `${unreadAnnouncementCount} duyuru`,
@@ -161,6 +182,7 @@ export function TeacherTodayPage() {
       href: href("/ogretmen/odevler"),
       key: "homework",
       label: "Ödev kontrolü",
+      pending: today.pendingHomeworkCount > 0,
       statusLabel: today.pendingHomeworkCount > 0 ? "Bekliyor" : "Tamam",
       tone: today.pendingHomeworkCount > 0 ? "warning" : "success",
       value: `${today.pendingHomeworkCount} ödev`,
@@ -171,18 +193,21 @@ export function TeacherTodayPage() {
       href: href(today.latestReport ? `/ogretmen/raporlar?examId=${encodeURIComponent(today.latestReport.examId)}` : "/ogretmen/raporlar"),
       key: "report",
       label: "Son sınav raporu",
+      pending: false,
       statusLabel: today.latestReport ? "Rapor hazır" : "Bekliyor",
       tone: today.latestReport ? "success" : "neutral",
       value: today.latestReport ? formatDate(today.latestReport.latestGeneratedAt) : "-",
     },
   ];
-  const pendingWork = [
-    lessonsWithoutAttendance.length > 0 ? `${lessonsWithoutAttendance.length} yoklama` : "",
-    pendingSubmissionCount > 0 ? `${pendingSubmissionCount} teslim` : "",
-    unpublishedGradeDraftCount > 0 ? `${unpublishedGradeDraftCount} taslak` : "",
-    unreadAnnouncementCount > 0 ? `${unreadAnnouncementCount} duyuru` : "",
-    today.pendingHomeworkCount > 0 ? `${today.pendingHomeworkCount} ödev` : "",
-  ].filter(Boolean);
+  // UAT U18: "Bekleyen iş" kartı ve "Bekleyen işler" başlığı aynı tanımdan (pending kartlar) sayılır.
+  const pendingSummaries: Record<string, string> = {
+    attendance: `${lessonsWithoutAttendance.length} yoklama`,
+    submissions: `${pendingSubmissionCount} teslim`,
+    gradeDrafts: `${unpublishedGradeDraftCount} taslak`,
+    announcements: `${unreadAnnouncementCount} duyuru`,
+    homework: `${today.pendingHomeworkCount} ödev`,
+  };
+  const pendingWork = inbox.filter(isPortalActionPending).map((item) => pendingSummaries[item.key] ?? item.value);
 
   const lessonColumns: Array<DataTableColumn<TodayLesson>> = [
     { key: "time", header: "Saat", mobilePriority: "primary", priority: "primary", render: (lesson) => `${formatTime(lesson.startsAt)}–${formatTime(lesson.endsAt)}` },

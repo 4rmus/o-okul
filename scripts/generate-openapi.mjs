@@ -2221,6 +2221,14 @@ const requiredOperationContracts = [
     fieldChecks: portalHomeworkMaterialAssignmentFieldChecks,
   },
   {
+    // DEC-20261103-01: guardian class homework is read-only; the teacher's check note, checker and score never leave.
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/homework",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "classId", "title", "submission"],
+    responseDataForbiddenDeep: [...portalHomeworkMaterialAssignmentForbiddenDeep, "checkedBy", "checkedById", "note", "score", "tenantId"],
+  },
+  {
     method: "get",
     path: "/api/v1/me/guardian/students/{studentId}/notification-preferences",
     responseEnvelope: true,

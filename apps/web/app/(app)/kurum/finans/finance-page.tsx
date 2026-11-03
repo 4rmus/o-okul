@@ -401,7 +401,7 @@ export function FinancePage() {
         }
         aria-label="Finans yönetimi"
         columns={columns}
-        description="Ödeme planlarını öğrenci ve akademik bağlama göre izle, taksit durumlarını güncelle."
+        description="Ödeme planlarını öğrenci ve akademik bağlama göre izleyin, taksit durumlarını güncelleyin."
         emptyState={
           <EmptyState
             title="Ödeme taksiti yok"
@@ -565,7 +565,7 @@ function InstallmentFormModal({
 }) {
   return (
     <FormModal
-      description="Tutar, vade ve durum alanlarını güncelle."
+      description="Tutar, vade ve durum alanlarını güncelleyin."
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
@@ -610,7 +610,7 @@ function TransactionFormModal({
 }) {
   return (
     <FormModal
-      description="Tahsilat tutarı, yöntemi ve tarihi ile işlem kaydı oluştur."
+      description="Tahsilat tutarı, yöntemi ve tarihi ile işlem kaydı oluşturun."
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}

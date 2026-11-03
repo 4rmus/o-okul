@@ -61,6 +61,13 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await page.setViewportSize({ height: 900, width: 1280 });
     await open(page, db, "/kurum/donem-gecisi");
 
+    // U9: steps that cannot open yet read as pending, without an error marker.
+    const stepper = page.getByRole("navigation", { name: "Dönem geçişi adımları" });
+    await expect(stepper.getByText("Bekliyor", { exact: true })).toHaveCount(5);
+    await expect(stepper.getByText("Sıradaki", { exact: true })).toHaveCount(1);
+    await expect(stepper).not.toContainText("Engel");
+    await expect(stepper).not.toContainText("!");
+
     const calendar = page.getByRole("form", { name: "Yeni yıl ve dönem" });
     await calendar.getByRole("combobox", { name: "Akademik yıl", exact: true }).selectOption("year-new");
     await calendar.getByRole("combobox", { name: "Dönem", exact: true }).selectOption("term-new");
@@ -96,14 +103,31 @@ test.describe("Dönem geçişi sihirbazı", () => {
 
     await page.getByRole("button", { name: "Devam edin" }).click();
     const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
+    // DEC-20261103-01 (U13): the run asks for a confirmation naming the counts and the target; cancelling sends nothing.
     await apply.getByRole("button", { name: "Geçişi uygulayın" }).click();
+    const dialog = page.getByRole("dialog", { name: "Dönem geçişini onaylayın" });
+    await expect(dialog).toContainText("1 öğrencinin kaydı 2026-2027 1. Dönem için yenilenecek.");
+    await expect(dialog).toContainText("1 öğrenci mezun, 1 öğrenci ayrılan olarak işaretlenecek.");
+    await expect(dialog).toContainText("2026-2027 1. Dönem etkin dönem olacak");
+    await dialog.getByRole("button", { name: "Vazgeçin" }).click();
+    await expect(dialog).toBeHidden();
+    expect(writes(db)).toEqual([]);
+
+    await apply.getByRole("button", { name: "Geçişi uygulayın" }).click();
+    await page.getByRole("dialog", { name: "Dönem geçişini onaylayın" }).getByRole("button", { name: "Onaylayın ve uygulayın" }).click();
     await expect(apply.getByRole("alert")).toBeVisible();
     await expect(apply.getByRole("button", { name: "Yeniden deneyin" })).toBeEnabled();
     expect(writes(db).map((request) => request.path)).toEqual(["/students/enrollments/bulk-renew"]);
     await expect(page).toHaveURL(/kosu=/);
 
     await apply.getByRole("button", { name: "Yeniden deneyin" }).click();
+    await page.getByRole("dialog", { name: "Dönem geçişini onaylayın" }).getByRole("button", { name: "Onaylayın ve uygulayın" }).click();
     await expect(apply.getByText("Dönem geçişi tamamlandı.")).toBeVisible();
+    // U14: the apply step is marked done and the run button gives way to the next places to go.
+    await expect(stepper.getByText("Tamam", { exact: true })).toHaveCount(6);
+    await expect(apply.getByRole("button", { name: /Geçişi uygulayın|Yeniden deneyin/ })).toHaveCount(0);
+    await expect(apply.getByRole("link", { name: "Öğrencileri açın" })).toHaveAttribute("href", "/kurum/ogrenciler");
+    await expect(apply.getByRole("link", { name: "Kurum özetine gidin" })).toHaveAttribute("href", "/kurum");
     const writeRequests = writes(db);
     expect(writeRequests.map((request) => request.path)).toEqual([
       "/students/enrollments/bulk-renew",
@@ -127,7 +151,40 @@ test.describe("Dönem geçişi sihirbazı", () => {
     // A reload rebuilds the plan from the address and the server: nothing is left to apply.
     await page.reload();
     await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByText("Dönem geçişi tamamlandı.")).toBeVisible();
-    await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByRole("button", { name: "Geçişi uygulayın" })).toBeDisabled();
+    await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByRole("button", { name: "Geçişi uygulayın" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByRole("link", { name: "Öğrencileri açın" })).toBeVisible();
+  });
+
+  test("hedef değişince önceki uygulamanın sonucu tamamlandı göstermez; takvim seçilmeden adım tamam sayılmaz", async ({ page }) => {
+    const db = createDb();
+    db.renewFailuresLeft = 0;
+    await page.setViewportSize({ height: 900, width: 1280 });
+    // The address carries a later step but no year and term: no step reads as complete.
+    await open(page, db, "/kurum/donem-gecisi?adim=4");
+    const stepper = page.getByRole("navigation", { name: "Dönem geçişi adımları" });
+    await expect(stepper.getByText("Bekliyor", { exact: true }).first()).toBeVisible();
+    await expect(stepper.getByText("Tamam", { exact: true })).toHaveCount(0);
+    await expect(stepper).not.toContainText("✓");
+
+    await page.goto("/kurum/donem-gecisi?adim=6&yil=year-new&donem=term-new&e=class-8a%3Aclass-9a");
+    const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
+    await apply.getByRole("button", { name: "Geçişi uygulayın" }).click();
+    await page.getByRole("dialog", { name: "Dönem geçişini onaylayın" }).getByRole("button", { name: "Onaylayın ve uygulayın" }).click();
+    await expect(apply.getByText("Dönem geçişi tamamlandı.")).toBeVisible();
+    await expect(stepper.getByText("Tamam", { exact: true })).toHaveCount(6);
+
+    // Another target in the same page session: the finished run belongs to the old target and is not shown.
+    await stepper.getByRole("link", { name: /Yıl ve dönem/ }).click();
+    const calendar = page.getByRole("form", { name: "Yeni yıl ve dönem" });
+    await calendar.getByRole("combobox", { name: "Akademik yıl", exact: true }).selectOption("year-old");
+    await calendar.getByRole("combobox", { name: "Dönem", exact: true }).selectOption("term-old");
+    await expect(page).toHaveURL(/donem=term-old/);
+    await stepper.getByRole("link", { name: /Uygulama/ }).click();
+    await expect(apply).toBeVisible();
+    await expect(apply.getByText("Dönem geçişi tamamlandı.")).toHaveCount(0);
+    await expect(apply).not.toContainText("etkin dönem oldu");
+    await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeVisible();
+    await expect(stepper.locator("li").nth(5)).not.toHaveAttribute("data-status", "complete");
   });
 
   test("geri alınamaz onay verilmeden ve dönem başlamadan uygulama düğmesi kapalı kalır", async ({ page }) => {
@@ -153,6 +210,55 @@ test.describe("Dönem geçişi sihirbazı", () => {
     const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
     await expect(apply).toContainText("kurum genelinde yetkili bir yönetici uygulamalıdır");
     await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeDisabled();
+    // U14: a step with nothing to do before the run reads "Gerek yok", not "Tamamlandı".
+    const runSteps = apply.getByRole("list", { name: "Uygulama adımları" }).getByRole("listitem");
+    await expect(runSteps.nth(0)).toContainText("Bekliyor");
+    await expect(runSteps.nth(1)).toContainText("Gerek yok");
+    await expect(apply).not.toContainText("Tamamlandı");
+    expect(writes(db)).toEqual([]);
+  });
+
+  test("etkin dönem hedef seçilince eşleştirme mevcut sınıfı gösterir ve bilgi notu verir", async ({ page }) => {
+    const db = createDb();
+    // Ada has no enrollment in the active term yet; the others are already in it.
+    db.students[0]!.termId = "";
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await open(page, db, "/kurum/donem-gecisi?adim=2&yil=year-old&donem=term-old");
+
+    const mapping = page.getByRole("region", { name: "Sınıf eşleştirme", exact: true });
+    await expect(mapping.getByRole("status").filter({ hasText: "Hedef dönem etkin dönem: 2025-2026 2. Dönem" })).toBeVisible();
+    const table = mapping.getByRole("table", { name: "Sınıf eşleştirme listesi" });
+    await expect(table.getByRole("columnheader", { name: "Mevcut sınıf" })).toBeVisible();
+    await expect(mapping).not.toContainText("Geçen yılın sınıfı");
+    await expect(table).toContainText("8-A");
+    await expect(mapping).toContainText("2 öğrencinin kaydı zaten bu dönemde");
+    expect(writes(db)).toEqual([]);
+  });
+
+  test("ön izleme ve ayrılan seçimi öğrencileri Türkçe ad sırasıyla listeler", async ({ page }) => {
+    const db = createDb();
+    db.students.push(
+      { id: "student-a1", firstName: "Şule", lastName: "Arı", studentNo: "803", classId: "class-8a", status: "ACTIVE", termId: "term-old" },
+      { id: "student-a2", firstName: "Çağla", lastName: "Er", studentNo: "804", classId: "class-8a", status: "ACTIVE", termId: "term-old" },
+      { id: "student-a3", firstName: "İpek", lastName: "Can", studentNo: "805", classId: "class-8a", status: "ACTIVE", termId: "term-old" },
+    );
+    const expected = ["Ada Kaya", "Bora Demir", "Çağla Er", "İpek Can", "Şule Arı"];
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await open(page, db, "/kurum/donem-gecisi?adim=5&yil=year-new&donem=term-new&e=class-8a%3Aclass-9a");
+
+    const preview = page.getByRole("region", { name: "Ön izleme", exact: true });
+    const previewRows = preview.getByRole("table", { name: "Kaydı yenilenecek öğrenciler" }).getByRole("row");
+    await expect(previewRows).toHaveCount(expected.length + 1);
+    const previewNames = (await previewRows.allInnerTexts()).slice(1).map((text) => expected.find((name) => text.includes(name)));
+    expect(previewNames).toEqual(expected);
+
+    await page.getByRole("button", { name: "Geri" }).click();
+    await page.getByRole("button", { name: "Geri" }).click();
+    const exits = page.getByRole("region", { name: "Mezun ve ayrılanlar", exact: true });
+    const options = exits.getByLabel("Ayrılacak öğrenci").locator("option");
+    await expect(options).toHaveCount(expected.length + 1);
+    const optionNames = (await options.allInnerTexts()).slice(1).map((text) => expected.find((name) => text.includes(name)));
+    expect(optionNames).toEqual(expected);
     expect(writes(db)).toEqual([]);
   });
 

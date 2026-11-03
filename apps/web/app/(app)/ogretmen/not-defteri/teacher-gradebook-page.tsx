@@ -23,7 +23,7 @@ import {
   publishGradeAssessment,
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
-import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { discardUnsavedGradesRequest, GradeEntryGrid, toGradeGridStudents } from "../../_shared/gradebook/grade-entry-grid.js";
 import { useInAppNavigationGuard } from "../../_shell/navigation-guard.js";
 import { AccessPanel, PortalFrame } from "../../portals/_shared/portal-shell.js";
 
@@ -99,9 +99,7 @@ export function TeacherGradebookPage() {
   const options = authoringOptions(scopes, lookups, form);
   const detail = detailQuery.data;
   const students = useMemo(
-    () => (studentsQuery.data ?? [])
-      .filter((record) => detail && record.classId === detail.assessment.classId)
-      .map((record) => ({ id: record.id, name: `${record.firstName} ${record.lastName}` })),
+    () => toGradeGridStudents((studentsQuery.data ?? []).filter((record) => detail && record.classId === detail.assessment.classId)),
     [studentsQuery.data, detail],
   );
   const assessments = assessmentsQuery.data ?? [];
@@ -114,7 +112,11 @@ export function TeacherGradebookPage() {
     setBusy(true);
     try {
       await saveGradeEntries(accessToken, detail.assessment.id, entries);
-      await queryClient.invalidateQueries({ queryKey: ["teacher-gradebook-assessment", sessionKey, detail.assessment.id] });
+      // The list rows carry unpublishedDraftCount, so they are refreshed together with the detail.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["teacher-gradebook", sessionKey] }),
+        queryClient.invalidateQueries({ queryKey: ["teacher-gradebook-assessment", sessionKey, detail.assessment.id] }),
+      ]);
       // UAT F-24: a visible confirmation that also replaces the previous publish message, which no longer describes
       // the screen once a new draft exists.
       const publishLabel = detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla";

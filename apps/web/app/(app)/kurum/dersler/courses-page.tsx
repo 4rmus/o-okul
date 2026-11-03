@@ -241,7 +241,7 @@ export function CoursesPage() {
         emptyState={
           <EmptyState
             title="Henüz ders yok"
-            description="Ders ekleyerek öğretmen, program ve sınav akışlarını hazırlamaya başla."
+            description="Ders ekleyerek öğretmen, program ve sınav akışlarını hazırlamaya başlayın."
             primaryAction={{ label: "Ders ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />

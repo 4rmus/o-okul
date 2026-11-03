@@ -116,6 +116,9 @@ const files = {
     "apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx",
     "utf8",
   ),
+  "apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx": readFileSync("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", "utf8"),
+  "apps/web/app/(app)/_shared/gradebook/gradebook-api.ts": readFileSync("apps/web/app/(app)/_shared/gradebook/gradebook-api.ts", "utf8"),
+  "apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx": readFileSync("apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx", "utf8"),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
   "apps/web/app/(auth)/tenant-login-page.tsx": readFileSync("apps/web/app/(auth)/tenant-login-page.tsx", "utf8"),
   "apps/web/app/globals.css": readCssWithLocalImports("apps/web/app/globals.css"),
@@ -289,7 +292,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts e2e-next/term-transition-wizard-next.spec.ts e2e-next/list-export-next.spec.ts e2e-next/level-analytics-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts e2e-next/term-transition-wizard-next.spec.ts e2e-next/list-export-next.spec.ts e2e-next/level-analytics-next.spec.ts e2e-next/teacher-today-counts-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -1331,7 +1334,8 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Bugün yapılacaklar",
   // T3: öğretmen Bugün gelen kutusu; yeni sayaçlar ve sınıf/yoklama sütunları.
-  "6 iş",
+  // UAT U18: şerit başlığı yalnız bekleyen kartları sayar (Bugün kartıyla aynı sayı).
+  "5 iş",
   'getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })',
   'getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })',
   'getByRole("link", { name: /Okunmamış duyurular: 1 duyuru/ })',
@@ -1474,8 +1478,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   'getByLabel("Rol önizleme bilgisi")',
   "Duyuruları oku: 1 okunmamış",
   "Bugün yapılacaklar",
-  "3 iş",
-  "7 iş",
+  '.next-portal-action-strip__summary span")).toHaveText("2 iş")',
   "Ödevi aç: 1 atama",
   "Son sınavı incele: %81,7",
   "successRateDelta: 11.7",
@@ -1540,12 +1543,12 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "expectNoUnlabeledControls",
   'getByRole("region", { exact: true, name: "Ödevler" })',
   'getByRole("heading", { name: "Ödevler" })',
-  'getByRole("table", { name: "Ödev ve materyal atamaları" })',
+  'getByRole("table", { name: "Sınıf ödevleri ve materyal atamaları" })',
   'getByRole("region", { exact: true, name: "Öğretmen notları" })',
   'getByRole("table", { name: "Öğretmen notları" })',
   'getByRole("region", { exact: true, name: "Devamsızlık" })',
   'getByRole("table", { name: "Devamsızlık kayıtları" })',
-  'for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b"])',
+  'for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b", "homework-open", "teacher-math", "checkedBy"])',
   'getByRole("region", { exact: true, name: "Profil" })',
   'profileInfo).toHaveClass(/uh-info-grid/)',
   'profileInfo.locator(".uh-info-item")).toHaveCount(8)',
@@ -3902,7 +3905,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   "Field,",
   "Select,",
   '<Field label="Sınav seç">',
-  "Cevap anahtarı hazır sınavı seç, optik düzeni belirle ve dosya yüklemesini tek akışta kontrol et.",
+  "Cevap anahtarı hazır sınavı seçin, optik düzeni belirleyin ve dosya yüklemesini tek akışta kontrol edin.",
   "Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran format, optik yükleme ve eşleşmeyen satır çözümünü yürütür.",
   "opticalFormPreviewColumns",
   'renderOpticalFormPreview(selectedPresetForm.rows, "Seçili optik düzen alanları")',
@@ -3911,7 +3914,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   'className="next-optical-selector-grid"',
   'aria-label="Sınav seçimi"',
   'className="next-optical-selector-panel"',
-  "Cevap anahtarı hazırlanmış sınavı seç. Yeni sınav ve cevap anahtarı Sınavlar ekranında oluşturulur.",
+  "Cevap anahtarı hazırlanmış sınavı seçin. Yeni sınav ve cevap anahtarı Sınavlar ekranında oluşturulur.",
   "Sınav ve cevap anahtarı hazırlandıktan sonra optik yükleme burada başlar.",
   'className="next-optical-format-grid"',
   'className="next-optical-format-panel next-optical-format-panel--wide"',
@@ -3941,7 +3944,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   "Önce optik dosya yükleyin.",
   '<Field label="Yüklenen optik dosya">',
   'className="next-optical-quarantine-panel next-optical-quarantine-panel--wide"',
-  "Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izle.",
+  "Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izleyin.",
   "const studentSelectOptions = useMemo",
   "const quarantineColumns = useMemo",
   'className="next-optical-report-workspace"',
@@ -4609,7 +4612,9 @@ requireTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
   "Öğretmen bilgisi yok",
   "Bilinmeyen veli",
   "Dönem bilgisi yok",
-  "Neden bilgisi yok",
+  // UAT U15/U20: kayıt türü etiketi (yenileme vb.) ve kapanmış kayıt durumu.
+  "RENEWED: \"Kayıt yenileme\"",
+  "\"Kapandı\"",
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
@@ -4816,6 +4821,54 @@ requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.ts
   "Sınıf veya branş öğretmeni olarak atandığınız bir sınıf bulunmuyor.",
   "Değerlendirme oluşturulamadı. Atandığınız sınıf ve dersi seçip tekrar deneyin.",
 ]);
+// UAT 2026-11-03 U6/U7/U8: kurum not defteri "siz" hitabıyla yazılır; liste yayın ve bekleyen taslağı ayrı söyler;
+// not tablosu soyada göre Türkçe sıralanır (öğretmen ve yönetici ekranı aynı yardımcıyı kullanır).
+requireNoTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", [
+  "notlarını tanımla,",
+  "kontrol et ve yayınla.",
+  "bir değerlendirme tanımla.\"",
+  "<StatusBadge tone=\"success\">{`Yayında v${row.publishedVersion}`}</StatusBadge>",
+]);
+// UAT 2026-11-03 review: every kurum screen uses the "siz" address; these 2nd-person-singular forms must not return.
+// Substring match: each token ends with a space, a period or a quote so the "-sınız/-siniz" forms do not collide.
+requireNoTokensInFiles(
+  "apps/web/app/(app)/kurum",
+  appSourcePaths.filter((path) => path.startsWith("apps/web/app/(app)/kurum/")),
+  [
+    "abilirsin.",
+    "ebilirsin.",
+    "abilirsin ",
+    "ebilirsin ",
+    "abilirsin,",
+    "ebilirsin,",
+    "abilirsin?",
+    "ebilirsin?",
+    "abilirsin\"",
+    "ebilirsin\"",
+    "Kurumunu ",
+    "denersen ",
+    "eklemen önerilir",
+    "tekrar yaz\"",
+    "akışını tamamla.",
+    "tek akışta toparla.",
+    "pakette sakla.",
+    "kontrol et;",
+    "parolanı ",
+  ],
+);
+requireTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", [
+  "Yazılı, performans ve proje notlarını tanımlayın, girilen notları kontrol edin ve yayınlayın.",
+  "assessmentPublicationStatus(row)",
+  "toGradeGridStudents(studentsQuery.data?.data ?? [])",
+]);
+requireTokens("apps/web/app/(app)/_shared/gradebook/gradebook-api.ts", [
+  "not yayın bekliyor",
+]);
+requireTokens("apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx", [
+  "export function toGradeGridStudents(",
+  'new Intl.Collator("tr"',
+]);
+requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx", ["toGradeGridStudents("]);
 requireTokens("apps/web/app/(app)/portals/teacher-homework-create.tsx", [
   "Ödev verebileceğiniz sınıflar alınamadı.",
   "Sınıf veya branş öğretmeni ataması için kurum yöneticinizle görüşün.",

@@ -4,10 +4,11 @@ import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
-export type GradeAssessmentCreateInput = Omit<GradeAssessmentRecord, "id" | "createdAt" | "publishedVersion">;
+export type GradeAssessmentCreateInput = Omit<GradeAssessmentRecord, "id" | "createdAt" | "publishedVersion" | "unpublishedDraftCount">;
 
 export interface GradebookStore {
   createAssessment(input: GradeAssessmentCreateInput): Promise<GradeAssessmentRecord>;
+  /** Each record carries unpublishedDraftCount: students whose newest entry is still a draft. */
   listAssessments(filter: { classIds?: readonly string[]; termId?: string; courseId?: string }): Promise<GradeAssessmentRecord[]>;
   findAssessment(id: string): Promise<GradeAssessmentRecord | undefined>;
   listEntries(assessmentId: string): Promise<GradeEntryRecord[]>;
@@ -41,7 +42,11 @@ export class InMemoryGradebookStore implements GradebookStore {
       .filter((record) => (!filter.classIds || filter.classIds.includes(record.classId))
         && (!filter.termId || record.termId === filter.termId)
         && (!filter.courseId || record.courseId === filter.courseId))
-      .map((record) => ({ ...record }));
+      .map((record) => ({ ...record, unpublishedDraftCount: this.unpublishedDraftCount(record.id) }));
+  }
+
+  private unpublishedDraftCount(assessmentId: string): number {
+    return new Set(this.entries.filter((entry) => entry.assessmentId === assessmentId && !entry.publishedAt).map((entry) => entry.studentId)).size;
   }
 
   async findAssessment(id: string): Promise<GradeAssessmentRecord | undefined> {
@@ -118,12 +123,17 @@ export class PostgresGradebookStore implements GradebookStore {
 
   async listAssessments(filter: { classIds?: readonly string[]; termId?: string; courseId?: string }): Promise<GradeAssessmentRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
+      // Drafts live only on the newest version of each student (saveDrafts), so distinct students with an
+      // unpublished row are the students waiting for publish.
       const result = await client.query<GradeAssessmentRow>(
-        `SELECT * FROM "GradeAssessment"
-         WHERE ($1::text[] IS NULL OR "classId" = ANY($1))
-           AND ($2::text IS NULL OR "termId" = $2)
-           AND ($3::text IS NULL OR "courseId" = $3)
-         ORDER BY "heldOn" DESC, "createdAt" DESC`,
+        `SELECT a.*,
+           (SELECT count(DISTINCT e."studentId")::int FROM "GradeEntry" e
+             WHERE e."assessmentId" = a."id" AND e."publishedAt" IS NULL) AS "unpublishedDraftCount"
+         FROM "GradeAssessment" a
+         WHERE ($1::text[] IS NULL OR a."classId" = ANY($1))
+           AND ($2::text IS NULL OR a."termId" = $2)
+           AND ($3::text IS NULL OR a."courseId" = $3)
+         ORDER BY a."heldOn" DESC, a."createdAt" DESC`,
         [filter.classIds ? [...filter.classIds] : null, filter.termId ?? null, filter.courseId ?? null],
       );
       return result.rows.map(toAssessmentRecord);
@@ -222,6 +232,8 @@ interface GradeAssessmentRow {
   heldOn: Date | string;
   maxScore: string | number;
   publishedVersion: number | null;
+  /** Present only on list queries. */
+  unpublishedDraftCount?: number | string | null;
   createdById: string;
   createdAt: Date | string;
 }
@@ -250,6 +262,7 @@ function toAssessmentRecord(row: GradeAssessmentRow): GradeAssessmentRecord {
     heldOn: formatDate(row.heldOn),
     maxScore: Number(row.maxScore),
     ...(row.publishedVersion === null ? {} : { publishedVersion: row.publishedVersion }),
+    ...(row.unpublishedDraftCount === undefined || row.unpublishedDraftCount === null ? {} : { unpublishedDraftCount: Number(row.unpublishedDraftCount) }),
     createdById: row.createdById,
     createdAt: new Date(row.createdAt).toISOString(),
   };

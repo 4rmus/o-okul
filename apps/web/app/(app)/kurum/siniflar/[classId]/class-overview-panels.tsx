@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { DataTable, InfoGrid, InfoItem, LoadingState, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
-import type { ClassOverview, ClassOverviewAssessmentStatus, ClassOverviewTeacherAssignment } from "@o-okul/shared-types";
+import type {
+  ClassOverview,
+  ClassOverviewAssessmentStatus,
+  ClassOverviewTeacherAssignment,
+  TeacherAssignmentRole,
+} from "@o-okul/shared-types";
 import { useAuth } from "../../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../../src/api-client.js";
 import { canAccessHref, hasCapabilityForRoles } from "../../../_shared/access.js";
@@ -39,18 +44,20 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
   // Sınıfın bu dönemki tüm değerlendirmeleri; canlı not giren ataması olmayanlar da listede kalır.
   const assessments = sortAssessments(overview.assessments);
   const rollCall = rollCallLabel(overview);
+  // UAT U5: aynı öğretmenin sınıf ve branş atamaları tek satırda birleşir; değerlendirmeler bir kez sayılır.
+  const teacherRows = groupTeacherAssignments(overview.teacherAssignments);
 
-  const teacherColumns: Array<DataTableColumn<ClassOverviewTeacherAssignment>> = [
+  const teacherColumns: Array<DataTableColumn<TeacherGradeEntryRow>> = [
     {
       key: "teacher",
       header: "Öğretmen",
       mobilePriority: "primary",
       priority: "primary",
       sticky: "left",
-      render: (assignment) => (
+      render: (row) => (
         <span>
-          {assignment.teacherName}
-          <small> {assignmentRoleLabel(assignment.role)}</small>
+          {row.teacherName}
+          <small> {row.roles.map(assignmentRoleLabel).join(" · ")}</small>
         </span>
       ),
     },
@@ -59,7 +66,7 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
       header: "Ders",
       mobilePriority: "secondary",
       priority: "secondary",
-      render: (assignment) => assignment.courseName ?? (assignment.courseId ? "Ders eşleşmedi" : "Tüm dersler"),
+      render: (row) => row.courseLabel,
     },
     {
       key: "assessments",
@@ -179,8 +186,8 @@ export function ClassOverviewPanels({ classId }: { classId: string }) {
           density="compact"
           description="Değerlendirme sayısı, eksik giriş ve yayın bekleyen taslaklar; puanlar gösterilmez."
           emptyText="Sınıfa atanmış not giren öğretmen yok"
-          getRowKey={(assignment) => assignment.assignmentId}
-          rows={overview.teacherAssignments}
+          getRowKey={(row) => row.teacherId}
+          rows={teacherRows}
         />
         <DataTable
           caption="Değerlendirme giriş durumu"
@@ -220,7 +227,54 @@ function rollCallLabel(overview: ClassOverview): { description: string; label: s
   return { description: `${formatCount(rollCall.lessonCount)} ders programda`, label: "Alınmadı", tone: "danger" };
 }
 
-function assignmentStatus(assignment: ClassOverviewTeacherAssignment): { label: string; tone: StatusBadgeProps["tone"] } {
+interface TeacherGradeEntryRow {
+  teacherId: string;
+  teacherName: string;
+  roles: TeacherAssignmentRole[];
+  courseLabel: string;
+  assessmentCount: number;
+  missingEntryAssessmentCount: number;
+  unpublishedDraftAssessmentCount: number;
+}
+
+function groupTeacherAssignments(assignments: readonly ClassOverviewTeacherAssignment[]): TeacherGradeEntryRow[] {
+  const groups = new Map<string, ClassOverviewTeacherAssignment[]>();
+  // API sırası (soyad, ad) korunur; öğretmen ilk göründüğü yerde kalır.
+  for (const assignment of assignments) {
+    const group = groups.get(assignment.teacherId);
+    if (group) group.push(assignment);
+    else groups.set(assignment.teacherId, [assignment]);
+  }
+  return [...groups.entries()].map(([teacherId, group]) => {
+    const assessments = new Map<string, ClassOverviewAssessmentStatus>();
+    for (const assignment of group) {
+      for (const assessment of assignment.assessments) assessments.set(assessment.assessmentId, assessment);
+    }
+    const covered = [...assessments.values()];
+    // Sınıf öğretmeni önce gelir; aynı rol bir kez yazılır.
+    const roles = [...new Set(group.map((assignment) => assignment.role))]
+      .sort((left, right) => (left === "CLASS_TEACHER" ? 0 : 1) - (right === "CLASS_TEACHER" ? 0 : 1));
+    return {
+      teacherId,
+      teacherName: group[0]?.teacherName ?? "",
+      roles,
+      courseLabel: courseLabel(group),
+      assessmentCount: covered.length,
+      missingEntryAssessmentCount: covered.filter((assessment) => assessment.missingEntries).length,
+      unpublishedDraftAssessmentCount: covered.filter((assessment) => assessment.hasUnpublishedDraft).length,
+    };
+  });
+}
+
+function courseLabel(group: readonly ClassOverviewTeacherAssignment[]): string {
+  const coversAllCourses = group.some((assignment) => !assignment.courseId);
+  const courseNames = [...new Set(group.flatMap((assignment) => (assignment.courseId ? [assignment.courseName ?? "Ders eşleşmedi"] : [])))]
+    .sort((left, right) => left.localeCompare(right, "tr", { sensitivity: "base" }));
+  if (coversAllCourses) return courseNames.length > 0 ? `Tüm dersler · branş: ${courseNames.join(", ")}` : "Tüm dersler";
+  return courseNames.join(", ");
+}
+
+function assignmentStatus(assignment: TeacherGradeEntryRow): { label: string; tone: StatusBadgeProps["tone"] } {
   if (assignment.assessmentCount === 0) return { label: "Kapsamda değerlendirme yok", tone: "warning" };
   if (assignment.missingEntryAssessmentCount > 0) return { label: "Eksik giriş", tone: "warning" };
   if (assignment.unpublishedDraftAssessmentCount > 0) return { label: "Yayın bekliyor", tone: "info" };
@@ -238,7 +292,7 @@ function publicationStatus(assessment: ClassOverviewAssessmentStatus): { label: 
     : { label: "Giriş yok", tone: "neutral" };
 }
 
-function assignmentRoleLabel(role: ClassOverviewTeacherAssignment["role"]) {
+function assignmentRoleLabel(role: TeacherAssignmentRole) {
   return role === "CLASS_TEACHER" ? "Sınıf öğretmeni" : "Branş öğretmeni";
 }
 

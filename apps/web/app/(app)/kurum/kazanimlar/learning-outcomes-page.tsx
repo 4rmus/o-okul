@@ -349,11 +349,11 @@ export function LearningOutcomesPage() {
         aria-label="Kazanım yönetimi"
         columns={columns}
         density="compact"
-        description="Sınav ve optik analizlerinde kullanılacak kazanım kataloğunu yönet."
+        description="Sınav ve optik analizlerinde kullanılacak kazanım kataloğunu yönetin."
         emptyState={
           <EmptyState
             title="Kazanım yok"
-            description="İlk kazanımı ekleyerek sınav ve optik analizlerini hazırla."
+            description="İlk kazanımı ekleyerek sınav ve optik analizlerini hazırlayın."
             primaryAction={{ label: "Kazanım ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />

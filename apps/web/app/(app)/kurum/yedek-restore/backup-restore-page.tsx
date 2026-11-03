@@ -227,7 +227,7 @@ export function BackupRestorePage() {
         description="Seçili kayıtların JSON kopyasıdır. Dosya içeriklerini kapsamaz ve doğrudan geri yüklenemez."
         title="JSON Veri Dışa Aktarımı"
       >
-        <p>Öğrenci, veli, öğretmen, sınıf, finans, sınav, rapor, duyuru ve destek kayıtlarını JSON dosyası olarak indir.</p>
+        <p>Öğrenci, veli, öğretmen, sınıf, finans, sınav, rapor, duyuru ve destek kayıtlarını JSON dosyası olarak indirin.</p>
         {exportError ? <p className="next-form-error">{exportError}</p> : null}
       </Panel>
       <details>

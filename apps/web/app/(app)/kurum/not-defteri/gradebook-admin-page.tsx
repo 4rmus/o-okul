@@ -28,6 +28,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
+  assessmentPublicationStatus,
   createGradeAssessment,
   gradeKindLabels,
   listGradeAssessments,
@@ -35,7 +36,7 @@ import {
   publishGradeAssessment,
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
-import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { discardUnsavedGradesRequest, GradeEntryGrid, toGradeGridStudents } from "../../_shared/gradebook/grade-entry-grid.js";
 import { useInAppNavigationGuard } from "../../_shell/navigation-guard.js";
 
 interface AssessmentForm {
@@ -96,7 +97,7 @@ export function GradebookAdminPage() {
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
   const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const students = useMemo(
-    () => (studentsQuery.data?.data ?? []).map((record) => ({ id: record.id, name: `${record.firstName} ${record.lastName}` })),
+    () => toGradeGridStudents(studentsQuery.data?.data ?? []),
     [studentsQuery.data],
   );
   const selected = detailQuery.data;
@@ -110,9 +111,10 @@ export function GradebookAdminPage() {
     {
       key: "status",
       header: "Durum",
-      render: (row) => row.publishedVersion
-        ? <StatusBadge tone="success">{`Yayında v${row.publishedVersion}`}</StatusBadge>
-        : <StatusBadge tone="warning">Yayınlanmadı</StatusBadge>,
+      render: (row) => {
+        const status = assessmentPublicationStatus(row);
+        return <StatusBadge tone={status.tone}>{status.label}</StatusBadge>;
+      },
     },
     {
       key: "actions",
@@ -211,7 +213,11 @@ export function GradebookAdminPage() {
     setBusy(true);
     try {
       await saveGradeEntries(accessToken, selected.assessment.id, entries);
-      await queryClient.invalidateQueries({ queryKey: ["gradebook-assessment", tenantKey, selected.assessment.id] });
+      // The list row carries unpublishedDraftCount (UAT U7), so it is refreshed together with the detail.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["gradebook-assessments", tenantKey] }),
+        queryClient.invalidateQueries({ queryKey: ["gradebook-assessment", tenantKey, selected.assessment.id] }),
+      ]);
     } finally {
       setBusy(false);
     }
@@ -235,11 +241,11 @@ export function GradebookAdminPage() {
         )}
         aria-label="Not defteri yönetimi"
         columns={columns}
-        description="Yazılı, performans ve proje notlarını tanımla, girilen notları kontrol et ve yayınla. Deneme sonuçları bu ekranda değil, Sınavlar'dadır."
+        description="Yazılı, performans ve proje notlarını tanımlayın, girilen notları kontrol edin ve yayınlayın. Deneme sonuçları bu ekranda değil, Sınavlar'dadır."
         emptyState={(
           <EmptyState
             title="Değerlendirme yok"
-            description="Not girişi için önce sınıf, ders ve dönem seçerek bir değerlendirme tanımla."
+            description="Not girişi için önce sınıf, ders ve dönem seçerek bir değerlendirme tanımlayın."
             primaryAction={{ label: "Değerlendirme ekle", onClick: () => void openForm() }}
           />
         )}

@@ -448,6 +448,45 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expectTeacherPageClean(page, "teacher-homework-select-390");
   });
 
+  test("teslim tarihi geçen ödev 'Süresi geçti' görünür, teslim listesi ada göre sıralanır (UAT U19)", async ({ page }) => {
+    await openTeacherPortal(page, { height: 900, width: 1024 }, { path: "/ogretmen/odevler" });
+    await page.route("**/api/v1/me/teacher/homework", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      return fulfillData(route, [
+        { classId: "class-8a", dueAt: "2026-06-15T12:00:00.000Z", id: "homework-overdue", tenantId: "tenant-teacher", title: "Geçmiş ödev" },
+        ...createHomework(),
+      ]);
+    });
+    await page.route("**/api/v1/homework/*/submissions", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      // API sırası ada göre değil; ekran Türkçe ad sırasına dizer.
+      return fulfillData(route, [
+        { homeworkId: "homework-overdue", status: "NOT_SUBMITTED", studentId: "student-c" },
+        { homeworkId: "homework-overdue", status: "NOT_SUBMITTED", studentId: "student-b" },
+        { homeworkId: "homework-overdue", status: "SUBMITTED", studentId: "student-a", submittedAt: "2026-06-14T09:00:00.000Z" },
+      ]);
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+
+    const table = page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }).getByRole("table", { name: "Öğretmen ödev kontrol kayıtları" });
+    await expect(table.getByRole("row").filter({ hasText: "Geçmiş ödev" })).toContainText("Süresi geçti");
+    await expect(table.getByRole("row").filter({ hasText: "Geçmiş ödev" })).not.toContainText("Bekliyor");
+    await expect(table.getByRole("row").filter({ hasText: "Kesirler tekrar" })).toContainText("Bekliyor");
+
+    const submissions = page.getByRole("region", { exact: true, name: "Ödev teslim durumu" });
+    await expect(submissions.getByRole("combobox", { name: "Ödev" })).toHaveValue("homework-overdue");
+    const rows = submissions.getByRole("table", { name: "Öğrenci teslim durumları" }).locator("tbody tr");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText("Ada Kaya");
+    await expect(rows.nth(0)).toContainText("Teslim edildi");
+    await expect(rows.nth(1)).toContainText("Bora Yilmaz");
+    await expect(rows.nth(1)).toContainText("Teslim edilmedi · süresi geçti");
+    // Adı listede olmayan öğrenci sona düşer.
+    await expect(rows.nth(2)).toContainText("Bilinmeyen öğrenci");
+    await expectTeacherPageClean(page, "teacher-homework-overdue-1024");
+  });
+
   test("öğretmen portalında düşen istek yalnız kendi bölümünü işaretler", async ({ page }) => {
     const failReadPaths = new Set(["/me/teacher/teacher-notes", "/me/teacher/attendance"]);
     await openTeacherPortal(page, { height: 844, width: 390 }, { failReadPaths, path: "/ogretmen/ogrenci-takibi" });
@@ -552,7 +591,8 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   await expect(actionStrip).toBeVisible();
   await expect(actionStrip.getByRole("heading", { name: "Bekleyen işler" })).toBeVisible();
   await expect(actionStrip).toContainText("Bugün yapılacaklar");
-  await expect(actionStrip).toContainText("6 iş");
+  // UAT U18: başlık yalnız bekleyen kartları sayar ve "Bekleyen iş" kartıyla aynı sayıyı gösterir; rapor kartı iş sayılmaz.
+  await expect(actionStrip).toContainText("5 iş");
   await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", attendanceHref);
   await expect(actionStrip.getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
   await expect(actionStrip.getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })).toHaveAttribute("href", `/ogretmen/not-defteri${suffix}`);

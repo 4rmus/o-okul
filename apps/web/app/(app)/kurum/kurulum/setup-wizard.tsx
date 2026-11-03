@@ -738,12 +738,12 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   }
 
   return (
-    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırla.">
+    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırlayın.">
       <section className="next-onboarding-hero" aria-label="Kurulum karşılama">
         <div>
           <span>{isFinished ? "Temel kurum kayıtları oluşturuldu" : "İlk giriş akışı"}</span>
-          <h2>{draft.general.institutionName || "Kurumunu birlikte hazırlayalım"}</h2>
-          <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
+          <h2>{draft.general.institutionName || "Kurumunuzu birlikte hazırlayalım"}</h2>
+          <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparlayın.</p>
         </div>
         <MetricGrid className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri" role="region">
           <MetricCard

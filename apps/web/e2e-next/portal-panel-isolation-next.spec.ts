@@ -44,8 +44,10 @@ test.describe("Portal panel yalıtımı", () => {
   });
 
   test("veli: düşen ödev paneli tek başına hata verir, özet ve diğer paneller yerinde kalır", async ({ page }) => {
+    // DEC-20261103-01: ödev paneli iki kaynaktan okur; ikisi de düşünce tek hata paneli görünür.
     const homeworkPath = "/me/guardian/students/student-a/homework/material-assignments";
-    const mock = await openPortal(page, "GUARDIAN", "/veli", guardianResponse, [homeworkPath]);
+    const classHomeworkPath = "/me/guardian/students/student-a/homework";
+    const mock = await openPortal(page, "GUARDIAN", "/veli", guardianResponse, [homeworkPath, classHomeworkPath]);
 
     await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
     await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toContainText("Ada Kaya");
@@ -60,7 +62,9 @@ test.describe("Portal panel yalıtımı", () => {
     await homework.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(homework.getByRole("alert")).toHaveCount(0);
     await expect(homework).toContainText("Problemler föyü");
+    await expect(homework).toContainText("Kesirler sınıf ödevi");
     await expect.poll(() => countRequests(mock)[homeworkPath]).toBe((before[homeworkPath] ?? 0) + 1);
+    await expect.poll(() => countRequests(mock)[classHomeworkPath]).toBe((before[classHomeworkPath] ?? 0) + 1);
     const after = countRequests(mock);
     for (const path of [
       "/me/guardian/students",
@@ -73,6 +77,39 @@ test.describe("Portal panel yalıtımı", () => {
     }
     // Finans izni kapalıyken ödeme planı hiç istenmez.
     expect(after["/me/guardian/students/student-a/payment-plans"]).toBeUndefined();
+  });
+
+  test("veli: yalnız sınıf ödevi düşerse materyal atamaları görünür, eksik kaynak yazılır", async ({ page }) => {
+    const classHomeworkPath = "/me/guardian/students/student-a/homework";
+    const mock = await openPortal(page, "GUARDIAN", "/veli/odevler", guardianResponse, [classHomeworkPath]);
+
+    const homework = page.getByRole("region", { exact: true, name: "Ödevler" });
+    await expect(homework.getByRole("alert")).toContainText("Sınıf ödevleri şu an alınamadı; liste eksik olabilir.");
+    await expect(homework).toContainText("Problemler föyü");
+    const before = countRequests(mock);
+
+    mock.failures.clear();
+    await homework.getByRole("button", { name: "Tekrar dene" }).click();
+    await expect(homework.getByRole("alert")).toHaveCount(0);
+    await expect(homework).toContainText("Kesirler sınıf ödevi");
+    await expect.poll(() => countRequests(mock)[classHomeworkPath]).toBe((before[classHomeworkPath] ?? 0) + 1);
+    expect(countRequests(mock)["/me/guardian/students/student-a/homework/material-assignments"]).toBe(before["/me/guardian/students/student-a/homework/material-assignments"]);
+  });
+
+  test("veli: bir ödev kaynağı düşünce özet sayaçları kesin ve başarılı sayı göstermez", async ({ page }) => {
+    const classHomeworkPath = "/me/guardian/students/student-a/homework";
+    await openPortal(page, "GUARDIAN", "/veli", guardianResponse, [classHomeworkPath]);
+
+    // Only the material assignment (1) arrived: the count is a lower bound in a warning tone, never "Tamam".
+    const actions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
+    const homeworkAction = actions.getByRole("link", { name: /Ödevi kontrol et: en az 1 açık ödev/ });
+    await expect(homeworkAction).toHaveAttribute("aria-label", /Eksik/);
+    await expect(homeworkAction).not.toHaveAttribute("aria-label", /Tamam/);
+    await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toContainText("en az 1 açık ödev");
+    const metric = page.getByRole("region", { exact: true, name: "Portal özeti" }).locator(".uh-metric-card").filter({ hasText: "Açık ödev" });
+    await expect(metric).toContainText("en az 1");
+    await expect(metric).toHaveClass(/uh-metric-card--warning/);
+    await expect(metric).not.toHaveClass(/uh-metric-card--success/);
   });
 
   test("öğretmen: düşen program bölümü tek başına hata verir, Tekrar dene yalnız programı ister", async ({ page }) => {
@@ -198,6 +235,9 @@ function guardianResponse(pathName: string): unknown {
   if (pathName === `${prefix}/announcements`) return [announcement];
   if (pathName === `${prefix}/homework/material-assignments`) {
     return [{ createdAt: "2026-06-10T09:00:00.000Z", id: "assignment-a", materialId: "material-a", materialTitle: "Problemler föyü", studentId: "student-a", tenantId: "tenant-panel" }];
+  }
+  if (pathName === `${prefix}/homework`) {
+    return [{ classId: "class-8a", dueAt: "2026-06-20T12:00:00.000Z", id: "homework-class-a", submission: { homeworkId: "homework-class-a", status: "NOT_SUBMITTED", studentId: "student-a" }, title: "Kesirler sınıf ödevi" }];
   }
   if (pathName === `${prefix}/attendance/summary`) return { absent: 0, excused: 0, late: 0, present: 10, studentId: "student-a", total: 10 };
   if (pathName === `${prefix}/overview`) return { examSeries: [], schoolGrades: [] };

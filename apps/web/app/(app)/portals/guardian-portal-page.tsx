@@ -19,6 +19,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentEnrollmentRecord,
+  StudentHomeworkRecord,
   StudentProfileRecord,
   StudentRecord,
   SupportTicketRecord,
@@ -33,7 +34,7 @@ import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { PortalAttendanceCalendar } from "./_shared/attendance-calendar.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, PaymentPlansPanel } from "./_shared/guardian-panels.js";
-import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
+import { GuardianHomeworkPanel, countOpenGuardianHomework } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
   PortalMetricGrid,
@@ -112,6 +113,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       rolePreviewToken,
     ),
   );
+  // DEC-20261103-01: sınıf ödevleri (öğrencinin teslim durumuyla) ayrı sorgudur; biri düşerse diğeri yine gösterilir.
+  const classHomeworkQuery = usePortalPanelQuery(panelKey("class-homework"), studentReady && panels.homework, get<StudentHomeworkRecord[]>("/homework"));
   const supportTicketsQuery = usePortalPanelQuery(
     panelKey("support-tickets"),
     studentReady && panels.support,
@@ -155,6 +158,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
     enrollmentsQuery,
     announcementsQuery,
     homeworkQuery,
+    classHomeworkQuery,
     supportTicketsQuery,
     attendanceQuery,
     teacherNotesQuery,
@@ -229,6 +233,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   }
 
   const homeworkAssignments = homeworkQuery.data ?? emptyList<HomeworkMaterialAssignmentRecord>();
+  const classHomework = classHomeworkQuery.data ?? emptyList<StudentHomeworkRecord>();
   const data = {
     announcements: announcementsQuery.data ?? emptyList<AnnouncementRecord>(),
     attendance: attendanceQuery.data?.records ?? emptyList<AttendanceRecord>(),
@@ -257,7 +262,20 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const unreadAnnouncements = (data?.announcements ?? []).filter((announcement) => !announcement.readAt).length;
   const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
   const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
-  const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
+  // UAT U17: "Ödev" sayısı açık işleri sayar (teslim edilmemiş sınıf ödevi + materyal ataması), öğrenci portalıyla aynı.
+  const openHomeworkCount = countOpenGuardianHomework(classHomework, homeworkAssignments);
+  const homeworkLoading = homeworkQuery.isLoading || classHomeworkQuery.isLoading;
+  const homeworkSourceQueries = [homeworkQuery, classHomeworkQuery];
+  // A failed source makes the count a lower bound, never a definite (success-toned) number.
+  const homeworkPartial = !homeworkLoading && homeworkSourceQueries.some((query) => query.isError);
+  const homeworkPartialValue = openHomeworkCount > 0 ? `en az ${openHomeworkCount}` : "Alınamadı";
+  const homeworkStatus = homeworkPartial
+    ? openHomeworkCount > 0 ? `en az ${openHomeworkCount} açık ödev` : "Alınamadı"
+    : `${openHomeworkCount} açık ödev`;
+  const homeworkDetail = homeworkPartial ? "Ödevlerin bir kısmı alınamadı" : "Sınıf ödevleri ve materyal atamaları";
+  const homeworkGateQueries = homeworkSourceQueries.every((query) => query.isError)
+    ? homeworkSourceQueries
+    : homeworkSourceQueries.filter((query) => query.isLoading);
   const attendanceStatus = formatAttendanceSummary(data?.attendanceSummary);
   // İzin okunurken finans ve destek "Kapalı" değil "Yükleniyor…" gösterir; kapalı yalnız okunan izin false ise yazılır.
   const financeLoading = preferencesQuery.isLoading || (panels.payments && preferencesQuery.isFetching) || paymentPlansQuery.isLoading;
@@ -268,6 +286,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
     : canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
   const financeStatus = financeLoading ? panelLoadingValue : canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
   const supportReadOnly = isRolePreview || !canOpenSupportTickets;
+  const hasPendingPayment = canViewFinance && !financeLoading && (data?.paymentPlans ?? []).some((plan) =>
+    plan.installments.some((installment) => installment.status === "PENDING"));
   const selectedStudentLabel = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Seçilmedi";
   const selectedStudentDetail = data?.profile?.className ?? "Bağlı öğrenci";
   const portalSubtitle = guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti");
@@ -279,6 +299,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref("/veli/ogrenci", isRolePreview),
       key: "student",
       label: "Öğrenci seç",
+      pending: false,
       statusLabel: selectedStudent ? "Seçili" : "Bekliyor",
       tone: selectedStudent ? "info" : "neutral",
       value: selectedStudentLabel,
@@ -290,20 +311,22 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref("/veli/duyurular", isRolePreview),
       key: "announcement",
       label: "Duyuruları oku",
+      pending: unreadAnnouncements > 0,
       statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
       tone: unreadAnnouncements > 0 ? "warning" : "success",
       value: announcementStatus,
     },
     {
-      actionLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Kontrol" : "Hazır",
+      actionLabel: homeworkPartial || openHomeworkCount > 0 ? "Kontrol" : "Hazır",
       contextLabel: "Ödev",
-      detail: "Öğrenci çalışma takibi",
+      detail: homeworkDetail,
       href: guardianPortalHref("/veli/odevler", isRolePreview),
       key: "homework",
       label: "Ödevi kontrol et",
-      statusLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Takip" : "Tamam",
-      tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "success",
-      value: homeworkStatus,
+      pending: openHomeworkCount > 0,
+      statusLabel: homeworkPartial ? "Eksik" : openHomeworkCount > 0 ? "Takip" : "Tamam",
+      tone: homeworkPartial ? "warning" : openHomeworkCount > 0 ? "info" : "success",
+      value: homeworkLoading ? panelLoadingValue : homeworkStatus,
     },
     {
       actionLabel: financeLoading ? "Bekle" : canViewFinance ? "Takip" : "Kapalı",
@@ -312,6 +335,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref("/veli/odemeler", isRolePreview),
       key: "finance",
       label: "Ödeme durumunu gör",
+      pending: hasPendingPayment,
       statusLabel: financeLoading ? "Yükleniyor" : canViewFinance ? "İzinli" : "Kapalı",
       tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
       value: financeLoading ? panelLoadingValue : canViewFinance ? financeStatus : "Ödeme izni kapalı",
@@ -325,6 +349,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref("/veli/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
+      pending: !supportLoading && canOpenSupportTickets && openSupportTickets > 0,
       statusLabel: supportLoading && !isRolePreview ? "Yükleniyor" : supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
       tone: !supportReadOnly && openSupportTickets > 0 ? "warning" : "neutral",
       value: supportStatus,
@@ -336,6 +361,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref("/veli/raporlar", isRolePreview),
       key: "report",
       label: "Son sınavı incele",
+      pending: false,
       statusLabel: "Başarı %",
       tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
       value: reportQuery.isLoading ? panelLoadingValue : formatPercentNumber(reportSuccess),
@@ -347,6 +373,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       href: guardianPortalHref(isRolePreview ? "/veli" : "/veli/bildirimler", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
+      pending: false,
       statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       tone: isRolePreview ? "neutral" : "info",
       value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
@@ -394,9 +421,9 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               },
               {
                 label: "Ödev",
-                value: homeworkQuery.isLoading ? panelLoadingValue : `${data?.homeworkAssignments.length ?? 0} atama`,
-                detail: "Öğrenci çalışma takibi",
-                tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
+                value: homeworkLoading ? panelLoadingValue : homeworkStatus,
+                detail: homeworkDetail,
+                tone: homeworkPartial ? "warning" : openHomeworkCount > 0 ? "info" : "neutral",
               },
               {
                 label: "Ödeme",
@@ -429,7 +456,9 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
             items={[
               { label: "Devamsızlık", value: attendanceStatus },
               { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
-              { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
+              homeworkPartial
+                ? { label: "Açık ödev", value: homeworkPartialValue, description: "Ödevlerin bir kısmı alınamadı", tone: "warning" }
+                : { label: "Açık ödev", value: homeworkLoading ? panelLoadingValue : openHomeworkCount },
               { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
               { label: "Net", value: formatNetNumber(reportTotal?.net) },
               { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
@@ -496,12 +525,22 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               </PortalPanelGate>
             </div> : null}
             {view === "overview" || view === "homework" ? <div id="portal-homework">
-              <PortalPanelGate label="Ödevler" queries={[homeworkQuery]} subject="Ödevler" title="Ödevler">
-                <HomeworkAssignmentsPanel
-                  assignments={data?.homeworkAssignments ?? []}
+              {/* İki kaynak da düşerse tek hata paneli; biri düşerse tablo diğerini gösterir ve eksik kaynağı yazar. */}
+              <PortalPanelGate
+                label="Ödevler"
+                queries={homeworkGateQueries}
+                subject="Ödevler"
+                title="Ödevler"
+              >
+                <GuardianHomeworkPanel
+                  classHomework={classHomework}
+                  classHomeworkFailed={classHomeworkQuery.isError}
                   courseNames={courseNameById}
                   limit={view === "overview" ? 3 : undefined}
+                  materialAssignments={homeworkAssignments}
+                  materialAssignmentsFailed={homeworkQuery.isError}
                   moreHref={view === "overview" ? guardianPortalHref("/veli/odevler", isRolePreview) : undefined}
+                  onRetry={() => retryFailedPanels(classHomeworkQuery, homeworkQuery)}
                   termNames={termNameById}
                 />
               </PortalPanelGate>

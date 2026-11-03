@@ -224,10 +224,10 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   expect(download.suggestedFilename()).toBe("o-okul-tenant-a-2026-06-14.json");
   expect(tenantExportGetCount).toBe(1);
   await page.getByLabel("Yeni yedek parolası", { exact: true }).fill("uzun-yedek-parolasi");
-  await page.getByLabel("Yedek parolasını tekrar yaz").fill("farkli-yedek-parolasi");
+  await page.getByLabel("Yedek parolasını tekrar yazın", { exact: true }).fill("farkli-yedek-parolasi");
   await page.getByRole("button", { name: "Şifreli yedeği indir", exact: true }).click();
   await expect(page.getByLabel("Cihazda şifreli kurum yedeği").getByRole("alert")).toHaveText("Yedek parolaları eşleşmiyor."); expect(deviceDownloads).toBe(0);
-  await page.getByLabel("Yedek parolasını tekrar yaz").fill("uzun-yedek-parolasi");
+  await page.getByLabel("Yedek parolasını tekrar yazın", { exact: true }).fill("uzun-yedek-parolasi");
   const encryptedDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Şifreli yedeği indir", exact: true }).click();
   expect((await encryptedDownload).suggestedFilename()).toMatch(/\.ookulbackup$/); expect(deviceDownloads).toBe(1);

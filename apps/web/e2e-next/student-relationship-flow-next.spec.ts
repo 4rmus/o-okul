@@ -499,8 +499,10 @@ test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
   test("kayıtlar sekmesi olayları sınırlı isteklerle gösterir; genel bakış bu istekleri atmaz", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 1280, height: 900 }, { requestedPaths, section: "overview", timelineFixtures: true });
-    const timelinePaths = ["/grade-assessments/students/student-a/published", "/homework/students/student-a", "/development/assessments", "/attendance"];
+    const timelinePaths = ["/grade-assessments/students/student-a/published", "/development/assessments", "/attendance"];
     expect(requestedPaths.filter((path) => timelinePaths.includes(path))).toEqual([]);
+    // UAT U1: Genel bakış "Açık ödev" kartı sınıf ödevini sayar; bu tek istek zaman çizelgesiyle paylaşılır.
+    await expect.poll(() => requestedPaths.filter((path) => path === "/homework/students/student-a").length).toBe(1);
 
     await openRecordsSection(page);
     const timeline = page.getByRole("region", { name: "Öğrenci zaman çizelgesi" });
@@ -537,6 +539,56 @@ test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
     await expectNoHorizontalOverflow(page, "student-timeline-desktop");
     await expectNoUnlabeledControls(page, "student-timeline-desktop");
   });
+
+  test("Açık ödev kartı ve Ödevler paneli sınıf ödevini teslim durumuyla gösterir (UAT U1)", async ({ page }) => {
+    await openStudentDetail(page, { width: 1280, height: 900 }, {
+      responseOverrides: {
+        "/homework/students/student-a": [
+          { classId: "class-11a", dueAt: "2026-10-31T12:00:00.000Z", id: "homework-open", title: "S1-11 sınıf ödevi", submission: { homeworkId: "homework-open", status: "NOT_SUBMITTED", studentId: "student-a" } },
+          { classId: "class-11a", id: "homework-done", title: "Teslim edilen ödev", submission: { homeworkId: "homework-done", status: "SUBMITTED", studentId: "student-a", submittedAt: "2026-10-20T09:00:00.000Z" } },
+        ],
+      },
+      section: "overview",
+    });
+
+    const homeworkCard = page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" }).locator(".next-operation-summary__item").filter({ hasText: "Açık ödev" });
+    // Açık ödev = teslim edilmemiş sınıf ödevi (1) + materyal ataması (0); teslim edilen sayılmaz.
+    await expect(homeworkCard.locator(".uh-metric-card__value")).toHaveText("1");
+    const homeworkTable = page.getByLabel("Ödevler", { exact: true }).getByRole("table", { name: "Öğrenci ödev kayıtları" });
+    await expect(homeworkTable).toContainText("S1-11 sınıf ödevi");
+    await expect(homeworkTable).toContainText("Sınıf ödevi");
+    await expect(homeworkTable).toContainText("Teslim edilmedi");
+    await expect(homeworkTable).toContainText("Teslim edilen ödev");
+    await expect(homeworkTable).not.toContainText("homework-open");
+    await expect(homeworkTable).not.toContainText("Sınıf ödevi veya materyal ataması yok");
+    await expectNoHorizontalOverflow(page, "student-homework-1280");
+  });
+
+  for (const viewport of [{ width: 320, height: 800 }, { width: 768, height: 1024 }]) {
+    test(`kapanmış kayıt Aktif görünmez; Yoklama süzgeci yalnız devamsızlığı listelediğini söyler (UAT U2/U15) ${viewport.width}px`, async ({ page }) => {
+      const renewed = { classId: "class-11a", id: "enrollment-renewed", reason: "RENEWED", startsAt: "2026-11-03T00:00:00.000Z", status: "ACTIVE", studentId: "student-a", tenantId: "tenant-flow" };
+      const closed = { classId: "class-11a", endsAt: "2026-11-03T00:00:00.000Z", id: "enrollment-closed", reason: "CREATED", startsAt: "2026-10-11T00:00:00.000Z", status: "ACTIVE", studentId: "student-a", tenantId: "tenant-flow" };
+      await openStudentDetail(page, viewport, {
+        responseOverrides: {
+          "/attendance": [{ classId: "class-11a", date: istanbulDayKey(-1), id: "att-present", status: "PRESENT", studentId: "student-a", tenantId: "tenant-flow" }],
+          "/students/student-a/overview": { ...createStudentOverview(), activeEnrollment: renewed, enrollments: [renewed, closed] },
+        },
+        section: "records",
+      });
+
+      const history = page.getByLabel("Kayıt geçmişi", { exact: true });
+      const mainRows = history.locator("tbody tr:not([data-mobile-detail])");
+      const closedRow = mainRows.filter({ hasText: "İlk kayıt" });
+      await expect(closedRow).toContainText("Kapandı");
+      await expect(closedRow).not.toContainText("Aktif");
+      await expect(mainRows.filter({ hasText: "Kayıt yenileme" })).toContainText("Aktif");
+
+      const timeline = page.getByRole("region", { name: "Öğrenci zaman çizelgesi" });
+      await timeline.getByLabel("Olay türü").selectOption("attendance");
+      await expect(timeline).toContainText("\"Var\" yoklamaları zaman çizelgesine girmez; yoklama takviminde görünür.");
+      await expectNoHorizontalOverflow(page, `student-records-${viewport.width}`);
+    });
+  }
 
   test("finans yetkisi olmayan rol finans olayı görmez; dar ekranda taşma olmaz", async ({ page }) => {
     const requestedPaths: string[] = [];
@@ -632,6 +684,7 @@ async function openStudentDetail(
     failFirstContactCreate?: boolean;
     guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
+    responseOverrides?: Record<string, unknown>;
     roles?: string[];
     section?: "overview" | "records";
     timelineFixtures?: boolean;
@@ -664,6 +717,8 @@ async function installStudentApiMocks(
     failFirstContactCreate?: boolean;
     guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
+    /** Yol başına sabit GET yanıtı (UAT U1/U2/U15 senaryoları). */
+    responseOverrides?: Record<string, unknown>;
     roles?: string[];
     timelineFixtures?: boolean;
   } = {},
@@ -677,6 +732,11 @@ async function installStudentApiMocks(
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(pathName);
+    const override = route.request().method() === "GET" ? options.responseOverrides?.[pathName] : undefined;
+    if (override !== undefined) {
+      await fulfillData(route, override);
+      return;
+    }
     if (pathName === "/students/student-a/contacts" && route.request().method() === "POST") {
       options.contactCreateRequests?.push({
         body: route.request().postData() ?? "",
