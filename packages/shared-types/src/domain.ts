@@ -408,6 +408,13 @@ export interface EmployeeAccessRecord {
   employmentEndsAt?: string;
   userId?: string;
   accountStatus?: string;
+  /**
+   * Read model only (GET /employees, DEC-20261102-01 / F-21): the linked account's e-mail. Once an account is
+   * bound it is the contact of record; `workEmail` stays an HR field.
+   */
+  accountEmail?: string;
+  /** Read model only (GET /employees): the Teacher profile bound to this employee, when one exists. */
+  teacherId?: string;
   access?: {
     membershipId: string;
     staffRole?: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";
@@ -2006,6 +2013,48 @@ export interface TeacherNoteRecord {
 
 export type DevelopmentAssessmentVisibility = "INTERNAL" | "GUARDIAN";
 
+/** DEC-20261102-05: upper bound for the free-text mentor note on a development assessment. */
+export const developmentMentorNoteMaxLength = 1000;
+
+export interface DevelopmentCriterionRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  scaleMin: number;
+  scaleMax: number;
+  sortOrder: number;
+}
+
+export interface DevelopmentScoreRecord {
+  id: string;
+  tenantId: string;
+  assessmentId: string;
+  criterionId: string;
+  score: number;
+}
+
+/**
+ * Append-only (DEC-20261102-05): there is no update or delete route; a correction is a new record.
+ * INTERNAL records reach only admin and guidance readers and the author teacher.
+ */
+export interface DevelopmentAssessmentRecord {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  teacherId: string;
+  termId?: string;
+  periodLabel: string;
+  mentorNote?: string;
+  visibility: DevelopmentAssessmentVisibility;
+  createdAt?: string;
+  scores: DevelopmentScoreRecord[];
+}
+
+/** Students the signed-in teacher may write development assessments for (CLASS_TEACHER or GUIDANCE_COUNSELOR). */
+export interface DevelopmentAuthoringScope {
+  studentIds: string[];
+}
+
 export interface DevelopmentCriterionCreateRequest {
   name: string;
   scaleMin?: number;
@@ -2020,10 +2069,13 @@ export interface DevelopmentAssessmentScoreInput {
 
 export interface DevelopmentAssessmentCreateRequest {
   studentId: string;
+  /** Required for admin writers; ignored for a teacher, who is always the author. */
   teacherId?: string;
   termId?: string;
   periodLabel: string;
+  /** At most developmentMentorNoteMaxLength characters. */
   mentorNote?: string;
+  /** Omitted means INTERNAL; GUARDIAN must be requested explicitly. */
   visibility?: DevelopmentAssessmentVisibility;
   scores: DevelopmentAssessmentScoreInput[];
 }
@@ -2729,6 +2781,97 @@ export interface InstitutionDashboardSummary {
    * attributed to a campus (import quarantine, the latest exam and its report) read 0 or are left out.
    */
   campusScoped?: boolean;
+  /**
+   * DEC-20261102-04: academic operations counts for academic:manage viewers, filtered by the same campus scope as the
+   * counts above. Left out when the viewer lacks academic:manage or the source tables cannot be read.
+   */
+  academicOps?: InstitutionDashboardAcademicOps;
+}
+
+/** DEC-20261102-04: counts only; never draft scores or averages (ADR-0011). */
+export interface InstitutionDashboardAcademicOps {
+  /** Istanbul calendar day the roll-call count refers to (YYYY-MM-DD). */
+  date: string;
+  /** Classes with a scheduled lesson today and a non-empty roster where no roster student is marked yet. */
+  rollCallMissingClassCount: number;
+  /**
+   * Current-term assessments held on or before the date whose entries cover fewer students than the class roster; an
+   * assessment dated after the date is not yet due.
+   */
+  missingGradeEntryAssessmentCount: number;
+  /** Current-term assessments that carry at least one unpublished draft entry. */
+  unpublishedDraftAssessmentCount: number;
+}
+
+/**
+ * Roll call of a class on a day with a scheduled lesson: EMPTY_ROSTER when the roster is empty (nothing to mark),
+ * NOT_TAKEN when no roster student is marked, PARTIAL when some are, TAKEN when every roster student is marked.
+ */
+export type ClassOverviewRollCallState = "EMPTY_ROSTER" | "NOT_TAKEN" | "PARTIAL" | "TAKEN";
+
+/** Grade-entry status of one current-term assessment; counts and the published version only (ADR-0011). */
+export interface ClassOverviewAssessmentStatus {
+  assessmentId: string;
+  title: string;
+  kind: string;
+  heldOn: string;
+  courseId: string;
+  courseName?: string;
+  termId: string;
+  /** Roster students with at least one entry (draft or published). */
+  enteredCount: number;
+  rosterCount: number;
+  /** Held on or before the overview date and entries cover fewer students than the roster; a future assessment is not due. */
+  missingEntries: boolean;
+  hasUnpublishedDraft: boolean;
+  publishedVersion?: number;
+}
+
+/** An active CLASS_TEACHER or BRANCH_TEACHER assignment of the class and the assessments it may author. */
+export interface ClassOverviewTeacherAssignment {
+  assignmentId: string;
+  teacherId: string;
+  teacherName: string;
+  role: TeacherAssignmentRole;
+  courseId?: string;
+  courseName?: string;
+  termId?: string;
+  assessmentCount: number;
+  missingEntryAssessmentCount: number;
+  unpublishedDraftAssessmentCount: number;
+  assessments: ClassOverviewAssessmentStatus[];
+}
+
+/** DEC-20261102-04 Class 360: read-only academic operations counts of one class. */
+export interface ClassOverview {
+  classId: string;
+  /** Istanbul calendar day the roster, roll call and assignments refer to (YYYY-MM-DD). */
+  date: string;
+  generatedAt: string;
+  /** Active, non-deleted students whose enrollment in the class covers the date (the attendance roster rule). */
+  rosterCount: number;
+  /** Present only when the class has a scheduled lesson on the date. */
+  rollCall?: {
+    state: ClassOverviewRollCallState;
+    lessonCount: number;
+    markedCount: number;
+  };
+  homework: {
+    openCount: number;
+    waitingSubmissionCount: number;
+  };
+  gradeEntry: {
+    assessmentCount: number;
+    missingEntryAssessmentCount: number;
+    unpublishedDraftAssessmentCount: number;
+  };
+  /**
+   * Every current-term assessment of the class, newest first, whether or not a live grade-writer assignment covers it;
+   * gradeEntry summarizes exactly this list.
+   */
+  assessments: ClassOverviewAssessmentStatus[];
+  /** Per-assignment view; an assessment appears under every assignment whose course and term scope covers it. */
+  teacherAssignments: ClassOverviewTeacherAssignment[];
 }
 
 export interface ReportErrorBooklet {

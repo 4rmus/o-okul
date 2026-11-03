@@ -18,6 +18,7 @@ import {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import { type AlanStore, alanStoreToken } from "../school/alan-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
@@ -181,9 +182,9 @@ export class ExamService {
     const classIds = normalizeClassIds(input);
     const answerKey = requireCreateAnswerKey(input.answerKey);
 
-    for (const classId of classIds) {
-      await this.requireClass(tenantId, classId);
-    }
+    // Classes and the caller's participant scope are checked before any write, so a class the caller cannot
+    // enroll never leaves a created and audited exam behind.
+    await this.assertClassParticipantTargets(context, tenantId, classIds);
 
     const exam = await this.repository.create({ tenantId, title, ...academicContext, ...(startsAt ? { startsAt } : {}) });
     await this.auditLogs?.record({
@@ -203,10 +204,10 @@ export class ExamService {
         linkedTytExamId: exam.linkedTytExamId,
       },
     });
-    for (const classId of classIds) {
-      await this.addClassParticipants(context, tenantId, exam.id, classId);
-    }
     try {
+      for (const classId of classIds) {
+        await this.addClassParticipants(context, tenantId, exam.id, classId);
+      }
       await this.answerKeyImports.import(context, {
         examId: exam.id,
         version: answerKey.version,
@@ -313,10 +314,7 @@ export class ExamService {
     }
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
     const classIds = normalizeClassIds(input);
-
-    for (const classId of classIds) {
-      await this.requireClass(tenantId, classId);
-    }
+    await this.assertClassParticipantTargets(context, tenantId, classIds);
 
     const exam = await this.repository.update(tenantId, id, { title, ...academicContext, ...(startsAt ? { startsAt } : {}) });
     if (!exam) {
@@ -522,7 +520,7 @@ export class ExamService {
     if (!student || student.tenantId !== tenantId) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await assertTeacherAssigned(context, this.teacherAssignments, {
+    await this.assertParticipantScope(context, {
       tenantId,
       studentId: student.id,
       classId: student.classId,
@@ -546,8 +544,28 @@ export class ExamService {
     }
   }
 
+  private async assertClassParticipantTargets(context: RequestContext, tenantId: string, classIds: string[]): Promise<void> {
+    for (const classId of classIds) {
+      await this.requireClass(tenantId, classId);
+      await this.assertParticipantScope(context, { tenantId, classId });
+    }
+  }
+
+  /**
+   * DEC-20261102-03: a tenant-wide OPERATIONS_STAFF enrolls exam participants without a teacher assignment. The rule
+   * is exam-only; the shared assignment bypass in assertTeacherAssigned stays limited to the admin roles, so the
+   * attendance, homework, gradebook, teacher-note, development and guardian scopes do not widen.
+   */
+  private async assertParticipantScope(
+    context: RequestContext,
+    scope: { tenantId: string; classId?: string; studentId?: string },
+  ): Promise<void> {
+    if (isTenantWideExamOperator(context)) return;
+    await assertTeacherAssigned(context, this.teacherAssignments, scope);
+  }
+
+  /** Callers validate the class and the participant scope first (assertClassParticipantTargets). */
   private async addClassParticipants(context: RequestContext, tenantId: string, examId: string, classId: string): Promise<void> {
-    await assertTeacherAssigned(context, this.teacherAssignments, { tenantId, classId });
     const existingStudentIds = new Set((await this.participants.list(tenantId, examId)).map((participant) => participant.studentId));
     const students = (await this.students.list()).filter(
       (student) => student.tenantId === tenantId && student.classId === classId && !student.deletedAt,
@@ -659,10 +677,29 @@ function requireExamReadTenant(context: RequestContext): string {
 }
 
 function shouldLimitExamReadToTeacher(context: RequestContext): boolean {
-  const hasAdminRole = context.roles.some((role) => (
+  return context.activePersona === "TEACHER" || (context.roles.includes("TEACHER") && !hasExamAdminRole(context));
+}
+
+function hasExamAdminRole(context: RequestContext): boolean {
+  return context.roles.some((role) => (
     role === "TENANT_OWNER" || role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN"
   ));
-  return context.activePersona === "TEACHER" || (context.roles.includes("TEACHER") && !hasAdminRole);
+}
+
+/**
+ * DEC-20261102-03: OPERATIONS_STAFF in the STAFF persona with an explicit tenant-wide membership scope and
+ * academic:manage. A STAFF-persona session carries only the membership's staff role, so a membership that also
+ * opens a teacher persona qualifies here and stays outside in its TEACHER persona. A campus-scoped or scope-less
+ * membership and a role preview stay outside; the admin roles keep their own path.
+ */
+function isTenantWideExamOperator(context: RequestContext): boolean {
+  return context.roles.includes("OPERATIONS_STAFF")
+    && context.activePersona === "STAFF"
+    && context.campusScope?.scopeMode === "TENANT"
+    && !context.bypassRls
+    && !context.rolePreview
+    && Boolean(context.tenantId)
+    && hasCapability(context, "academic:manage");
 }
 
 function assertExamWorkspaceAccess(context: RequestContext): void {
@@ -670,6 +707,7 @@ function assertExamWorkspaceAccess(context: RequestContext): void {
     !canAccessExamWorkspace(context.roles, context.activePersona)
     || context.rolePreview
     || context.campusScope?.scopeMode === "CAMPUSES"
+    || (!hasExamAdminRole(context) && !isTenantWideExamOperator(context))
   ) {
     throw new ForbiddenException("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
   }

@@ -80,12 +80,14 @@ export function canAccessExamWorkspace(
   roles: readonly string[],
   activePersona?: "STAFF" | "TEACHER" | "STUDENT" | "GUARDIAN",
 ): boolean {
-  const allowedRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
-  const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));
-  return hasAllowedRole && (
-    activePersona === "STAFF"
-    || (activePersona === undefined && roles.length === 1)
-  );
+  const adminRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
+  if (roles.some((role) => adminRoles.includes(role))) {
+    return activePersona === "STAFF" || (activePersona === undefined && roles.length === 1);
+  }
+  // DEC-20261102-03: OPERATIONS_STAFF opens the workspace only in the STAFF persona. A STAFF-persona session holds
+  // only the membership's staff role, so a membership that also has a teacher persona opens it here and stays outside
+  // in its TEACHER persona. The session carries no campus scope, so the API rejects a campus-scoped membership.
+  return activePersona === "STAFF" && roles.includes("OPERATIONS_STAFF");
 }
 
 // FINANCE_STAFF rank kalıtımı almaz (apps/api/src/rbac/roles.ts); başka kurum rolü yoksa

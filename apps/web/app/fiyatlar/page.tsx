@@ -28,12 +28,12 @@ const plans = planProfiles.map((tier) => {
 });
 
 const features = [
-  { icon: ScanLine, title: "Optik okuma ve karne", text: "Optik TXT/DAT dosyasından rapor ve karne sürecini tek akışta yönetin." },
-  { icon: BarChart3, title: "Deneme analizi", text: "Başarı %, Net/Soru ve deneme puanıyla gelişimi inceleyin." },
+  { icon: BookOpen, title: "Öğrenci kaydı", text: "Deneme sonuçları, okul notu, devamsızlık ve ödev aynı öğrenci kaydında." },
   { icon: CalendarDays, title: "Kurum operasyonu", text: "Kayıt, akademik yapı, program ve devamsızlık işlerini tek yerden takip edin." },
-  { icon: BookOpen, title: "Okul notu ve ödev", text: "Deneme sonuçları, okul notu, devamsızlık ve ödev aynı öğrenci kaydında." },
   { icon: Wallet, title: "Finans takibi", text: "Ödeme planı, alacak ve taksitleri takip edin." },
   { icon: ShieldCheck, title: "Rol tabanlı erişim", text: "Öğretmen atanmış kapsamını, öğrenci kendi bilgilerini görür." },
+  { icon: BarChart3, title: "Deneme analizi", text: "Başarı %, Net/Soru ve deneme puanıyla gelişimi inceleyin." },
+  { icon: ScanLine, title: "Optik okuma ve karne", text: "Optik TXT/DAT dosyasından rapor ve karne sürecini tek akışta yönetin." },
 ] as const;
 
 export default function PricingPage() {

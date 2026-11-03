@@ -258,7 +258,88 @@ const institutionDashboardSummarySchema = objectSchema({
   }, ["attendanceAlertCount", "openImportQuarantineCount", "openSupportTicketCount"]),
   latestExam: institutionDashboardExamSchema,
   campusScoped: { type: "boolean" },
+  // DEC-20261102-04: academic:manage viewers only, same campus scope; counts only (ADR-0011).
+  academicOps: objectSchema({
+    date: stringSchema({ format: "date" }),
+    rollCallMissingClassCount: integerSchema({ minimum: 0 }),
+    missingGradeEntryAssessmentCount: integerSchema({ minimum: 0 }),
+    unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+  }, ["date", "rollCallMissingClassCount", "missingGradeEntryAssessmentCount", "unpublishedDraftAssessmentCount"]),
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
+
+// DEC-20261102-04 Class 360: counts and the published version only; never draft scores or averages (ADR-0011).
+const classOverviewAssessmentStatusSchema = objectSchema({
+  assessmentId: stringSchema(),
+  title: stringSchema(),
+  kind: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  courseId: stringSchema(),
+  courseName: stringSchema(),
+  termId: stringSchema(),
+  enteredCount: integerSchema({ minimum: 0 }),
+  rosterCount: integerSchema({ minimum: 0 }),
+  missingEntries: { type: "boolean" },
+  hasUnpublishedDraft: { type: "boolean" },
+  publishedVersion: integerSchema({ minimum: 1 }),
+}, [
+  "assessmentId",
+  "title",
+  "kind",
+  "heldOn",
+  "courseId",
+  "termId",
+  "enteredCount",
+  "rosterCount",
+  "missingEntries",
+  "hasUnpublishedDraft",
+]);
+
+const classOverviewGradeEntrySummarySchema = objectSchema({
+  assessmentCount: integerSchema({ minimum: 0 }),
+  missingEntryAssessmentCount: integerSchema({ minimum: 0 }),
+  unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+}, ["assessmentCount", "missingEntryAssessmentCount", "unpublishedDraftAssessmentCount"]);
+
+const classOverviewSchema = objectSchema({
+  classId: stringSchema(),
+  date: stringSchema({ format: "date" }),
+  generatedAt: stringSchema({ format: "date-time" }),
+  rosterCount: integerSchema({ minimum: 0 }),
+  rollCall: objectSchema({
+    state: { type: "string", enum: ["EMPTY_ROSTER", "NOT_TAKEN", "PARTIAL", "TAKEN"] },
+    lessonCount: integerSchema({ minimum: 1 }),
+    markedCount: integerSchema({ minimum: 0 }),
+  }, ["state", "lessonCount", "markedCount"]),
+  homework: objectSchema({
+    openCount: integerSchema({ minimum: 0 }),
+    waitingSubmissionCount: integerSchema({ minimum: 0 }),
+  }, ["openCount", "waitingSubmissionCount"]),
+  gradeEntry: classOverviewGradeEntrySummarySchema,
+  // Every current-term assessment of the class, also those no live grade-writer assignment covers.
+  assessments: arraySchema(classOverviewAssessmentStatusSchema),
+  teacherAssignments: arraySchema(objectSchema({
+    assignmentId: stringSchema(),
+    teacherId: stringSchema(),
+    teacherName: stringSchema(),
+    role: { type: "string", enum: ["CLASS_TEACHER", "BRANCH_TEACHER"] },
+    courseId: stringSchema(),
+    courseName: stringSchema(),
+    termId: stringSchema(),
+    assessmentCount: integerSchema({ minimum: 0 }),
+    missingEntryAssessmentCount: integerSchema({ minimum: 0 }),
+    unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+    assessments: arraySchema(classOverviewAssessmentStatusSchema),
+  }, [
+    "assignmentId",
+    "teacherId",
+    "teacherName",
+    "role",
+    "assessmentCount",
+    "missingEntryAssessmentCount",
+    "unpublishedDraftAssessmentCount",
+    "assessments",
+  ])),
+}, ["classId", "date", "generatedAt", "rosterCount", "homework", "gradeEntry", "assessments", "teacherAssignments"]);
 
 const tenantFirstOwnerCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
@@ -336,6 +417,8 @@ const employeeAccessSchema = objectSchema({
   employmentEndsAt: stringSchema({ format: "date-time" }),
   userId: stringSchema(),
   accountStatus: stringSchema(),
+  accountEmail: stringSchema({ format: "email", description: "Linked account e-mail (GET /employees); the contact of record once an account is bound." }),
+  teacherId: stringSchema({ description: "Teacher profile bound to this employee (GET /employees)." }),
   access: objectSchema({
     membershipId: stringSchema(),
     staffRole: { type: "string", enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
@@ -910,14 +993,18 @@ const developmentAssessmentRecordSchema = objectSchema({
 }, ["id", "tenantId", "studentId", "teacherId", "periodLabel", "visibility", "scores"]);
 
 const developmentAssessmentCreateRequestSchema = objectSchema({
-  mentorNote: stringSchema(),
-  periodLabel: stringSchema(),
-  scores: arraySchema(developmentAssessmentScoreInputSchema, { minItems: 1 }),
+  mentorNote: stringSchema({ maxLength: 1000 }),
+  periodLabel: stringSchema({ maxLength: 120 }),
+  scores: arraySchema(developmentAssessmentScoreInputSchema, { minItems: 1, maxItems: 50 }),
   studentId: stringSchema(),
   teacherId: stringSchema(),
   termId: stringSchema(),
   visibility: developmentAssessmentVisibilitySchema,
 }, ["periodLabel", "scores", "studentId"]);
+
+const developmentAuthoringScopeSchema = objectSchema({
+  studentIds: arraySchema(stringSchema()),
+}, ["studentIds"]);
 
 const developmentTrendScoreSchema = objectSchema({
   criterionId: stringSchema(),
@@ -3610,7 +3697,7 @@ const operationContracts: Record<string, OperationContract> = {
       { name: "cursor", description: "Opaque cursor returned by the previous response.", schema: stringSchema() },
       { name: "direction", schema: { type: "string", enum: ["next", "previous"], default: "next" } },
       { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 50 }) },
-      { name: "q", description: "Case-insensitive employee name, employee number or work email search.", schema: stringSchema() },
+      { name: "q", description: "Case-insensitive employee name, employee number, work e-mail or account e-mail search.", schema: stringSchema() },
       { name: "sort", schema: { type: "string", enum: ["lastName", "-lastName", "firstName", "employeeNo"], default: "lastName" } },
     ],
   },
@@ -3691,6 +3778,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/development/assessments": {
     responseBody: arraySchema(developmentAssessmentRecordSchema),
     listResponse: true,
+  },
+  "get /api/v1/development/authoring-scope": {
+    responseBody: developmentAuthoringScopeSchema,
   },
   "post /api/v1/development/assessments": {
     requestBody: developmentAssessmentCreateRequestSchema,
@@ -4320,6 +4410,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/classes/{id}": {
     responseBody: classRecordSchema,
+  },
+  "get /api/v1/classes/{classId}/overview": {
+    responseBody: classOverviewSchema,
   },
   "patch /api/v1/classes/{id}": {
     requestBody: classUpdateRequestSchema,

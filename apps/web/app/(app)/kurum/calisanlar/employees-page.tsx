@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -36,6 +37,7 @@ import {
 } from "@o-okul/ui";
 import { ChevronLeft, ChevronRight, MailPlus, MailX, Pencil, Plus, Search } from "lucide-react";
 import { useAuth } from "../../../providers.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import {
   ApiRequestError,
   apiBaseUrl,
@@ -101,6 +103,8 @@ export function EmployeesPage() {
   const [invitationEmailError, setInvitationEmailError] = useState("");
   const { notify } = useToast();
   const canManageOwners = auth?.session.roles.includes("TENANT_OWNER") ?? false;
+  // The teacher detail opens under the same capability its route needs.
+  const canOpenTeacherDetail = auth ? hasCapabilityForRoles(auth.session.roles, "staff:manage") : false;
   const linkedCount = employees.filter((employee) => employee.access).length;
   const columns: Array<DataTableColumn<EmployeeAccessRecord>> = [
     {
@@ -111,12 +115,27 @@ export function EmployeesPage() {
       render: (employee) => `${employee.firstName} ${employee.lastName}`,
     },
     { key: "employeeNo", header: "Sicil no", priority: "secondary", render: (employee) => employee.employeeNo ?? "-" },
-    { key: "workEmail", header: "İş e-postası", priority: "secondary", render: (employee) => maskEmail(employee.workEmail) },
+    {
+      key: "contact",
+      header: "E-posta",
+      priority: "secondary",
+      render: (employee) => <EmployeeContact employee={employee} invitation={employee.userId ? undefined : pendingInvitations.get(employee.id)} />,
+    },
     {
       key: "role",
       header: "Yetki / çalışma alanı",
       priority: "primary",
-      render: (employee) => accessLabel(employee),
+      render: (employee) => employee.teacherId && canOpenTeacherDetail ? (
+        <>
+          <div>{accessLabel(employee)}</div>
+          <Link
+            aria-label={`${employee.firstName} ${employee.lastName} öğretmen profili`}
+            href={`/kurum/ogretmenler/${encodeURIComponent(employee.teacherId)}`}
+          >
+            Öğretmen profili
+          </Link>
+        </>
+      ) : accessLabel(employee),
     },
     {
       key: "status",
@@ -395,7 +414,7 @@ export function EmployeesPage() {
         rows={employees}
         summary={<OperationSummary ariaLabel="Çalışan erişim özeti" badges={badges} items={summaryItems} />}
         tableCaption="Kurum çalışanları ve yetkileri"
-        tableDescription="Çalışan, hesap, rol, çalışma alanı, çalışma durumu ve kampüs kapsamı."
+        tableDescription="Çalışan, hesap veya iş e-postası, rol, çalışma alanı, çalışma durumu ve kampüs kapsamı."
         hideTitle
         title="Çalışanlar ve Yetkiler"
       />
@@ -545,6 +564,34 @@ export function EmployeesPage() {
   );
 }
 
+// DEC-20261102-01 (F-21): once an account is bound its e-mail is the contact; the work e-mail stays an HR field.
+function EmployeeContact({ employee, invitation }: { employee: EmployeeAccessRecord; invitation?: IdentityInvitationRecord }) {
+  if (employee.userId && employee.accountEmail) {
+    const workEmailDiffers = Boolean(employee.workEmail) && employee.workEmail?.toLowerCase() !== employee.accountEmail.toLowerCase();
+    return (
+      <>
+        <div>{maskEmail(employee.accountEmail)}</div>
+        <div className="next-field-hint">{workEmailDiffers ? `İş e-postası: ${maskEmail(employee.workEmail)}` : "Hesap e-postası"}</div>
+      </>
+    );
+  }
+  if (invitation?.email) {
+    return (
+      <>
+        <div>{maskEmail(invitation.email)}</div>
+        <div className="next-field-hint">Davet adresi</div>
+      </>
+    );
+  }
+  if (!employee.workEmail) return "-";
+  return (
+    <>
+      <div>{maskEmail(employee.workEmail)}</div>
+      <div className="next-field-hint">İş e-postası</div>
+    </>
+  );
+}
+
 function accessLabel(employee: EmployeeAccessRecord) {
   if (!employee.access) return "Hesap bağlı değil";
   const labels = employee.access.staffRole ? [tenantRoleLabel(employee.access.staffRole)] : [];
@@ -598,7 +645,7 @@ function EmployeeCursorControls({
         <Search size={17} aria-hidden="true" />
         <Input
           aria-label="Ara"
-          placeholder="Ad, sicil no veya iş e-postası"
+          placeholder="Ad, sicil no veya e-posta"
           value={state.q ?? ""}
           onChange={(event) => onChange(resetEmployeeCursor(state, { q: event.target.value }))}
         />

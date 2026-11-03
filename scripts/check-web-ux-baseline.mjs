@@ -60,7 +60,7 @@ const files = {
   "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx": readFileSync("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kampusler/campuses-page.tsx": readFileSync("apps/web/app/(app)/kurum/kampusler/campuses-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx": readFileSync("apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/kullanicilar/users-page.tsx": readFileSync("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/kullanicilar/page.tsx": readFileSync("apps/web/app/(app)/kurum/kullanicilar/page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kvkk/kvkk-page.tsx": readFileSync("apps/web/app/(app)/kurum/kvkk/kvkk-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kurum-dashboard.tsx": readFileSync("apps/web/app/(app)/kurum/kurum-dashboard.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": readFileSync("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", "utf8"),
@@ -80,6 +80,7 @@ const files = {
   "apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx": readFileSync("apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx": readFileSync("apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/classes-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/classes-page.tsx", "utf8"),
   "apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardians-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", "utf8"),
@@ -197,6 +198,15 @@ requireTokens("apps/web/app/(app)/app-shell.tsx", [
   'aria-expanded={expanded}',
 ]);
 requireOccurrenceCount("apps/web/app/(app)/app-shell.tsx", 'className="next-command-open"', 2);
+// DEC-20261102-06: portal unread-announcement bell; one mount per top bar (desktop and mobile), student and guardian only.
+requireOccurrenceCount("apps/web/app/(app)/app-shell.tsx", "<PortalAnnouncementBell />", 2);
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  'hasSubjectPortalAccess(session, "STUDENT", "STUDENT")',
+  'hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN")',
+  'aria-label="Okunmamış duyurular"',
+  "collectPortalUnreadAnnouncements(sources)",
+  "{licenseReadOnly ? null : (",
+]);
 
 requireTokens("apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", [
   'aria-label={revealed ? "Telefonu kapat" : "Telefonu aç"}',
@@ -270,7 +280,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -490,19 +500,14 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
 ]);
 
 requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
-  "mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir",
-  "kullanıcı ekranı davet tokenı göstermeden PII maskesini korur",
+  "emekli kullanıcı hesapları adresi aramayı koruyarak Çalışanlar'a yönlenir",
+  "emekli kullanıcı hesapları sekmesi Personel bölümlerinde yer almaz",
   "kurum kişi yönetimi ekranları mobil ve tablet operasyon sözleşmesini korur",
-  'getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" })',
-  'getByLabel("Admin Kullanıcı rolleri", { exact: true })',
-  'adminRoles.getByRole("checkbox")).toHaveCount(0)',
+  'url.pathname === "/kurum/calisanlar" && url.searchParams.get("employeesQ") === "admin"',
+  'staffTabs.getByRole("link", { name: "Kullanıcı hesapları" })).toHaveCount(0)',
+  "expect(captured.users).toEqual([])",
   "expect(captured.roleUpdates).toEqual([])",
-  'getByRole("button", { name: /rollerini kaydet/u })).toHaveCount(0)',
-  'getByRole("link", { name: "Çalışan erişimlerini yönet" })',
-  'getByRole("button", { name: "Davet oluştur" })).toHaveCount(0)',
-  'getByLabel("Son aktivasyon tokenı")).toHaveCount(0)',
   "activation-token-created-secret",
-  "activation-token-resent-secret",
   "POST",
   "PATCH",
   "öğrenci listesi mobil operasyon sözleşmesini korur",
@@ -1115,7 +1120,7 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   'getByLabel("Öğretmen aktarım dosyası")).toBeVisible()',
   'getByLabel("Öğrenci aktarım dosyası")).toBeVisible()',
   'getByLabel("Veli aktarım dosyası")).toHaveCount(0)',
-  'getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
+  'getByRole("option", { name: /Kurulum/ }).first()).toBeVisible()',
   "expect(unexpectedMutations).toEqual([])",
   "expectNoHorizontalOverflow",
   "expectNoUnlabeledControls",
@@ -1811,7 +1816,7 @@ requireTokens("apps/web/src/route-manifest.js", [
   'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" })',
   'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" })',
   'navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" })',
-  'commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage")',
+  'commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage")',
 ]);
 
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
@@ -2527,33 +2532,17 @@ requireTokens("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", [
   "Veli erişimi",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
-  "StatusBadge,",
-  "tenantRoleLabel",
-  'density="compact"',
-  "next-role-checks",
-  "Mevcut hesaplar",
-  "Roller Çalışanlar ekranında düzenlenir",
-  "Çalışan erişimlerini yönet",
-  'href="/kurum/calisanlar"',
-  "Kurumdaki giriş hesaplarını ve rollerini görün.",
-  'mobilePriority: "primary"',
-  'mobilePriority: "secondary"',
-  "maskEmail(user.email)",
+// DEC-20261102-01 (F-21): the "Kullanıcı hesapları" tab is retired; the old route only redirects to Çalışanlar.
+requireTokens("apps/web/app/(app)/kurum/kullanicilar/page.tsx", [
+  'import { redirect } from "next/navigation";',
+  '"/kurum/calisanlar"',
+  "employeesQ",
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
-  "Yazma kapalı",
-  "<label key={role.value}>",
-  'type="checkbox"',
-  "current.roles.includes(role.value)",
-  "RoleCheckboxGrid",
-  "toggleRole(",
-  "saveRoles(",
-  "Kullanıcı ekle",
-  "TC + telefon girişi",
-  '<div className="next-invitation-context" aria-label="Davet bağlamı">',
-  "<span>Davet hedefi</span>",
+requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/page.tsx", [
+  "UsersPage",
+  "CrudPage",
+  "/tenant-users",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogretmenler/teachers-page.tsx", [
@@ -2682,6 +2671,42 @@ requireNoTokens("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", [
   "?? detail.record.campusId",
   "?? detail.record.gradeLevelId",
   "uh-crud-page__table-shell",
+]);
+
+// DEC-20261102-04 Sınıf 360: academic:manage rolüne sayılar; taslak puan veya ortalama asla (ADR-0011).
+requireTokens("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", [
+  '{activeSection === "overview" ? overviewPanels : null}',
+]);
+requireTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", [
+  'hasCapabilityForRoles(roles, "academic:manage")',
+  "/overview`",
+  'aria-label="Sınıf akademik durumu"',
+  '<InfoGrid aria-label="Sınıf akademik durum özeti" role="region">',
+  'caption="Öğretmen başına not girişi"',
+  'caption="Değerlendirme giriş durumu"',
+  'mobilePriority: "primary"',
+  'sticky: "left"',
+  "isClassOverview",
+  // F1: the assessment table reads the top-level list, so an assessment without a live grade-writer assignment stays.
+  "sortAssessments(overview.assessments)",
+  "Array.isArray(record.assessments)",
+  'rollCall.state === "EMPTY_ROSTER"',
+]);
+requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
+  "dashboard.academicOps",
+  "academicOps?.rollCallMissingClassCount ?? 0",
+  "academicOps?.missingGradeEntryAssessmentCount ?? 0",
+  "academicOps?.unpublishedDraftAssessmentCount ?? 0",
+  'href: "/kurum/not-defteri"',
+  "key={item.title}",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/siniflar/[classId]/class-overview-panels.tsx", [
+  ".score",
+  "average",
+  "assessment.assessmentId}</",
+  "assignment.courseId ??",
+  "uniqueAssessments(overview.teacherAssignments)",
+  "açtığı değerlendirmeler",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
@@ -5360,11 +5385,22 @@ requireTokens("scripts/profile-web-performance.mjs", [
 requireTokens("apps/web/app/page.tsx", [
   "next-marketing-workflow",
   'aria-label="Öğrenci kaydında toplanan bilgiler"',
+  'id="ogrenci-haftasi"',
+  "Yoklama, ödev, okul notu ve deneme aynı öğrenci kaydında.",
+  "Deneme sınavı yapan kurumlar için",
   "Dosyayı alın",
   "Eşleşmeleri kontrol edin",
   "Sonucu doğrulayın",
   "Raporu oluşturun",
   "Takibi planlayın",
+]);
+
+// DEC-20261102-07: hero'dan sonra öğrencinin haftası, ardından optik akış.
+requireTokensInOrder("apps/web/app/page.tsx", [
+  'className="next-marketing-hero"',
+  'id="ogrenci-haftasi"',
+  'id="optik-akis"',
+  'id="roller"',
 ]);
 
 requireTokens("apps/web/playwright.next.config.ts", [
@@ -5515,8 +5551,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 96) {
-    failures.push(`${path} route manifest must contain exactly 96 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 98) {
+    failures.push(`${path} route manifest must contain exactly 98 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5526,8 +5562,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 96) {
-    failures.push(`${path} must give all 96 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 98) {
+    failures.push(`${path} must give all 98 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

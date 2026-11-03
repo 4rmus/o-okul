@@ -32,6 +32,8 @@ interface RouteCase {
   persona: Persona;
   primaryTask: PrimaryTask;
   query?: string;
+  /** Retired route that only redirects; the contract is checked on the destination page. */
+  redirectTo?: string;
   routeTemplate: string;
 }
 
@@ -66,10 +68,12 @@ const routeCases = [
   route("/kurum/duyurular", "Duyurular", "assistantAdmin", { role: "region", name: "Duyuru yönetimi" }),
   route("/kurum/etutler", "Etütler", "assistantAdmin", { role: "region", name: "Etüt yönetimi" }),
   route("/kurum/finans", "Finans", "tenantAdmin", { role: "region", name: "Finans yönetimi" }),
+  route("/kurum/gelisim-kriterleri", "Gelişim Kriterleri", "assistantAdmin", { role: "region", name: "Gelişim kriteri yönetimi" }),
   route("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "tenantAdmin", { role: "region", name: "Canlıya geçiş güvenlik kontrolleri" }),
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
-  route("/kurum/kullanicilar", "Kullanıcılar", "tenantAdmin", { role: "region", name: "Kullanıcı ve rol yönetimi" }),
+  // DEC-20261102-01 (F-21): the "Kullanıcı hesapları" tab is retired; old links land on Çalışanlar.
+  route("/kurum/kullanicilar", "Çalışanlar ve Yetkiler", "tenantAdmin", { role: "region", name: "Çalışan ve yetki görünümü" }, { redirectTo: "/kurum/calisanlar" }),
   route("/kurum/lisans-donemleri", "Lisans Dönemleri", "tenantAdmin", { role: "region", name: "Lisans dönemleri" }),
   route("/kurum/kurulum", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
   route("/kurum/kurulum/genel", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
@@ -130,6 +134,7 @@ const routeCases = [
   route("/ogretmen/ders-akisi", "Öğretmen Portalı", "teacher", { role: "region", name: "Bugünkü dersler" }),
   route("/ogretmen/destek", "Öğretmen Portalı", "teacher", { role: "region", name: "Destek talepleri" }),
   route("/ogretmen/duyurular", "Öğretmen Portalı", "teacher", { role: "region", name: "Duyurular" }),
+  route("/ogretmen/gelisim", "Öğretmen Portalı", "teacher", { role: "region", name: "Gelişim değerlendirmesi yaz" }),
   route("/ogretmen/odevler", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen ödev kontrolü" }),
   route("/ogretmen/not-defteri", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen not girişi" }),
   route("/ogretmen/ogrenci-takibi", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen öğrenci kapsamı" }),
@@ -177,7 +182,7 @@ test.describe("UI route family smoke", () => {
 
         const featureRedirected = routeCase.feature === "sms" && process.env.NEXT_PUBLIC_SMS_ENABLED !== "true";
         await expect(page).toHaveURL((url) =>
-          url.pathname === (featureRedirected ? "/kurum" : resolvedPath)
+          url.pathname === (featureRedirected ? "/kurum" : routeCase.redirectTo ?? resolvedPath)
           && (featureRedirected || !routeCase.query || url.searchParams.toString() === routeCase.query),
         );
         await expect(page, contractLabel(routeCase, viewport, "document title")).toHaveTitle(/\S/);
@@ -371,7 +376,7 @@ function route(
   heading: string,
   persona: Persona,
   primaryTask: PrimaryTask,
-  options: Pick<RouteCase, "feature" | "query"> = {},
+  options: Pick<RouteCase, "feature" | "query" | "redirectTo"> = {},
 ): RouteCase {
   return { architecture: resolveRouteArchitecture(routeTemplate), ...options, heading, persona, primaryTask, routeTemplate };
 }
@@ -393,7 +398,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 96) throw new Error(`Route manifest must contain exactly 96 entries; found ${manifest.length}.`);
+  if (manifest.length !== 98) throw new Error(`Route manifest must contain exactly 98 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -633,6 +638,22 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   }
 
   if (pathName === "/classes/class-8a") return { data: classFixture };
+  // DEC-20261102-04 Sınıf 360: yalnız sayılar.
+  if (pathName === "/classes/class-8a/overview") {
+    return {
+      data: {
+        classId: "class-8a",
+        date: "2026-07-30",
+        generatedAt: "2026-07-30T09:00:00.000Z",
+        rosterCount: 1,
+        rollCall: { state: "NOT_TAKEN", lessonCount: 1, markedCount: 0 },
+        homework: { openCount: 1, waitingSubmissionCount: 0 },
+        gradeEntry: { assessmentCount: 0, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
+        assessments: [],
+        teacherAssignments: [],
+      },
+    };
+  }
   if (pathName === "/teachers/teacher-math") return { data: teacherFixture };
   if (pathName === "/teachers/teacher-math/assignments") return { data: [] };
   if (pathName === "/guardians/guardian-mother") return { data: guardianFixture };
@@ -750,6 +771,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   if (portalArrayPaths.has(pathName)) return { data: [] };
 
   if (pathName === "/tenants/current/reset-request") return { data: { request: null } };
+  if (pathName === "/development/authoring-scope") return { data: { studentIds: [] } };
   if (pathName === "/device-backups/status") return { data: { available: false, maxFileBytes: 33558528 } };
 
   const directArrays: Record<string, unknown[]> = {
@@ -766,6 +788,8 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/campuses": [campusFixture],
     "/classes": [classFixture],
     "/courses": [courseFixture],
+    "/development/assessments": [],
+    "/development/criteria": [],
     "/employees": [],
     "/exams": [],
     "/grade-level-course-templates": [],

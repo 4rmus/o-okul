@@ -224,6 +224,16 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   expect(employeeRequests.some((url) => url.searchParams.get("cursor") === "stale-cursor")).toBe(true);
   expect(employeeRequests.at(-1)?.searchParams.get("q")).toBe("ada");
   await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
+
+  // The retired Kullanıcılar route stays in the manifest only for its redirect; the command palette offers Çalışanlar.
+  await page.keyboard.press("ControlOrMeta+K");
+  const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(commandDialog).toBeVisible();
+  await commandDialog.getByLabel("Komut ara").fill("kullan");
+  await expect(commandDialog.getByRole("option", { name: /Kullanıcılar/ })).toHaveCount(0);
+  await commandDialog.getByLabel("Komut ara").fill("çalışan");
+  await expect(commandDialog.getByRole("option", { name: /Çalışanlar ve Yetkiler/ })).toHaveCount(1);
+  await commandDialog.getByRole("button", { name: "Kapat" }).click();
 });
 
 // UAT F-20: the 409 e-mail refusal of the same step reopens the invitation dialog with the field marked invalid.
@@ -436,6 +446,131 @@ test("UAT F-20 davet penceresi bağlı veya uyumsuz e-postada açık kalır ve a
     { email: "ogrenci@example.test", role: "FINANCE_STAFF" },
     { email: "muhasebe@example.test", role: "FINANCE_STAFF" },
   ]);
+});
+
+// DEC-20261102-01 (F-21): the account e-mail is the contact once linked; the work e-mail stays an HR field.
+test("çalışan satırı hesap, davet ve iş e-postasını ayırır ve öğretmen profiline bağlanır", async ({ page }) => {
+  let activeSession = false;
+  const employeeRequests: URL[] = [];
+  const employees: EmployeeAccessRecord[] = [
+    {
+      ...employeeFixture(),
+      accountEmail: "ada.hesap@okul.test",
+      teacherId: "teacher-ada",
+      workEmail: "ik.ada@okul.test",
+      access: { ...employeeFixture().access!, hasTeacherPersona: true },
+    },
+    {
+      id: "employee-same-a",
+      tenantId: "tenant-a",
+      firstName: "Can",
+      lastName: "Ak",
+      workEmail: "can.ak@okul.test",
+      accountEmail: "Can.Ak@okul.test",
+      status: "ACTIVE",
+      userId: "user-same-a",
+      accountStatus: "ACTIVE",
+      access: { membershipId: "membership-same-a", staffRole: "FINANCE_STAFF", hasTeacherPersona: false, status: "ACTIVE", version: 1, scopeMode: "TENANT", campusIds: [] },
+    },
+    unlinkedEmployeeFixture(),
+    { id: "employee-hr-a", tenantId: "tenant-a", firstName: "Ece", lastName: "Kurt", workEmail: "ece.kurt@okul.test", status: "PLANNED" },
+  ];
+  const pendingInvitation = {
+    id: "invitation-pending-a",
+    tenantId: "tenant-a",
+    subjectType: "EMPLOYEE",
+    subjectId: "employee-unlinked-a",
+    email: "davet.adresi@okul.test",
+    name: "Yeni Admin",
+    role: "OPERATIONS_STAFF",
+    kind: "EMAIL_LINK",
+    status: "PENDING",
+    expiresAt: "2099-01-02T10:00:00.000Z",
+    createdAt: "2099-01-01T10:00:00.000Z",
+    updatedAt: "2099-01-01T10:00:00.000Z",
+  };
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route("**/auth/refresh", async (route) => {
+    if (!activeSession) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await json(route, authResponse());
+  });
+  await page.route("**/auth/login", async (route) => {
+    activeSession = true;
+    await json(route, authResponse());
+  });
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/")) {
+      await route.fallback();
+      return;
+    }
+    if (path === "/employees" && request.method() === "GET") {
+      employeeRequests.push(new URL(request.url()));
+      await json(route, employees, { limit: 50 });
+      return;
+    }
+    if (path === "/identity-invitations" && request.method() === "GET") {
+      await json(route, [pendingInvitation]);
+      return;
+    }
+    if (path === "/me/tenant") {
+      await json(route, { id: "tenant-a", name: "DNA Eğitim", plan: "TRIAL", slug: "dna-egitim", status: "ACTIVE" });
+      return;
+    }
+    if (path === "/me/institution-dashboard") {
+      await json(route, {
+        activeStudentCount: 0,
+        attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+        generatedAt: "2026-08-01T10:00:00.000Z",
+        institution: { name: "DNA Eğitim" },
+      });
+      return;
+    }
+    await json(route, []);
+  });
+
+  await login(page);
+  const managementGroup = page.getByRole("button", { name: "Kişiler", exact: true });
+  if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
+  await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true }).click();
+  const staffTabs = page.getByRole("navigation", { name: "Personel bölümleri" });
+  // The "Kullanıcı hesapları" tab is retired; accounts are managed here.
+  await expect(staffTabs.getByRole("link", { name: "Kullanıcı hesapları" })).toHaveCount(0);
+  await staffTabs.getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true }).click();
+  await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);
+  await expect(page.getByRole("columnheader", { name: "E-posta" })).toBeVisible();
+
+  const linkedRow = page.getByRole("row", { name: /Ada Yılmaz/ });
+  await expect(linkedRow).toContainText("ad••@•••.test");
+  await expect(linkedRow).toContainText("İş e-postası: ik••@•••.test");
+  await expect(linkedRow.getByRole("link", { name: "Ada Yılmaz öğretmen profili" })).toHaveAttribute("href", "/kurum/ogretmenler/teacher-ada");
+  const sameAddressRow = page.getByRole("row", { name: /Can Ak/ });
+  await expect(sameAddressRow).toContainText("Hesap e-postası");
+  await expect(sameAddressRow).not.toContainText("İş e-postası");
+  await expect(sameAddressRow.getByRole("link", { name: /öğretmen profili/u })).toHaveCount(0);
+  const invitedRow = page.getByRole("row", { name: /Yeni Admin/ });
+  await expect(invitedRow).toContainText("da••@•••.test");
+  await expect(invitedRow).toContainText("Davet adresi");
+  const hrOnlyRow = page.getByRole("row", { name: /Ece Kurt/ });
+  await expect(hrOnlyRow).toContainText("ec••@•••.test");
+  await expect(hrOnlyRow).toContainText("İş e-postası");
+  for (const raw of ["ada.hesap@okul.test", "ik.ada@okul.test", "davet.adresi@okul.test", "ece.kurt@okul.test"]) {
+    await expect(page.locator("main")).not.toContainText(raw);
+  }
+
+  // The search box reaches the account e-mail through the API.
+  await page.getByRole("group", { name: "Çalışan liste kontrolleri" }).getByLabel("Ara").fill("ada.hesap");
+  await expect.poll(() => employeeRequests.at(-1)?.searchParams.get("q")).toBe("ada.hesap");
 });
 
 async function login(page: Page) {

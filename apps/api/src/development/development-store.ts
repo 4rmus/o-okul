@@ -33,14 +33,27 @@ export interface DevelopmentScoreRecord {
   score: number;
 }
 
+export type DevelopmentAssessmentCreateInput = Omit<DevelopmentAssessmentRecord, "id" | "createdAt">;
+export type DevelopmentScoreCreateInput = Pick<DevelopmentScoreRecord, "criterionId" | "score">;
+
+/**
+ * Assessments are append-only (DEC-20261102-05): the store has no update or delete for an assessment or its scores.
+ * The only in-place change is the KVKK purge that clears a purged student's mentor notes.
+ */
 export interface DevelopmentStore {
   listCriteria(): Promise<DevelopmentCriterionRecord[]>;
   findCriterionById(id: string): Promise<DevelopmentCriterionRecord | undefined>;
   createCriterion(input: Omit<DevelopmentCriterionRecord, "id">): Promise<DevelopmentCriterionRecord>;
   listAssessments(studentId?: string): Promise<DevelopmentAssessmentRecord[]>;
-  createAssessment(input: Omit<DevelopmentAssessmentRecord, "id">): Promise<DevelopmentAssessmentRecord>;
-  createScore(input: Omit<DevelopmentScoreRecord, "id">): Promise<DevelopmentScoreRecord>;
+  findAssessmentById(id: string): Promise<DevelopmentAssessmentRecord | undefined>;
+  /** Writes the assessment and all of its scores in one transaction: either every row exists or none does. */
+  createAssessmentWithScores(
+    input: DevelopmentAssessmentCreateInput,
+    scores: DevelopmentScoreCreateInput[],
+  ): Promise<{ assessment: DevelopmentAssessmentRecord; scores: DevelopmentScoreRecord[] }>;
   listScores(assessmentId: string): Promise<DevelopmentScoreRecord[]>;
+  /** KVKK purge: clears mentorNote on every assessment of the student and returns how many rows changed. */
+  purgeMentorNotesByStudent(tenantId: string, studentId: string): Promise<number>;
 }
 
 export const developmentStoreToken = Symbol("DevelopmentStore");
@@ -68,20 +81,47 @@ export class InMemoryDevelopmentStore implements DevelopmentStore {
     return this.assessments.filter((assessment) => !studentId || assessment.studentId === studentId);
   }
 
-  async createAssessment(input: Omit<DevelopmentAssessmentRecord, "id">): Promise<DevelopmentAssessmentRecord> {
-    const record = { id: `development-assessment-${this.assessments.length + 1}`, ...input };
-    this.assessments.push(record);
-    return record;
+  async findAssessmentById(id: string): Promise<DevelopmentAssessmentRecord | undefined> {
+    return this.assessments.find((assessment) => assessment.id === id);
   }
 
-  async createScore(input: Omit<DevelopmentScoreRecord, "id">): Promise<DevelopmentScoreRecord> {
-    const record = { id: `development-score-${this.scores.length + 1}`, ...input };
-    this.scores.push(record);
-    return record;
+  async createAssessmentWithScores(
+    input: DevelopmentAssessmentCreateInput,
+    scores: DevelopmentScoreCreateInput[],
+  ): Promise<{ assessment: DevelopmentAssessmentRecord; scores: DevelopmentScoreRecord[] }> {
+    // Mirrors the DevelopmentScore (tenantId, assessmentId, criterionId) unique key before anything is stored.
+    if (new Set(scores.map((score) => score.criterionId)).size !== scores.length) {
+      throw new Error("DEVELOPMENT_SCORE_CRITERION_DUPLICATE");
+    }
+    const assessment: DevelopmentAssessmentRecord = {
+      id: `development-assessment-${this.assessments.length + 1}`,
+      ...input,
+      createdAt: new Date().toISOString(),
+    };
+    const scoreRecords = scores.map((score, index) => ({
+      id: `development-score-${this.scores.length + index + 1}`,
+      tenantId: input.tenantId,
+      assessmentId: assessment.id,
+      criterionId: score.criterionId,
+      score: score.score,
+    }));
+    this.assessments.push(assessment);
+    this.scores.push(...scoreRecords);
+    return { assessment, scores: scoreRecords };
   }
 
   async listScores(assessmentId: string): Promise<DevelopmentScoreRecord[]> {
     return this.scores.filter((score) => score.assessmentId === assessmentId);
+  }
+
+  async purgeMentorNotesByStudent(tenantId: string, studentId: string): Promise<number> {
+    let changed = 0;
+    for (const assessment of this.assessments) {
+      if (assessment.tenantId !== tenantId || assessment.studentId !== studentId || assessment.mentorNote === undefined) continue;
+      delete assessment.mentorNote;
+      changed += 1;
+    }
+    return changed;
   }
 }
 
@@ -131,9 +171,23 @@ export class PostgresDevelopmentStore implements DevelopmentStore {
     });
   }
 
-  async createAssessment(input: Omit<DevelopmentAssessmentRecord, "id">): Promise<DevelopmentAssessmentRecord> {
+  async findAssessmentById(id: string): Promise<DevelopmentAssessmentRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<DevelopmentAssessmentRow>(
+        `SELECT * FROM "DevelopmentAssessment" WHERE "id" = $1 LIMIT 1`,
+        [id],
+      );
+      return result.rows[0] ? toAssessmentRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async createAssessmentWithScores(
+    input: DevelopmentAssessmentCreateInput,
+    scores: DevelopmentScoreCreateInput[],
+  ): Promise<{ assessment: DevelopmentAssessmentRecord; scores: DevelopmentScoreRecord[] }> {
+    // One withTenantQuery call is one BEGIN/COMMIT: a failing score insert rolls the assessment back too.
+    return withTenantQuery(this.pool, async (client) => {
+      const inserted = await client.query<DevelopmentAssessmentRow>(
         `INSERT INTO "DevelopmentAssessment" ("id", "tenantId", "studentId", "teacherId", "termId", "periodLabel", "mentorNote", "visibility", "updatedAt")
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          RETURNING *`,
@@ -148,19 +202,30 @@ export class PostgresDevelopmentStore implements DevelopmentStore {
           input.visibility,
         ],
       );
-      return toAssessmentRecord(result.rows[0]!);
+      const assessment = toAssessmentRecord(inserted.rows[0]!);
+      const scoreRecords: DevelopmentScoreRecord[] = [];
+      for (const score of scores) {
+        const result = await client.query<DevelopmentScoreRow>(
+          `INSERT INTO "DevelopmentScore" ("id", "tenantId", "assessmentId", "criterionId", "score", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, now())
+           RETURNING *`,
+          [randomUUID(), input.tenantId, assessment.id, score.criterionId, score.score],
+        );
+        scoreRecords.push(toScoreRecord(result.rows[0]!));
+      }
+      return { assessment, scores: scoreRecords };
     });
   }
 
-  async createScore(input: Omit<DevelopmentScoreRecord, "id">): Promise<DevelopmentScoreRecord> {
+  async purgeMentorNotesByStudent(tenantId: string, studentId: string): Promise<number> {
     return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<DevelopmentScoreRow>(
-        `INSERT INTO "DevelopmentScore" ("id", "tenantId", "assessmentId", "criterionId", "score", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, now())
-         RETURNING *`,
-        [randomUUID(), input.tenantId, input.assessmentId, input.criterionId, input.score],
+      const result = await client.query(
+        `UPDATE "DevelopmentAssessment"
+         SET "mentorNote" = NULL, "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "studentId" = $2 AND "mentorNote" IS NOT NULL`,
+        [tenantId, studentId],
       );
-      return toScoreRecord(result.rows[0]!);
+      return result.rowCount ?? 0;
     });
   }
 

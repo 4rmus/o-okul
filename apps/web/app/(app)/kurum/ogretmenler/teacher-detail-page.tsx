@@ -3,11 +3,11 @@
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
-import { ArrowLeft, BookOpen, ClipboardList, FileText, MailPlus, MailX, NotebookTabs, RotateCw } from "lucide-react";
+import type { AcademicTermRecord, ClassRecord, CourseRecord, EmployeeAccessRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
+import { ArrowLeft, BookOpen, ClipboardList, FileText, IdCard, MailPlus, MailX, NotebookTabs, RotateCw } from "lucide-react";
 import { Button, DataTable, Field, FormModal, InfoGrid, InfoItem, Input, Panel, StatusBadge, TabButton, Tabs, useToast, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiCursorListAll, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
@@ -58,6 +58,15 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
     refetchOnWindowFocus: false,
   });
   const pendingInvitation = invitationsQuery.data?.get(teacherId);
+  // DEC-20261102-01 (F-21): the employee row bound to this teacher, read under the capability the employee list needs.
+  const linkedEmployeeQuery = useQuery({
+    queryKey: ["next-teacher-linked-employee", auth?.session.tenantId ?? "anonymous", teacherId],
+    queryFn: () => loadLinkedEmployee(auth?.accessToken ?? "", teacherId),
+    enabled: Boolean(auth && canManageAccounts),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const linkedEmployee = linkedEmployeeQuery.data;
   const accountState: TeacherAccountState = detail ? teacherAccountState(detail.teacher, invitationsQuery.data ?? new Map()) : "none";
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -138,10 +147,18 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
       title={teacherName}
       subtitle="Öğretmen detayı"
       actions={
-        <Link className="uh-button uh-button--secondary" href="/kurum/ogretmenler">
-          <ArrowLeft size={17} aria-hidden="true" />
-          Öğretmenlere dön
-        </Link>
+        <>
+          <Link className="uh-button uh-button--secondary" href="/kurum/ogretmenler">
+            <ArrowLeft size={17} aria-hidden="true" />
+            Öğretmenlere dön
+          </Link>
+          {linkedEmployee ? (
+            <Link className="uh-button uh-button--secondary" href={employeeRowHref(linkedEmployee)}>
+              <IdCard size={17} aria-hidden="true" />
+              Çalışan kaydı
+            </Link>
+          ) : null}
+        </>
       }
     >
       <section className="next-detail-workspace" aria-label="Öğretmen detayı">
@@ -252,6 +269,17 @@ async function loadTeacherDetail(accessToken: string, teacherId: string) {
     teacher,
     termNameById: new Map(terms.data.map((record) => [record.id, record.name])),
   };
+}
+
+async function loadLinkedEmployee(accessToken: string, teacherId: string): Promise<EmployeeAccessRecord | null> {
+  const employees = await apiCursorListAll<EmployeeAccessRecord>(accessToken, `${apiBaseUrl}/employees?limit=100&sort=lastName`);
+  return employees.find((employee) => employee.teacherId === teacherId) ?? null;
+}
+
+// The employee list keeps its search in the URL; the employee number is unique, the name is the fallback.
+function employeeRowHref(employee: EmployeeAccessRecord) {
+  const query = new URLSearchParams({ employeesQ: employee.employeeNo ?? `${employee.firstName} ${employee.lastName}` });
+  return `/kurum/calisanlar?${query.toString()}`;
 }
 
 function buildTeacherSummaryItems(detail: TeacherDetailData): OperationSummaryItem[] {

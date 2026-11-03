@@ -252,15 +252,16 @@ export class InMemoryUserManagementStore implements UserManagementStore {
   }
 
   async listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]> {
-    return this.employees.filter((employee) => employee.tenantId === tenantId).map(cloneEmployeeAccessRecord);
+    return this.employees.filter((employee) => employee.tenantId === tenantId).map((employee) => this.withAccountEmail(employee));
   }
 
   async listEmployeeAccessPage(tenantId: string, query: EmployeeAccessListQuery): Promise<EmployeeAccessPage> {
     const normalizedQuery = normalizeSearchTerm(query.q);
     const sort = employeeSortDefinition(query.sort);
     const records = this.employees
-      .filter((employee) => employee.tenantId === tenantId && matchesEmployeeSearch(employee, normalizedQuery))
-      .map(cloneEmployeeAccessRecord);
+      .filter((employee) => employee.tenantId === tenantId)
+      .map((employee) => this.withAccountEmail(employee))
+      .filter((employee) => matchesEmployeeSearch(employee, normalizedQuery));
     return paginateCursorRecords(
       records,
       query,
@@ -269,6 +270,16 @@ export class InMemoryUserManagementStore implements UserManagementStore {
       sort.direction,
       employeeCursorInvalid,
     );
+  }
+
+  // Read-model twin of the Postgres `User` join: the bound account's e-mail, looked up inside the same tenant.
+  private withAccountEmail(employee: EmployeeAccessRecord): EmployeeAccessRecord {
+    const record = cloneEmployeeAccessRecord(employee);
+    const account = employee.userId
+      ? this.users.find((user) => user.tenantId === employee.tenantId && user.id === employee.userId)
+      : undefined;
+    record.accountEmail = account?.email;
+    return record;
   }
 
   async findEmployee(tenantId: string, employeeId: string): Promise<EmployeeAccessRecord | undefined> {
@@ -559,6 +570,8 @@ export class PostgresUserManagementStore implements UserManagementStore {
            e."employmentEndsAt",
            e."userId",
            u."accountStatus",
+           u."email" AS "accountEmail",
+           t."id" AS "teacherId",
            access."membershipId",
            access."staffRole",
            access."hasTeacherPersona",
@@ -569,6 +582,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
          FROM "Employee" e
          LEFT JOIN "User" u
            ON u."tenantId" = e."tenantId" AND u."id" = e."userId"
+         ${employeeTeacherJoinSql}
          LEFT JOIN LATERAL (
            SELECT
              m."id" AS "membershipId",
@@ -630,6 +644,8 @@ export class PostgresUserManagementStore implements UserManagementStore {
            e."employmentEndsAt",
            e."userId",
            u."accountStatus",
+           u."email" AS "accountEmail",
+           t."id" AS "teacherId",
            access."membershipId",
            access."staffRole",
            access."hasTeacherPersona",
@@ -641,6 +657,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
          FROM "Employee" e
          LEFT JOIN "User" u
            ON u."tenantId" = e."tenantId" AND u."id" = e."userId"
+         ${employeeTeacherJoinSql}
          LEFT JOIN LATERAL (
            SELECT
              m."id" AS "membershipId",
@@ -1365,8 +1382,16 @@ const employeeSearchSql = foldedSearchSql(`
   coalesce(e."firstName", '') || ' ' ||
   coalesce(e."lastName", '') || ' ' ||
   coalesce(e."employeeNo", '') || ' ' ||
-  coalesce(e."workEmail", '')
+  coalesce(e."workEmail", '') || ' ' ||
+  coalesce(u."email", '')
 `);
+
+/**
+ * DEC-20261102-01 (F-21): the Teacher profile bound to the employee. Every join is tenant-qualified on top of RLS;
+ * a soft-deleted teacher is not linked, so the cross-link never points at a removed profile.
+ */
+const employeeTeacherJoinSql = `LEFT JOIN "Teacher" t
+           ON t."tenantId" = e."tenantId" AND t."employeeId" = e."id" AND t."deletedAt" IS NULL`;
 
 /** Keyset sort key per sort; `keyOf` is the in-memory counterpart of `keySql`. */
 function employeeSortDefinition(sort: EmployeeAccessSort): {
@@ -1388,8 +1413,13 @@ function employeeSortDefinition(sort: EmployeeAccessSort): {
 
 function matchesEmployeeSearch(employee: EmployeeAccessRecord, query: string): boolean {
   if (!query) return true;
-  return foldSearchText([employee.firstName, employee.lastName, employee.employeeNo ?? "", employee.workEmail ?? ""].join(" "))
-    .includes(query);
+  return foldSearchText([
+    employee.firstName,
+    employee.lastName,
+    employee.employeeNo ?? "",
+    employee.workEmail ?? "",
+    employee.accountEmail ?? "",
+  ].join(" ")).includes(query);
 }
 
 function employeeCursorContext(tenantId: string, query: EmployeeAccessListQuery): string {
@@ -1430,6 +1460,8 @@ interface EmployeeAccessRow {
   employmentEndsAt: Date | null;
   userId: string | null;
   accountStatus: string | null;
+  accountEmail?: string | null;
+  teacherId?: string | null;
   membershipId: string | null;
   staffRole: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF" | null;
   hasTeacherPersona: boolean | null;
@@ -1492,6 +1524,9 @@ function toEmployeeAccessRecord(row: EmployeeAccessRow): EmployeeAccessRecord {
     employmentEndsAt: row.employmentEndsAt?.toISOString(),
     userId: row.userId ?? undefined,
     accountStatus: row.accountStatus ?? undefined,
+    // The account e-mail is reported only while an account is bound to this employee.
+    accountEmail: row.userId ? row.accountEmail ?? undefined : undefined,
+    teacherId: row.teacherId ?? undefined,
     access: row.membershipId
       ? {
           membershipId: row.membershipId,

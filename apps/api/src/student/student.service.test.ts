@@ -1,6 +1,7 @@
 import { ConflictException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
+import { InMemoryDevelopmentStore } from "../development/development-store.js";
 import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
@@ -85,12 +86,28 @@ describe("StudentService", () => {
       canReceiveAnnouncements: false,
       canReceiveFinance: false,
     });
+    const developmentInput = { tenantId: "tenant-a", teacherId: "teacher-a", periodLabel: "2026 Kasım", visibility: "INTERNAL" as const };
+    await setup.developmentStore.createAssessmentWithScores({ ...developmentInput, studentId: "student-a", mentorNote: "Özel not" }, []);
+    await setup.developmentStore.createAssessmentWithScores({ ...developmentInput, studentId: "student-b", mentorNote: "Başka öğrenci" }, []);
 
     await expect(setup.service.purgePii(adminContext, "student-a")).resolves.toMatchObject({
       firstName: "Anonim",
       lastName: "Ogrenci",
     });
 
+    // DEC-20261102-05: the purged student's mentor notes are cleared; the assessment rows and other students stay.
+    const [purgedAssessment] = await setup.developmentStore.listAssessments("student-a");
+    expect(purgedAssessment).toMatchObject({ periodLabel: "2026 Kasım" });
+    expect(purgedAssessment).not.toHaveProperty("mentorNote");
+    await expect(setup.developmentStore.listAssessments("student-b")).resolves.toEqual([
+      expect.objectContaining({ mentorNote: "Başka öğrenci" }),
+    ]);
+    expect(setup.auditRecords).toContainEqual(expect.objectContaining({
+      action: "kvkk.development_mentor_note_purged",
+      entityType: "DevelopmentAssessment",
+      diff: { studentId: "student-a", fieldsPurged: ["mentorNote"], recordCount: 1 },
+    }));
+    expect(JSON.stringify(setup.auditRecords)).not.toContain("Özel not");
     expect(setup.reportSnapshotPurgeCalls).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     await expect(setup.studentContactStore.listByStudent("tenant-a", "student-a")).resolves.toEqual([]);
     expect(setup.auditRecords).toContainEqual(expect.objectContaining({
@@ -768,6 +785,7 @@ function createService(options: {
   const guardianStore = new InMemoryGuardianStore();
   const studentContactStore = new InMemoryStudentContactStore();
   const teacherAssignmentStore = new InMemoryTeacherAssignmentStore();
+  const developmentStore = new InMemoryDevelopmentStore();
   const invitations: unknown[] = [];
   const auditRecords: unknown[] = [];
   const provisionedSubjects: unknown[] = [];
@@ -842,7 +860,9 @@ function createService(options: {
       licenseTerms,
       undefined,
       studentContactStore,
+      developmentStore,
     ),
+    developmentStore,
     guardianStore,
     guardianStudentStore,
     provisionOrInvite,

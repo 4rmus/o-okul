@@ -356,6 +356,50 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
       const page = await users.listEmployeeAccessPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q });
       expect(page.records.map((record) => record.id)).toEqual([`${tenantC}-employee-${expected}`]);
     });
+
+    // DEC-20261102-01 (F-21): accountEmail and teacherId come from tenant-qualified joins under FORCE RLS.
+    it("returns the bound account e-mail and teacher id, searches the account e-mail, and stays inside the tenant", async () => {
+      const employeeA = `${tenantA}-employee-001`;
+      const employeeB = `${tenantB}-employee-001`;
+      const userA = `${tenantA}-employee-account`;
+      const userB = `${tenantB}-employee-account`;
+      await admin.query(
+        `INSERT INTO "User" ("id", "tenantId", "name", "email", "emailNormalized", "passwordHash", "updatedAt")
+         VALUES ($1, $2, 'Hesap A', 'hesap-a@cursor-keyset.example.test', 'hesap-a@cursor-keyset.example.test', 'FIXTURE_HASH', now()),
+                ($3, $4, 'Hesap B', 'hesap-b@cursor-keyset.example.test', 'hesap-b@cursor-keyset.example.test', 'FIXTURE_HASH', now())`,
+        [userA, tenantA, userB, tenantB],
+      );
+      await admin.query(`UPDATE "Employee" SET "userId" = $2 WHERE "id" = $1`, [employeeA, userA]);
+      await admin.query(`UPDATE "Employee" SET "userId" = $2 WHERE "id" = $1`, [employeeB, userB]);
+      await admin.query(
+        `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "employeeId", "updatedAt")
+         VALUES ($1, $2, 'Bağlı', 'Öğretmen', $3, now()), ($4, $5, 'Bağlı', 'Öğretmen', $6, now())`,
+        [`${tenantA}-teacher-linked`, tenantA, employeeA, `${tenantB}-teacher-linked`, tenantB, employeeB],
+      );
+      try {
+        const page = await users.listEmployeeAccessPage(tenantA, { direction: "next", limit: 100, sort: "lastName" });
+        const linked = page.records.find((record) => record.id === employeeA);
+        expect(linked).toMatchObject({ accountEmail: "hesap-a@cursor-keyset.example.test", teacherId: `${tenantA}-teacher-linked` });
+        expect(page.records.every((record) => record.tenantId === tenantA)).toBe(true);
+        expect(JSON.stringify(page.records)).not.toContain("hesap-b@");
+        expect(JSON.stringify(page.records)).not.toContain(`${tenantB}-teacher-linked`);
+        expect(page.records.filter((record) => record.teacherId).map((record) => record.id)).toEqual([employeeA]);
+
+        const search = await users.listEmployeeAccessPage(tenantA, { direction: "next", limit: 10, sort: "lastName", q: "HESAP-A@cursor" });
+        expect(search.records.map((record) => record.id)).toEqual([employeeA]);
+        const foreign = await users.listEmployeeAccessPage(tenantA, { direction: "next", limit: 10, sort: "lastName", q: "hesap-b@cursor" });
+        expect(foreign.records).toEqual([]);
+
+        // A soft-deleted teacher profile is no longer linked.
+        await admin.query(`UPDATE "Teacher" SET "deletedAt" = now() WHERE "id" = $1`, [`${tenantA}-teacher-linked`]);
+        const afterDelete = await users.listEmployeeAccessPage(tenantA, { direction: "next", limit: 100, sort: "lastName" });
+        expect(afterDelete.records.find((record) => record.id === employeeA)?.teacherId).toBeUndefined();
+      } finally {
+        await admin.query(`DELETE FROM "Teacher" WHERE "id" = ANY($1::text[])`, [[`${tenantA}-teacher-linked`, `${tenantB}-teacher-linked`]]);
+        await admin.query(`UPDATE "Employee" SET "userId" = NULL WHERE "id" = ANY($1::text[])`, [[employeeA, employeeB]]);
+        await admin.query(`DELETE FROM "User" WHERE "id" = ANY($1::text[])`, [[userA, userB]]);
+      }
+    });
   });
 
   describe("GET /identity-invitations (PostgresIdentityInvitationStore.listPage)", () => {
@@ -775,6 +819,7 @@ async function seedTurkishEmployees(pool: pg.Pool, tenantId: string): Promise<vo
 
 async function cleanup(pool: pg.Pool): Promise<void> {
   await pool.query(`DELETE FROM "IdentityInvitation" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
+  await pool.query(`DELETE FROM "Teacher" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "Employee" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "Student" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "Class" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);

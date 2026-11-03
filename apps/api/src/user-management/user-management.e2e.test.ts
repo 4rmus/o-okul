@@ -105,9 +105,27 @@ describe("Tenant user management", () => {
       .set("Authorization", `Bearer ${tenantB}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: "employee-admin-b", tenantId: "tenant-b" })]);
+        expect(body).toEqual([expect.objectContaining({ id: "employee-admin-b", tenantId: "tenant-b", accountEmail: "admin-b@example.test" })]);
         expect(JSON.stringify(body)).not.toContain("admin-a@example.test");
       });
+
+    // DEC-20261102-01 (F-21): the bound account's e-mail is returned and searchable, only inside the caller's tenant.
+    await request(server)
+      .get("/employees")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: "employee-admin-a", userId: "user-tenant-a", accountEmail: "admin-a@example.test" }),
+        ]));
+        expect(body.find((employee: { id: string }) => employee.id === "employee-operations-a")?.accountEmail).toBeUndefined();
+      });
+    await request(server)
+      .get("/employees")
+      .query({ q: "admin-b@example.test" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([]));
 
     await request(server)
       .get("/employees")

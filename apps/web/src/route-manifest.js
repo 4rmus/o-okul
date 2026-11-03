@@ -56,9 +56,11 @@ const tenantModules = {
   duyurular: ["communication", "REGISTRY"],
   etutler: ["academic-structure", "REGISTRY"],
   finans: ["finance", "MASTER_DETAIL"],
+  "gelisim-kriterleri": ["academic-structure", "REGISTRY"],
   "guvenlik-denetimi": ["operations", "WORKFLOW"],
   kampusler: ["academic-structure", "REGISTRY"],
   kazanimlar: ["academic-structure", "REGISTRY"],
+  // DEC-20261102-01 (F-21): "Kullanıcı hesapları" sekmesi kalktı; sayfa yalnız Çalışanlar'a yönlendirir.
   kullanicilar: ["identity", "REGISTRY"],
   "lisans-donemleri": ["setup", "REGISTRY"],
   kurulum: ["setup", "WORKFLOW"],
@@ -156,7 +158,9 @@ export const institutionRoutes = [
   navRoute("/kurum/ogretmenler", "Öğretmenler", "Kişiler", "UserRoundCog", { capability: "staff:manage", detailParent: true, hub: "/kurum/ogretmenler", menuLabel: "Personel" }),
   navRoute("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "Kişiler", "UserRoundCog", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Çalışanlar ve yetkiler" }),
   navRoute("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "Kişiler", "GraduationCap", { capability: "user:manage", hub: "/kurum/ogrenciler", tabLabel: "Portal erişimi" }),
-  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Kullanıcı hesapları" }),
+  // DEC-20261102-01 (F-21): no hub tab and no rail entry. The entry stays only so the shell guard lets old links reach
+  // the page, whose redirect lands on Çalışanlar. `redirectTo` keeps it out of the command palette and breadcrumbs.
+  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hiddenFromRail: true, redirectTo: "/kurum/calisanlar" }),
   navRoute("/kurum/siniflar", "Sınıflar", "Akademik", "School", { capability: "class:manage", detailParent: true, hub: "/kurum/siniflar", menuLabel: "Sınıf yapısı" }),
   navRoute("/kurum/seviyeler", "Seviyeler", "Akademik", "ClipboardList", { capability: "class:manage", hub: "/kurum/siniflar" }),
   navRoute("/kurum/kampusler", "Kampüsler", "Akademik", "Building2", { capability: "class:manage", hub: "/kurum/siniflar" }),
@@ -168,6 +172,7 @@ export const institutionRoutes = [
   navRoute("/kurum/materyaller", "Materyaller", "Akademik", "Library", { capability: "academic:manage", keywords: ["ödev"], menuLabel: "Ödev ve materyal" }),
   navRoute("/kurum/notlar", "Notlar", "Akademik", "NotebookTabs", { capability: "note:manage" }),
   navRoute("/kurum/not-defteri", "Not Defteri", "Akademik", "ClipboardList", { capability: "academic:manage", keywords: ["yazılı", "performans", "not girişi", "not yayını"] }),
+  navRoute("/kurum/gelisim-kriterleri", "Gelişim Kriterleri", "Akademik", "ClipboardCheck", { capability: "academic:manage", keywords: ["gelişim", "mentör", "değerlendirme"] }),
   navRoute("/kurum/sinavlar", "Sınavlar", "Sınav", "FileText", { capability: "academic:manage", detailParent: true }),
   navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" }),
   navRoute("/kurum/kazanimlar", "Kazanımlar", "Sınav", "ClipboardList", { capability: "academic:manage" }),
@@ -211,6 +216,7 @@ export const portalNavGroups = [
       navRoute("/ogretmen", "Özet", "Öğretmen Paneli", "LayoutDashboard"),
       navRoute("/ogretmen/ders-akisi", "Ders Akışı", "Öğretmen Paneli", "CalendarDays"),
       navRoute("/ogretmen/ogrenci-takibi", "Öğrenci Takibi", "Öğretmen Paneli", "GraduationCap"),
+      navRoute("/ogretmen/gelisim", "Gelişim", "Öğretmen Paneli", "ClipboardCheck"),
       navRoute("/ogretmen/odevler", "Ödev Kontrolü", "Öğretmen Paneli", "NotebookTabs"),
   navRoute("/ogretmen/not-defteri", "Not Defteri", "Öğretmen Paneli", "ClipboardList"),
       navRoute("/ogretmen/raporlar", "Sınav Raporu", "Öğretmen Paneli", "BarChart3"),
@@ -275,7 +281,8 @@ export const examWorkspaceSegments = {
 
 // Komut paletindeki iş akışı ve hızlı işlem girdileri.
 export const commandActions = [
-  commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage"),
+  // Toplu dönem geçişi Öğrenciler listesindeki "Toplu işlemler" bölümündedir; ilk kurulum sihirbazı menüdeki Kurulum girdisidir.
+  commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage"),
   commandAction("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı", "academic:manage"),
   commandAction("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem", "class:manage"),
   commandAction("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem", "class:manage"),
@@ -285,6 +292,11 @@ export const commandActions = [
   commandAction("/kurum/ogrenciler?new=1", "Öğrenci ekle", "Hızlı işlem", "student:manage"),
   { ...commandAction("/sistem/kurumlar", "Kurum oluştur", "Hızlı işlem"), scope: "system" },
 ];
+
+// Yalnız yönlendirme için tutulan yollar: kabuk guard'ı için manifestte kalır, komut paleti ve breadcrumb'da görünmez.
+export function redirectOnlyHrefs() {
+  return navigationRoutes().filter((route) => route.redirectTo).map((route) => route.href);
+}
 
 export function navigationRoutes() {
   return [...systemRoutes, ...institutionRoutes, ...portalNavGroups.flatMap((group) => group.routes)];
@@ -298,6 +310,9 @@ export function breadcrumbLabels() {
   }
   for (const route of navigationRoutes()) {
     if (route.breadcrumbLabel) labels[route.href] = route.breadcrumbLabel;
+  }
+  for (const route of navigationRoutes()) {
+    if (route.redirectTo) labels[route.href] = labels[route.redirectTo];
   }
   return { ...labels, ...pageLabels };
 }

@@ -23,6 +23,14 @@ const optikSteps = [
   ["05", "Takibi planlayın", "Öğrenciye verilecek akademik desteği gelişim geçmişi üzerinden izleyin."],
 ] as const;
 
+const studentWeek = [
+  ["01", "Yoklama", "Öğretmen sınıf yoklamasını alır; devamsızlık öğrencinin geçmişine işlenir."],
+  ["02", "Ödev", "Atanan ödev ve teslim durumu öğrencinin kaydında görünür."],
+  ["03", "Okul notu", "Yazılı, sözlü ve proje notları deneme sonuçlarından ayrı tutulur."],
+  ["04", "Deneme", "Deneme sonucu Başarı %, Net ve Soru bilgisiyle aynı kayda eklenir."],
+  ["05", "Haftalık takip", "Yönetici ve öğretmen, desteğe ihtiyaç duyan öğrenciyi aynı kayıttan belirler."],
+] as const;
+
 const studentRecord = [
   ["01", "Deneme sonuçları", "Optik TXT/DAT denemelerinde Başarı %, Net ve Soru bilgisi."],
   ["02", "Okul notu", "Yazılı, sözlü ve proje notları denemelerden ayrı kayıtta."],
@@ -181,6 +189,18 @@ export default function HomePage() {
           </section>
         </section>
 
+        <section id="ogrenci-haftasi" className="next-marketing-section" aria-labelledby="week-title">
+          <div className="next-marketing-section__header">
+            <div><p className="next-marketing-kicker">Öğrencinin haftası</p><h2 id="week-title">Yoklama, ödev, okul notu ve deneme aynı öğrenci kaydında.</h2></div>
+            <p>Yoklama, ödev, okul notu ve deneme sonucu ayrı tablolarda kalmaz; öğretmen ve yönetici öğrencinin haftasını tek kayıttan izler.</p>
+          </div>
+          <div className="next-marketing-steps">
+            {studentWeek.map(([number, title, description]) => (
+              <article key={number}><span>{number}</span><h3>{title}</h3><p>{description}</p></article>
+            ))}
+          </div>
+        </section>
+
         <section id="optik-akis" className="next-marketing-section" aria-labelledby="flow-title">
           <div className="next-marketing-section__header">
             <div><p className="next-marketing-kicker">Deneme sınavı yapan kurumlar için</p><h2 id="flow-title">Optik veriyi kontrol edin, rapora dönüştürün.</h2></div>
@@ -268,7 +288,7 @@ export default function HomePage() {
 
       <footer className="next-marketing-footer">
         <div><Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link><p>Özel okullar için bütüncül öğrenci takibi.</p></div>
-        <nav aria-label="Alt navigasyon"><a href="#optik-akis">Optik akış</a><a href="#roller">Kullanıcılar</a><a href="#operasyon">Kurum takibi</a><a href="#sinirlar">Kapsam</a><Link href="/fiyatlar">Fiyatlar</Link><Link href="/iletisim">İletişim</Link><Link href="/iletisim#kvkk">KVKK başvurusu</Link><Link href="/login">Giriş</Link></nav>
+        <nav aria-label="Alt navigasyon"><a href="#ogrenci-haftasi">Öğrencinin haftası</a><a href="#optik-akis">Optik akış</a><a href="#roller">Kullanıcılar</a><a href="#operasyon">Kurum takibi</a><a href="#sinirlar">Kapsam</a><Link href="/fiyatlar">Fiyatlar</Link><Link href="/iletisim">İletişim</Link><Link href="/iletisim#kvkk">KVKK başvurusu</Link><Link href="/login">Giriş</Link></nav>
         <p className="next-marketing-footer__copyright">© 2026 {appBrand.name}</p>
       </footer>
     </main>

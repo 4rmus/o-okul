@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
@@ -24,7 +24,8 @@ interface ClassDetailData {
 
 type ClassDetailSection = "overview" | "reports" | "students";
 
-export function ClassDetailPage({ classId }: { classId: string }) {
+// overviewPanels: Sınıf 360 akademik durum panelleri (DEC-20261102-04), Genel sekmesinde profil kartının altında.
+export function ClassDetailPage({ classId, overviewPanels }: { classId: string; overviewPanels?: ReactNode }) {
   const { auth } = useAuth();
   const [activeSection, setActiveSection] = useState<ClassDetailSection>("overview");
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -219,6 +220,7 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 <InfoItem label="Öğrenci kapsamı" value={`${formatCount(detail.students.length)} öğrenci`} />
               </InfoGrid>
             </Panel> : null}
+            {activeSection === "overview" ? overviewPanels : null}
             {activeSection === "reports" ? <Panel
               actions={<StatusBadge tone={reportState.tone}>{reportState.label}</StatusBadge>}
               aria-label="Sınıf rapor bağlamı"

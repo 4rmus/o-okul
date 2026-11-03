@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Building2, LogOut, Search, UserRound } from "lucide-react";
-import { Button, ContextBar } from "@o-okul/ui";
+import { Button } from "@o-okul/ui";
 import { isTenantRoleName, tenantRoleLabel, type Session } from "@o-okul/shared-types";
 import { appBrand } from "../../../src/brand.js";
-import { productTerms } from "../../../src/product-terms.js";
 import { hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "../_shared/navigation.js";
 import { type ShellTenantBrand } from "./nav-sidebar.js";
+import { PortalAnnouncementBell } from "./portal-announcement-bell.js";
 import { ThemeToggle } from "./theme-toggle.js";
 import { examWorkspaceSegments } from "../../../src/route-manifest.js";
 const allNavigationItems = [
@@ -23,56 +23,6 @@ const breadcrumbLabelByPath = {
   ...Object.fromEntries(allNavigationItems.map((item) => [item.href, item.label])),
   ...staticBreadcrumbLabels,
 };
-
-export function WorkContext({
-  campusId,
-  campuses,
-  onActivate,
-  onChange,
-  termId,
-  terms,
-  tenantName,
-}: {
-  campusId: string;
-  campuses: Array<{ id: string; name: string }>;
-  onActivate(): void;
-  onChange(key: "campusId" | "termId", value: string): void;
-  termId: string;
-  terms: Array<{ id: string; name: string }>;
-  tenantName?: string;
-}) {
-  return (
-    <ContextBar
-      className="next-work-context"
-      label="Çalışma bilgileri"
-      onActivate={onActivate}
-      selects={[
-        {
-          accessibleName: "Çalışma kampüsü",
-          allLabel: productTerms.allBranches,
-          label: productTerms.branch,
-          onChange: (value) => onChange("campusId", value),
-          options: withSelectedOption(campuses, campusId).map((campus) => ({ label: campus.name, value: campus.id })),
-          value: campusId,
-        },
-        {
-          accessibleName: "Çalışma dönemi",
-          allLabel: "Tüm dönemler",
-          label: "Dönem",
-          onChange: (value) => onChange("termId", value),
-          options: withSelectedOption(terms, termId).map((term) => ({ label: term.name, value: term.id })),
-          value: termId,
-        },
-      ]}
-      staticItems={[{ label: productTerms.institution, value: tenantName ?? "Kurum çalışma alanı" }]}
-    />
-  );
-}
-
-// URL'deki seçim listede yoksa (yükleniyor veya erişim dışı) ham kimlik gösterilmez.
-function withSelectedOption(options: Array<{ id: string; name: string }>, selectedId: string) {
-  return selectedId && !options.some((option) => option.id === selectedId) ? [...options, { id: selectedId, name: "Seçilmedi" }] : options;
-}
 
 export function DesktopTopBar({
   canUseShellSearch,
@@ -112,6 +62,7 @@ export function DesktopTopBar({
             {personaSwitch.label}
           </Button>
         ))}
+        <PortalAnnouncementBell />
         <ThemeToggle />
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />

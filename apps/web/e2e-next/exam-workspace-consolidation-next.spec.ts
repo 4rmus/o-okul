@@ -160,6 +160,32 @@ test.describe("Sınav çalışma alanı birleşimi", () => {
     await expect(page.getByRole("table", { name: "Sınav yönetimi" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Çalışma alanına dön" })).toHaveCount(0);
   });
+
+  // DEC-20261102-03: tenant geneli operasyon çalışanı STAFF personasında aynı çalışma alanını adım adım kullanır.
+  test("operasyon çalışanı listeden çalışma alanını açar ve optik, değerlendirme ve rapor adımlarında çerçeveyi görür", async ({ page }) => {
+    const evidence = await installK1Api(page, {
+      session: { userId: "operations-k1", membershipId: "membership-operations-k1", roles: ["OPERATIONS_STAFF"], activePersona: "STAFF" },
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/kurum/sinavlar", { waitUntil: "domcontentloaded" });
+
+    const examTable = page.getByRole("table", { name: "Sınav yönetimi" });
+    await examTable.getByRole("link", { name: examTitle }).click();
+    await expect(page).toHaveURL(`${appOrigin}/kurum/sinavlar/${examId}`);
+    await expect(page.getByRole("heading", { level: 1, name: examTitle })).toBeVisible();
+    const steps = page.getByRole("navigation", { name: "Sınav adımları" });
+    await expect(steps.getByRole("listitem")).toHaveCount(8);
+    await expect(steps.getByRole("link", { name: /Katılımcılar/ })).toHaveAttribute("href", `/kurum/sinavlar?examId=${examId}&from=workspace`);
+
+    for (const path of ["optik/duzen", "degerlendirme", "rapor/genel"]) {
+      await page.goto(`/kurum/sinavlar/${examId}/${path}`, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(`${appOrigin}/kurum/sinavlar/${examId}/${path}`);
+      await expect(page.locator("main:visible").getByRole("heading", { level: 1, name: examTitle })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Sınav adımları" })).toBeVisible();
+    }
+    expect(evidence.workspaceRequests).toBeGreaterThan(0);
+    expect(evidence.mutationRequests).toEqual([]);
+  });
 });
 
 async function expectNoHorizontalOverflow(page: Page, label: string) {
@@ -169,8 +195,14 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 
 async function installK1Api(
   page: Page,
-  options: { evaluationRounds?: number; nextAction?: "OPEN_OPTICAL" | "ADD_PARTICIPANTS"; workspaceStatus?: 403 | 404 } = {},
+  options: {
+    evaluationRounds?: number;
+    nextAction?: "OPEN_OPTICAL" | "ADD_PARTICIPANTS";
+    session?: Partial<typeof authFixture.session>;
+    workspaceStatus?: 403 | 404;
+  } = {},
 ) {
+  const auth = { ...authFixture, session: { ...authFixture.session, ...options.session } };
   const evidence = { mutationRequests: [] as string[], unknownRequests: [] as string[], workspaceRequests: 0 };
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
@@ -181,7 +213,7 @@ async function installK1Api(
     const pathName = new URL(request.url()).pathname.replace(/^\/api\/v1/, "");
 
     if (pathName === "/auth/refresh" && request.method() === "POST") {
-      await fulfillData(route, authFixture);
+      await fulfillData(route, auth);
       return;
     }
     if (request.method() !== "GET") {
@@ -200,10 +232,10 @@ async function installK1Api(
     }
     if (pathName === "/me/profile") {
       await fulfillData(route, {
-        userId: authFixture.session.userId,
-        tenantId: authFixture.session.tenantId,
-        roles: authFixture.session.roles,
-        activePersona: authFixture.session.activePersona,
+        userId: auth.session.userId,
+        tenantId: auth.session.tenantId,
+        roles: auth.session.roles,
+        activePersona: auth.session.activePersona,
         capabilities: [],
         mustChangePassword: false,
       });

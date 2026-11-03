@@ -186,4 +186,88 @@ describe("Development API", () => {
       .expect(409)
       .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
   });
+
+  describe("DEC-20261102-05 yazma kuralları", () => {
+    async function createCriterion(name: string): Promise<string> {
+      const response = await request(server)
+        .post("/development/criteria")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name, scaleMin: 1, scaleMax: 5 })
+        .expect(201);
+      return (response.body as { id: string }).id;
+    }
+
+    it("görünürlük verilmezse INTERNAL yazar; öğrenci portalı INTERNAL kaydı görmez", async () => {
+      const criterionId = await createCriterion("Varsayılan görünürlük ölçütü");
+      const created = await request(server)
+        .post("/development/assessments")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ periodLabel: "2026 Kasım iç", scores: [{ criterionId, score: 3 }], studentId: "student-a", mentorNote: "İç gözlem" })
+        .expect(201);
+      expect(created.body).toMatchObject({ visibility: "INTERNAL", mentorNote: "İç gözlem" });
+
+      const studentToken = await login("student-a@example.test");
+      const portal = await request(server)
+        .get("/me/student/development-assessments")
+        .set("Authorization", `Bearer ${studentToken}`)
+        .expect(200);
+      expect((portal.body as Array<{ id: string }>).map((item) => item.id)).not.toContain(created.body.id);
+    });
+
+    it("aynı kriter tekrarını 400, uzun mentör notunu 422 ile reddeder", async () => {
+      const criterionId = await createCriterion("Tekrar ölçütü");
+      const duplicate = await request(server)
+        .post("/development/assessments")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ periodLabel: "2026 Kasım", scores: [{ criterionId, score: 3 }, { criterionId, score: 4 }], studentId: "student-a" })
+        .expect(400);
+      expect(duplicate.body.error.code).toBe("DEVELOPMENT_SCORE_CRITERION_DUPLICATE");
+
+      const tooLong = await request(server)
+        .post("/development/assessments")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ periodLabel: "2026 Kasım", scores: [{ criterionId, score: 3 }], studentId: "student-a", mentorNote: "a".repeat(1001) })
+        .expect(422);
+      expect(tooLong.body.error.details.fields).toEqual(expect.arrayContaining([expect.objectContaining({ path: "mentorNote" })]));
+    });
+
+    it("yönetici atamasız öğretmen adına yazamaz, sınıf öğretmeni adına yazar", async () => {
+      const criterionId = await createCriterion("Yönetici yazarlığı ölçütü");
+      const body = { periodLabel: "2026 Kasım", scores: [{ criterionId, score: 3 }], studentId: "student-a" };
+      const missing = await request(server)
+        .post("/development/assessments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send(body)
+        .expect(400);
+      expect(missing.body.error.code).toBe("DEVELOPMENT_ASSESSMENT_TEACHER_REQUIRED");
+      await request(server)
+        .post("/development/assessments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ ...body, teacherId: "teacher-a" })
+        .expect(201)
+        .expect(({ body: created }) => expect(created).toMatchObject({ teacherId: "teacher-a", visibility: "INTERNAL" }));
+    });
+
+    it("öğretmenin yazabileceği öğrencileri döndürür; personel bağlamında 403 verir", async () => {
+      const scope = await request(server)
+        .get("/development/authoring-scope")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(200);
+      expect(scope.body.studentIds).toContain("student-a");
+      const staff = await request(server)
+        .get("/development/authoring-scope")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(403);
+      expect(staff.body.error.code).toBe("TEACHER_CONTEXT_REQUIRED");
+    });
+
+    it("değerlendirme güncelleme ve silme yolu yoktur", async () => {
+      for (const method of ["patch", "put", "delete"] as const) {
+        await request(server)[method]("/development/assessments/any-id")
+          .set("Authorization", `Bearer ${tenantAAccessToken}`)
+          .send({ mentorNote: "değişiklik" })
+          .expect(404);
+      }
+    });
+  });
 });
