@@ -6,6 +6,7 @@ import {
   reportSnapshotScopeWidth,
   type PreferredSnapshotCandidate,
 } from "./report-snapshot-preference.js";
+import { reportSnapshotPreferenceExpectedOrder, reportSnapshotPreferenceFixture } from "./report-snapshot-preference.fixture.js";
 
 function snapshot(overrides: Partial<PreferredSnapshotCandidate> & { id: string }): PreferredSnapshotCandidate {
   return { createdAt: "2026-10-01T00:00:00.000Z", ...overrides };
@@ -34,8 +35,18 @@ describe("report snapshot preference", () => {
     expect(isPreferredReportSnapshot(level, olderLevel)).toBe(true);
     expect(isPreferredReportSnapshot(olderLevel, level)).toBe(false);
 
+    // No generatedAt: the row is placed by COALESCE(generatedAt, createdAt), the same key the SQL form uses, so a
+    // newer createdAt beats an older generatedAt and an older createdAt loses to it.
     const createdOnly = snapshot({ id: "created", gradeLevelId: "g", createdAt: "2026-10-02T10:00:00.000Z" });
     expect(isPreferredReportSnapshot(createdOnly, level)).toBe(true);
+    expect(isPreferredReportSnapshot(level, createdOnly)).toBe(false);
+    const createdEarlier = snapshot({ id: "created-earlier", gradeLevelId: "g", createdAt: "2026-09-30T10:00:00.000Z" });
+    expect(isPreferredReportSnapshot(createdEarlier, level)).toBe(false);
+
+    // Same COALESCE time: the newer createdAt wins before the id (level was created at 00:00 that day).
+    const sameGeneratedNewerCreated = snapshot({ id: "a-created-later", gradeLevelId: "g", generatedAt: "2026-10-01T10:00:00.000Z", createdAt: "2026-10-01T09:00:00.000Z" });
+    expect(isPreferredReportSnapshot(sameGeneratedNewerCreated, level)).toBe(true);
+    expect(isPreferredReportSnapshot(level, sameGeneratedNewerCreated)).toBe(false);
 
     const sameTimeA = snapshot({ id: "a", gradeLevelId: "g", generatedAt: "2026-10-01T10:00:00.000Z" });
     const sameTimeB = snapshot({ id: "b", gradeLevelId: "g", generatedAt: "2026-10-01T10:00:00.000Z" });
@@ -48,6 +59,18 @@ describe("report snapshot preference", () => {
     for (const column of reportSnapshotScopeFilters) {
       expect(sql).toContain(`(snapshot."${column}" IS NOT NULL)::int`);
     }
-    expect(sql).toMatch(/^\(.+\) ASC, snapshot\."generatedAt" DESC NULLS LAST, snapshot\."createdAt" DESC, snapshot\."id" DESC$/);
+    expect(sql).toMatch(/^\(.+\) ASC, COALESCE\(snapshot\."generatedAt", snapshot\."createdAt"\) DESC, snapshot\."createdAt" DESC, snapshot\."id" DESC$/);
+  });
+
+  it("ranks the shared fixture in the order the SQL form is pinned to (me-institution-dashboard.store.postgres.test.ts)", () => {
+    const sorted = [...reportSnapshotPreferenceFixture]
+      .sort((a, b) => (a.id === b.id ? 0 : isPreferredReportSnapshot(a, b) ? -1 : 1))
+      .map((candidate) => candidate.id);
+    expect(sorted).toEqual([...reportSnapshotPreferenceExpectedOrder]);
+
+    // The service keeps one winner per exam by pairwise comparison; it lands on the first of the same order.
+    const winner = reportSnapshotPreferenceFixture.reduce((current, candidate) =>
+      isPreferredReportSnapshot(candidate, current) ? candidate : current);
+    expect(winner.id).toBe(reportSnapshotPreferenceExpectedOrder[0]);
   });
 });

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { runWithRequestContext, type RequestContext } from "../context/request-context.js";
+import { reportSnapshotPreferenceExpectedOrder, reportSnapshotPreferenceFixture } from "../report/report-snapshot-preference.fixture.js";
+import { reportSnapshotPreferenceOrderBySql } from "../report/report-snapshot-preference.js";
 import { PostgresClassStore } from "../school/class-store.js";
 import { PostgresStudentStore } from "../student/student-store.js";
 import { PostgresSupportTicketStore } from "../support-ticket/support-ticket-store.js";
@@ -181,6 +183,28 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
       await admin.query('UPDATE "ReportSnapshot" SET "deletedAt"=NULL WHERE "tenantId"=$1 AND id=$2', [tenantA, id(tenantA, "snapshot")]);
     }
     expect(await headline()).toMatchObject({ snapshotId: id(tenantA, "snapshot") });
+  });
+
+  it("the SQL preference ranks the shared fixture like the TS comparator, a NULL generatedAt row by its createdAt", async () => {
+    // Same rows as report-snapshot-preference.test.ts, on a separate exam held before the headline exam; the single
+    // scope filter of the fixture is campus-1 here (ReportSnapshot.campusId references Campus).
+    await admin.query('INSERT INTO "Exam" (id,"tenantId",title,status,"startsAt","updatedAt") VALUES ($1,$2,\'Sıralama\',\'PUBLISHED\',\'2020-01-01T00:00:00Z\',now())', [id(tenantA, "exam-order"), tenantA]);
+    try {
+      for (const row of reportSnapshotPreferenceFixture) {
+        await admin.query(
+          'INSERT INTO "ReportSnapshot" (id,"tenantId","examId","campusId","reportType","contentHash","inputRefs",status,"snapshotData","generatedAt","createdAt","updatedAt") VALUES ($1,$2,$3,$4,\'EXAM\',$1,\'{}\'::jsonb,\'READY\',\'{}\'::jsonb,$5::timestamptz,$6::timestamptz,now())',
+          [id(tenantA, row.id), tenantA, id(tenantA, "exam-order"), row.campusId ? id(tenantA, "campus-1") : null, row.generatedAt ?? null, row.createdAt],
+        );
+      }
+      const ordered = await admin.query<{ id: string }>(
+        `SELECT snapshot."id" FROM "ReportSnapshot" snapshot WHERE snapshot."tenantId" = $1 AND snapshot."examId" = $2 ORDER BY ${reportSnapshotPreferenceOrderBySql("snapshot")}`,
+        [tenantA, id(tenantA, "exam-order")],
+      );
+      expect(ordered.rows.map((row) => row.id)).toEqual(reportSnapshotPreferenceExpectedOrder.map((name) => id(tenantA, name)));
+    } finally {
+      await admin.query('DELETE FROM "ReportSnapshot" WHERE "tenantId"=$1 AND "examId"=$2', [tenantA, id(tenantA, "exam-order")]);
+      await admin.query('DELETE FROM "Exam" WHERE "tenantId"=$1 AND id=$2', [tenantA, id(tenantA, "exam-order")]);
+    }
   });
 
   it("a campus-scoped viewer sees only its campus rows and no tenant-wide latest exam", async () => {
