@@ -22,6 +22,7 @@ import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { storeRolePreviewToken } from "../../portals/_shared/portal-shell.js";
 import { formatDateTime } from "../../_shared/format.js";
+import { redirectOnlyHrefs } from "../../../../src/route-manifest.js";
 
 type PreviewRole = TenantAssignableRoleName;
 
@@ -71,6 +72,9 @@ const evidenceChecks = [
   "pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts",
   "pnpm identity-link:audit",
 ] as const;
+
+// Retired routes kept only so the shell guard lets their redirect run (e.g. /kurum/kullanicilar) are not visible areas.
+const redirectOnlyPreviewHrefs = new Set(redirectOnlyHrefs());
 
 const previewRoles = tenantAssignableRoles.map((role) => ({ label: tenantRoleLabel(role), value: role }));
 
@@ -554,8 +558,8 @@ function buildRolePreviewSections(role: PreviewRole) {
   return hasInstitutionAccess([role])
     ? getInstitutionNavGroups([role], "STAFF").map((group) => ({
         title: group.label,
-        items: group.items.map((item) => item.label),
-      }))
+        items: group.items.filter((item) => !redirectOnlyPreviewHrefs.has(item.href)).map((item) => item.label),
+      })).filter((section) => section.items.length > 0)
     : [];
 }
 

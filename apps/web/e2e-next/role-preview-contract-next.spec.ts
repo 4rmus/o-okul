@@ -86,10 +86,14 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await expect(roleViewPreview.getByRole("columnheader", { name: "Menü grubu" })).toBeVisible();
     await expect(roleViewPreview.getByRole("columnheader", { name: "Görünür öğe" })).toBeVisible();
     await expect(roleViewPreview.getByText("Ödeme planları")).toBeVisible();
-    await expect(roleViewPreview.getByText("Kullanıcılar")).toBeVisible();
+    // Admin-only area: ASSISTANT_ADMIN has no user:manage, so the contrast below proves role differentiation.
+    await expect(roleViewPreview.getByText("Çalışanlar ve Yetkiler", { exact: true })).toBeVisible();
+    // /kurum/kullanicilar is redirect-only (DEC-20261102-01): it is not a visible area for any role.
+    await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
     await roleSelect.selectOption("ASSISTANT_ADMIN");
     await expect(roleViewPreview.getByText("Öğrenciler")).toBeVisible();
     await expect(roleViewPreview.getByText("Ödeme planları")).toHaveCount(0);
+    await expect(roleViewPreview.getByText("Çalışanlar ve Yetkiler", { exact: true })).toHaveCount(0);
     await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
     await roleSelect.selectOption("TEACHER");
     await expect(roleViewPreview).toContainText("Öğretmen ekranı");
