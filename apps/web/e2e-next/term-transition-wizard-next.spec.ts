@@ -61,8 +61,8 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await open(page, db, "/kurum/donem-gecisi");
 
     const calendar = page.getByRole("form", { name: "Yeni yıl ve dönem" });
-    await calendar.getByLabel("Akademik yıl", { exact: true }).selectOption("year-new");
-    await calendar.getByLabel("Dönem", { exact: true }).selectOption("term-new");
+    await calendar.getByRole("combobox", { name: "Akademik yıl", exact: true }).selectOption("year-new");
+    await calendar.getByRole("combobox", { name: "Dönem", exact: true }).selectOption("term-new");
     await expect(page).toHaveURL(/yil=year-new/);
     await expect(page).toHaveURL(/donem=term-new/);
     await expect(calendar).toContainText("Seçilen dönem: 2026-2027 1. Dönem");

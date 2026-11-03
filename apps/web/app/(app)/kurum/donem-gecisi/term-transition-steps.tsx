@@ -38,7 +38,7 @@ interface CalendarStepProps {
 }
 
 export function CalendarStep({ accessToken, loading, onCreated, onSelect, state, terms, today, years }: CalendarStepProps) {
-  const [yearChoice, setYearChoice] = useState(state.academicYearId || (years.length === 0 ? newRecord : ""));
+  const [yearChoice, setYearChoice] = useState(state.academicYearId);
   const [termChoice, setTermChoice] = useState(state.termId);
   const [yearForm, setYearForm] = useState({ name: "", startsAt: "", endsAt: "" });
   const [termForm, setTermForm] = useState({ name: "", startsAt: "", endsAt: "" });
@@ -263,6 +263,13 @@ const actionLabels: Record<StudentAction, string> = {
 
 export function ExitReviewStep({ classes, loading, onConfirm, onOverrides, plan, state }: ExitReviewStepProps) {
   const [leaverChoice, setLeaverChoice] = useState("");
+  // The address is the source of truth; the local copy keeps the box responsive until the address catches up.
+  const [confirmedDraft, setConfirmedDraft] = useState(state.confirmed);
+  const [syncedConfirmed, setSyncedConfirmed] = useState(state.confirmed);
+  if (syncedConfirmed !== state.confirmed) {
+    setSyncedConfirmed(state.confirmed);
+    setConfirmedDraft(state.confirmed);
+  }
   const classNames = classNameMap(classes);
   const rows = (plan?.candidates ?? []).filter((item) => item.action === "graduate" || item.action === "leave" || state.overrides[item.student.id]);
   const renewing = plan?.renew ?? [];
@@ -340,10 +347,13 @@ export function ExitReviewStep({ classes, loading, onConfirm, onOverrides, plan,
       ) : null}
       {exitCount > 0 ? (
         <Checkbox
-          checked={state.confirmed}
+          checked={confirmedDraft}
           description="Öğrenci kayıtları ve geçmiş sonuçları silinmez; durum değişikliği sihirbazla geri alınamaz."
           label={`${plan?.graduate.length ?? 0} öğrencinin mezun, ${plan?.leave.length ?? 0} öğrencinin ayrılan olarak işaretleneceğini ve öğrenci portal erişimlerinin askıya alınacağını onaylıyorum.`}
-          onChange={(event) => onConfirm(event.target.checked)}
+          onChange={(event) => {
+            setConfirmedDraft(event.target.checked);
+            onConfirm(event.target.checked);
+          }}
         />
       ) : null}
     </Panel>

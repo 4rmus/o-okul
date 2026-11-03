@@ -131,7 +131,7 @@ export function TermTransitionWizard() {
       router.push(href);
       return;
     }
-    router.replace(href, { scroll: false });
+    router.replace(href);
   }
 
   function stepHref(step: WizardStepNumber) {
