@@ -40,7 +40,7 @@ export class MePortalProfileService {
     const assignments = filterTenantResources(context, await this.teacherAssignments.list()).filter(isAssignmentActive);
     // The active term only breaks a tie, so the calendar is read only when several assignments compete.
     const activeTermIds = responsibleCandidates(assignments, profile).length > 1
-      ? new Set(filterTenantResources(context, await this.calendar.listTerms()).filter((term) => term.isActive).map((term) => term.id))
+      ? new Set(filterTenantResources(context, await this.calendar.listTerms()).filter((term) => term.isActive && !term.deletedAt).map((term) => term.id))
       : undefined;
     const assignment = pickResponsibleAssignment(assignments, profile, activeTermIds);
     if (!assignment) return profile;

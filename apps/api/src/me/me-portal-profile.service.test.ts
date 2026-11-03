@@ -109,6 +109,12 @@ describe("MePortalProfileService (UAT U20)", () => {
       { id: "term-active", tenantId: "tenant-a", academicYearId: "year", name: "1. Dönem", startsAt: "2026-09-01", endsAt: "2027-01-31", isActive: true },
     ]);
     expect((await service.getGuardianStudentProfile(guardianContext, "student-a")).responsibleTeacherName).toBe("Sınıf Öğretmeni");
+
+    // A soft-deleted term keeps isActive; it must not win the tie, so the later start decides.
+    const deletedTermService = createService(baseProfile, [newer, activeTerm], [
+      { id: "term-active", tenantId: "tenant-a", academicYearId: "year", name: "1. Dönem", startsAt: "2026-09-01", endsAt: "2027-01-31", isActive: true, deletedAt: "2026-11-01T00:00:00.000Z" },
+    ]);
+    expect((await deletedTermService.getGuardianStudentProfile(guardianContext, "student-a")).responsibleTeacherName).toBe("Sorumlu Öğretmen");
   });
 
   it("öğrenciye özel atama sınıf öğretmeni seçiminde sayılmaz", () => {

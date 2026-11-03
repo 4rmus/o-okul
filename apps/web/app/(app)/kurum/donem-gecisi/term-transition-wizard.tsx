@@ -144,6 +144,8 @@ export function TermTransitionWizard() {
   });
 
   function navigate(patch: Partial<WizardState>, mode: "push" | "replace" = "replace") {
+    // While the irreversible run is in flight the target and the plan stay fixed, so its progress and errors stay visible.
+    if (isApplying) return;
     const query = writeWizardState({ ...state, ...patch });
     const href = query ? `${pathname}?${query}` : pathname;
     if (mode === "push") {
@@ -205,7 +207,7 @@ export function TermTransitionWizard() {
     // still carry a later step number).
     const done = calendarReady && (number < state.step || (number === 6 && transitionDone));
     return {
-      href: locked ? undefined : stepHref(number),
+      href: locked || isApplying ? undefined : stepHref(number),
       key: step.key,
       label: step.label,
       status: done ? "complete" : number === state.step ? "current" : "upcoming",
