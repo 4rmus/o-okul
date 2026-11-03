@@ -1331,7 +1331,8 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Bugün yapılacaklar",
   // T3: öğretmen Bugün gelen kutusu; yeni sayaçlar ve sınıf/yoklama sütunları.
-  "6 iş",
+  // UAT U18: şerit başlığı yalnız bekleyen kartları sayar (Bugün kartıyla aynı sayı).
+  "5 iş",
   'getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })',
   'getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })',
   'getByRole("link", { name: /Okunmamış duyurular: 1 duyuru/ })',
