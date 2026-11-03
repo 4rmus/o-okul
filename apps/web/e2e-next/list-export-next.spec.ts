@@ -165,6 +165,7 @@ test.describe("Tablo CSV dışa aktarma", () => {
     ] as const) {
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await installPortalMocks(page, subjectType);
+      await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);

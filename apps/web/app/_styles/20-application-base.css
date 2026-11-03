@@ -2439,6 +2439,14 @@
   display: none;
 }
 
+/* Düğme sağa yaslı; ipucu düğmenin sağ kenarına hizalanır, dar ekranda görünüm alanından taşmaz. */
+.uh-crud-page__table-tools .uh-tooltip__content {
+  right: 0;
+  left: auto;
+  max-width: min(260px, calc(100vw - 2 * var(--space-sm)));
+  transform: none;
+}
+
 /* Dokunmatik genişliklerde dışa aktarma düğmesi 44 px hedef taşır. */
 @media (max-width: 1023px) {
   .uh-crud-page__table-tools .uh-button {
