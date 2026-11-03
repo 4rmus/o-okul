@@ -231,6 +231,7 @@ test.describe("Not girişi tablosu", () => {
     await sessionsLink.click();
     await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Oturumlar" })).toBeVisible();
 
     await page.goto("/kurum/not-defteri");
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
@@ -274,6 +275,8 @@ test.describe("Not girişi tablosu", () => {
 
   test("kaydedilmemiş not varken tarayıcı geri tuşu onay ister; vazgeçince adres ve not yerinde kalır", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/hesap/oturumlar", { saves: [] });
+    // WebKit interrupts a second goto that starts while the first page is still bootstrapping its session.
+    await expect(page.getByRole("heading", { level: 1, name: "Oturumlar" })).toBeVisible();
     await page.goto("/kurum/not-defteri");
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
     await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
