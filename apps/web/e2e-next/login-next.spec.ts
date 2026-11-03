@@ -5060,10 +5060,14 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Rol önizleme özeti").getByText("Kişiye göre")).toBeVisible();
   const roleViewPreview = page.getByLabel("Rol görünüm önizleme");
   await expect(roleViewPreview.getByText("Ödeme planları")).toBeVisible();
-  await expect(roleViewPreview.getByText("Kullanıcılar")).toBeVisible();
+  // Admin-only area: ASSISTANT_ADMIN has no user:manage, so the contrast below proves role differentiation.
+  await expect(roleViewPreview.getByText("Çalışanlar ve Yetkiler", { exact: true })).toBeVisible();
+  // /kurum/kullanicilar is redirect-only (DEC-20261102-01): it is not a visible area for any role.
+  await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
   await roleViewPreview.getByRole("combobox", { name: /^Rol/ }).selectOption("ASSISTANT_ADMIN");
   await expect(roleViewPreview.getByText("Öğrenciler")).toBeVisible();
   await expect(roleViewPreview.getByText("Ödeme planları")).toHaveCount(0);
+  await expect(roleViewPreview.getByText("Çalışanlar ve Yetkiler", { exact: true })).toHaveCount(0);
   await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
   await roleViewPreview.getByRole("combobox", { name: /^Rol/ }).selectOption("TEACHER");
   await expect(roleViewPreview.getByText("Öğretmen ekranı")).toBeVisible();
