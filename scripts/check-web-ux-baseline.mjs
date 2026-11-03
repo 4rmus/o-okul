@@ -4872,6 +4872,10 @@ requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.ts
 requireTokens("apps/web/app/(app)/portals/teacher-homework-create.tsx", [
   "Ödev verebileceğiniz sınıflar alınamadı.",
   "Sınıf veya branş öğretmeni ataması için kurum yöneticinizle görüşün.",
+  // Yerel UAT L6: geçmiş teslim tarihi engellenmez, satır içi uyarıyla söylenir; "bugün" Türkiye takvim günüdür.
+  "Teslim tarihi geçmişte; öğrenciler ödevi gecikmiş görür.",
+  "istanbulDateKey()",
+  '<Alert tone="warning">{pastDueDateWarning}</Alert>',
 ]);
 
 // Berrak G7 (§5): öğretmen günlük aksiyon şeridi ve özeti; eski overview şerit pin'lerinin eşdeğeri.

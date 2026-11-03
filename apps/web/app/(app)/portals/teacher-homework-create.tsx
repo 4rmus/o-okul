@@ -3,10 +3,18 @@
 import { type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { HomeworkCreateRequest, HomeworkRecord, TeacherAuthoringScope, TeacherPortalLookupsResponse } from "@o-okul/shared-types";
-import { Button, Field, Input, Panel, Select, Textarea } from "@o-okul/ui";
+import { Alert, Button, Field, Input, Panel, Select, Textarea } from "@o-okul/ui";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
+import { istanbulDateKey } from "../_shared/format.js";
 
 const emptyForm = { classId: "", title: "", description: "", dueAt: "" };
+
+/** A past due date is allowed (late entry of a given homework) but said out loud; "today" is the Türkiye calendar day. */
+const pastDueDateWarning = "Teslim tarihi geçmişte; öğrenciler ödevi gecikmiş görür.";
+
+function isPastDueDate(dueDateKey: string, todayKey: string = istanbulDateKey()): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dueDateKey) && dueDateKey < todayKey;
+}
 
 /** DEC-20261012-01: a class or branch teacher creates homework for an assigned class; the API enforces the scope. */
 export function TeacherHomeworkCreatePanel({ accessToken, onCreated }: { accessToken: string; onCreated(): void }) {
@@ -91,6 +99,7 @@ export function TeacherHomeworkCreatePanel({ accessToken, onCreated }: { accessT
         <Field label="Teslim tarihi">
           <Input type="date" value={form.dueAt} onChange={(event) => setForm({ ...form, dueAt: event.target.value })} />
         </Field>
+        {isPastDueDate(form.dueAt) ? <Alert tone="warning">{pastDueDateWarning}</Alert> : null}
         {message ? <p className={message.tone === "alert" ? "next-form-error" : "next-field-hint"} role={message.tone}>{message.text}</p> : null}
         <div className="next-form-actions">
           <Button disabled={busy} type="submit">Ödev oluştur</Button>

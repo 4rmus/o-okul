@@ -206,7 +206,9 @@ function LevelSeriesPanel({ levelName, series }: { levelName: string; series: Gr
       description={`${levelName} seviye raporları; soru sayısı farklı sınavlar Başarı % ile karşılaştırılır.`}
     >
       <ProgressLineChart
-        caption={`${typeLabel} Başarı % gidişi`}
+        // The chart's own data table sits in a collapsed "Ayrıntılı veriyi göster" block; its caption names it as the
+        // chart's data so it does not read as a second, untitled copy of the panel title (UAT L3).
+        caption={`${typeLabel} Başarı % grafiğinin verisi`}
         emptyLabel="Başarı % saklanmış seviye raporu yok"
         points={chartPoints}
         tableMode="details"

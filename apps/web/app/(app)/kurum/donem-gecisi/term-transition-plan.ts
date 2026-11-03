@@ -9,6 +9,14 @@ import {
 // DEC-20261102-08: the wizard keeps its choices in the page address and reads progress back from the server, so a
 // reload or a retry continues where an interrupted run stopped. Nothing is kept in browser storage.
 
+/**
+ * Calendar records in chronological order: earliest start first, so "1. Dönem" precedes "2. Dönem" and years read
+ * in calendar order. Ties fall back to the Turkish name order.
+ */
+export function compareCalendarByStart(left: { name: string; startsAt: string }, right: { name: string; startsAt: string }): number {
+  return left.startsAt.localeCompare(right.startsAt) || left.name.localeCompare(right.name, "tr-TR", { numeric: true });
+}
+
 export const wizardSteps = [
   { key: "takvim", label: "Yıl ve dönem" },
   { key: "siniflar", label: "Sınıf eşleştirme" },

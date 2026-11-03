@@ -306,7 +306,15 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(panel.getByRole("alert")).toHaveText("Sınıf ve ödev başlığı zorunludur.");
       await panel.getByRole("combobox", { name: /^Sınıf/ }).selectOption("class-8a");
       await panel.getByLabel("Ödev başlığı").fill("Kesirler");
+      // A past due date (before 2026-06-17, Türkiye) is allowed but warned about inline; it does not block saving.
+      const pastDueWarning = panel.getByRole("status").filter({ hasText: "Teslim tarihi geçmişte; öğrenciler ödevi gecikmiş görür." });
+      await panel.getByLabel("Teslim tarihi").fill("2026-06-16");
+      await expect(pastDueWarning).toBeVisible();
+      await expect(panel.getByRole("button", { name: "Ödev oluştur" })).toBeEnabled();
+      await panel.getByLabel("Teslim tarihi").fill("2026-06-17");
+      await expect(pastDueWarning).toHaveCount(0);
       await panel.getByLabel("Teslim tarihi").fill("2026-06-20");
+      await expect(pastDueWarning).toHaveCount(0);
       await expectNoHorizontalOverflow(page, `öğretmen ödev oluştur ${viewport.width}px`);
       await panel.getByRole("button", { name: "Ödev oluştur" }).click();
       await expect(panel.getByRole("status")).toHaveText("“Kesirler” ödevi oluşturuldu.");
