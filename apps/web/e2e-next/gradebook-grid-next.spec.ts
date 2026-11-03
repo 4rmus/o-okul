@@ -65,8 +65,11 @@ interface Captured {
   saves: string[];
   /** Delays the logout and persona switch responses (milliseconds). */
   slowAuthMs?: number;
-  /** Offers a STAFF → TEACHER persona switch whose request succeeds or fails. */
-  personaSwitch?: "ok" | "fail";
+  /**
+   * Offers a STAFF → TEACHER persona switch whose request succeeds, fails, or succeeds with a session that keeps
+   * institution access (TENANT_ADMIN plus TEACHER), so /kurum/not-defteri stays.
+   */
+  personaSwitch?: "ok" | "fail" | "keep";
   loggedOut?: boolean;
 }
 
@@ -218,7 +221,7 @@ test.describe("Not girişi tablosu", () => {
     await expect.poll(() => beforeUnloadBlocked(page)).toBe(false);
   });
 
-  test("kaydedilmemiş not varken menü, gezinme yolu ve komut paleti bağlantıları onay ister", async ({ page }) => {
+  test("kaydedilmemiş not varken menü, gezinme yolu ve komut paleti bağlantıları onay ister", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/kurum/not-defteri", { saves: [] });
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
     const sessionsLink = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Oturumlar" });
@@ -456,6 +459,68 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" })).toBeVisible();
   });
 
+  test("sayfayı koruyan çalışma alanı değişimi korumayı hemen geri kurar; not defteri yeni oturumda taslağı bırakınca koruma kalkar", backForwardTag, async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [], personaSwitch: "keep" });
+    // Records the guard mark of every history write from here on (Next.js has patched history by now).
+    await page.evaluate(() => {
+      const writes: string[] = [];
+      (window as unknown as { __historyWrites: string[] }).__historyWrites = writes;
+      const mark = (data: unknown) => {
+        const record = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
+        return "__ookulGuardSentinel" in record ? "sentinel" : "__ookulGuardBase" in record ? "base" : "__ookulGuardReleased" in record ? "released" : "page";
+      };
+      const replace = window.history.replaceState.bind(window.history);
+      const push = window.history.pushState.bind(window.history);
+      window.history.replaceState = (data: unknown, unused: string, url?: string | URL | null) => {
+        writes.push(`replace:${mark(data)}`);
+        replace(data, unused, url);
+      };
+      window.history.pushState = (data: unknown, unused: string, url?: string | URL | null) => {
+        writes.push(`push:${mark(data)}`);
+        push(data, unused, url);
+      };
+    });
+
+    await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    // The new persona may still open the page: right after the switch the released entry becomes the sentinel again,
+    // without a new entry.
+    await expect.poll(() => historyWrites(page)).toContain("replace:sentinel");
+    const writes = await historyWrites(page);
+    expect(writes.indexOf("replace:released")).toBeGreaterThanOrEqual(0);
+    expect(writes.indexOf("replace:released")).toBeLessThan(writes.indexOf("replace:sentinel"));
+    expect(writes.filter((write) => write.startsWith("push:"))).toEqual([]);
+    // The switch clears the query cache, the gradebook reloads without the typed grade, and the guard leaves cleanly.
+    await expect(page.getByTestId("grade-unsaved-summary")).toHaveText("Kaydedilmemiş değişiklik yok");
+    await expect.poll(() => onGuardSentinel(page)).toBe(false);
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+
+    await page.evaluate(() => window.history.back());
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("komut paletinden aynı sayfaya onaylı geçiş sayfayı bırakmazsa koruma geri gelir", backForwardTag, async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [] });
+    const historyLength = await page.evaluate(() => window.history.length);
+
+    await openCommandPalette(page);
+    const palette = page.getByRole("dialog", { name: "Komut paleti" });
+    await palette.getByRole("combobox", { name: "Komut ara" }).fill("Not Defteri");
+    await palette.getByRole("combobox", { name: "Komut ara" }).press("Enter");
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    // The navigation's transition settles with the page still mounted on its address: the guard comes back.
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+    expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+
+    await page.evaluate(() => window.history.back());
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+  });
+
   test("onaylanan çalışma alanı değişimi ve çıkış not defterine ileri kaydı bırakmaz", backForwardTag, async ({ page }) => {
     await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok" });
     await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
@@ -473,9 +538,12 @@ test.describe("Not girişi tablosu", () => {
 
   test("yavaş çalışma alanı değişimi ve çıkış korumayı erken kurmaz; adres görünen sayfayla aynı kalır", backForwardTag, async ({ page }) => {
     // Both requests take longer than the old fixed re-arm delay (2 s).
-    await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok", slowAuthMs: 2600 });
+    await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok", slowAuthMs: 3200 });
     await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
     await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    // Still on its way after 2.4 s: the guard entry carries only the released mark, no sentinel came back.
+    await page.waitForTimeout(2400);
+    expect(await guardMarker(page)).toEqual({ path: "/kurum/not-defteri", marker: "released" });
     await expect(page).toHaveURL(/\/ogretmen$/, { timeout: 10_000 });
     await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toHaveCount(0);
     expect(await canGoForward(page)).toBe(false);
@@ -484,9 +552,11 @@ test.describe("Not girişi tablosu", () => {
     expect(await canGoForward(page)).toBe(false);
 
     const second = await page.context().newPage();
-    await openGradebookFromSessions(second, { saves: [], slowAuthMs: 2600 });
+    await openGradebookFromSessions(second, { saves: [], slowAuthMs: 3200 });
     await second.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
     await second.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await second.waitForTimeout(2400);
+    expect(await guardMarker(second)).toEqual({ path: "/kurum/not-defteri", marker: "released" });
     await expect(second).toHaveURL(/\/login/, { timeout: 10_000 });
     await expect(second.getByRole("region", { name: "Değerlendirme notları" })).toHaveCount(0);
     expect(await canGoForward(second)).toBe(false);
@@ -568,6 +638,89 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
   });
 
+  test("adresle eklenen sayfa içi kayıtta kurulan koruma, kayıtlar arasında geri adımda sayfayı yenilemez", backForwardTag, async ({ page }) => {
+    const browserDialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      browserDialogs.push(dialog.type());
+      void dialog.dismiss();
+    });
+    await openGradebookFromSessions(page, { saves: [] }, { typeGrade: false });
+    // A fragment entry made outside the router carries a null history state; the guard arms on it.
+    await page.evaluate(() => {
+      (window as unknown as { __sameDocument?: boolean }).__sameDocument = true;
+      window.location.hash = "notlar";
+    });
+    await expect(page).toHaveURL(/\/kurum\/not-defteri#notlar$/);
+    expect(await page.evaluate(() => window.history.state as unknown)).toBeNull();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    // The guard's entries copy the null state, so they start without Next.js's `__NA`; the router's restore after the
+    // guard's history write adds it to the sentinel a frame later (probe: Chromium 148). A step onto the sentinel
+    // inside that frame meets it without `__NA`; the unpatched History.prototype.replaceState takes it off again to
+    // land in that frame deterministically.
+    await page.evaluate(() => {
+      const { __NA: _routerMark, __PRIVATE_NEXTJS_INTERNALS_TREE: _routerTree, ...guardOnly } = window.history.state as Record<string, unknown>;
+      History.prototype.replaceState.call(window.history, guardOnly, "");
+    });
+    expect(await page.evaluate(() => Object.keys(window.history.state as object))).toEqual(["__ookulGuardSentinel"]);
+
+    await page.evaluate(() => {
+      window.location.hash = "ozet";
+    });
+    await expect(page).toHaveURL(/\/kurum\/not-defteri#ozet$/);
+    // Back onto the sentinel stays on the page: no reload, so no beforeunload prompt and the typed grade stays.
+    await page.evaluate(() => window.history.back());
+    await expect(page).toHaveURL(/\/kurum\/not-defteri#notlar$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await page.waitForTimeout(500);
+    expect(browserDialogs).toEqual([]);
+    expect(await page.evaluate(() => (window as unknown as { __sameDocument?: boolean }).__sameDocument)).toBe(true);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    // One more step back still asks, and cancel keeps everything in place.
+    await page.evaluate(() => window.history.back());
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri#notlar$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+    expect(browserDialogs).toEqual([]);
+    expect(await page.evaluate(() => (window as unknown as { __sameDocument?: boolean }).__sameDocument)).toBe(true);
+  });
+
+  test("vazgeç, odak ekran dışındaki not hücresine dönse de kaydırma konumunu korur", backForwardTag, async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [] });
+    await page.setViewportSize({ width: 1280, height: 600 });
+    // WebKit keeps a focused field visible when the viewport resizes, so the resize settles before the focus.
+    await page.waitForFunction(() => window.innerHeight === 600);
+    await page.waitForTimeout(200);
+    const ada = page.getByLabel("Ada Kaya notu", { exact: true });
+    await ada.focus();
+    const scrollable = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(scrollable).toBeGreaterThan(300);
+    // WebKit reveals the newly focused field in a later rendering update, which can undo an early scroll; retry it.
+    await expect(async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect(ada).not.toBeInViewport({ timeout: 500 });
+    }).toPass();
+    await page.waitForTimeout(200);
+    await expect(ada).not.toBeInViewport();
+    const target = await page.evaluate(() => Math.round(window.scrollY));
+    expect(target).toBeGreaterThan(300);
+    await expect(ada).toBeFocused();
+
+    await page.evaluate(() => window.history.back());
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    // The Dialog gives focus back to the grade field; the scroll position the user had stays.
+    await expect(ada).toBeFocused();
+    await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThanOrEqual(target - 2);
+    await page.waitForTimeout(300);
+    expect(Math.abs((await page.evaluate(() => Math.round(window.scrollY))) - target)).toBeLessThanOrEqual(2);
+    await expect(ada).toBeFocused();
+    await expect(ada).not.toBeInViewport();
+  });
+
   test("önceki belgeden kalan koruma kaydı temizlenir; onaylanan geri sayfayı yerinde yenilemez", backForwardTag, async ({ page }) => {
     await openGradebookFromSessions(page, { saves: [] });
     // A reload while armed: the new document starts on the old guard entry, which no guard owns any more. The page's
@@ -619,20 +772,40 @@ test.describe("Not girişi tablosu", () => {
 });
 
 /** Sessions page, then the gradebook through the command palette (same document), with one unsaved grade. */
-async function openGradebookFromSessions(page: Page, captured: Captured) {
+async function openGradebookFromSessions(page: Page, captured: Captured, options: { typeGrade?: boolean } = {}) {
   await open(page, "admin", "/hesap/oturumlar", captured);
+  await openCommandPalette(page);
   const palette = page.getByRole("dialog", { name: "Komut paleti" });
-  // The shortcut listener attaches on hydration; retry until the palette opens.
-  await expect(async () => {
-    await page.keyboard.press("ControlOrMeta+k");
-    await expect(palette).toBeVisible({ timeout: 1000 });
-  }).toPass();
   await palette.getByRole("combobox", { name: "Komut ara" }).fill("Not Defteri");
   await palette.getByRole("combobox", { name: "Komut ara" }).press("Enter");
   await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
   await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+  if (options.typeGrade === false) return;
   await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
   await expect.poll(() => onGuardSentinel(page)).toBe(true);
+}
+
+/** The shortcut listener attaches on hydration; retry until the palette opens. */
+async function openCommandPalette(page: Page) {
+  const palette = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(async () => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(palette).toBeVisible({ timeout: 1000 });
+  }).toPass();
+}
+
+/** The path and the guard mark of the current history entry (see navigation-guard.ts). */
+async function guardMarker(page: Page) {
+  return page.evaluate(() => {
+    const state: unknown = window.history.state;
+    const record = typeof state === "object" && state !== null ? (state as Record<string, unknown>) : {};
+    const marker = "__ookulGuardSentinel" in record ? "sentinel" : "__ookulGuardBase" in record ? "base" : "__ookulGuardReleased" in record ? "released" : null;
+    return { path: window.location.pathname, marker };
+  });
+}
+
+async function historyWrites(page: Page) {
+  return page.evaluate(() => (window as unknown as { __historyWrites?: string[] }).__historyWrites ?? []);
 }
 
 /** Chromium's Navigation API: whether a forward entry exists. */
@@ -711,6 +884,11 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
   }
   if (path === "/auth/persona/switch" && captured.personaSwitch === "fail") {
     await route.fulfill({ body: JSON.stringify({ message: "unavailable" }), headers: { ...corsFor(route), "content-type": "application/json" }, status: 503 });
+    return;
+  }
+  if (path === "/auth/persona/switch" && captured.personaSwitch === "keep") {
+    const keep = auth("admin");
+    await fulfill(route, { ...keep, session: { ...keep.session, activePersona: "TEACHER", roles: ["TENANT_ADMIN", "TEACHER"], subjectId: "teacher-math", subjectType: "TEACHER" } });
     return;
   }
   if (path === "/auth/persona/switch") {

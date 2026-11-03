@@ -9,7 +9,8 @@ type LeaveCheck = () => Promise<boolean>;
  * Browser back/forward cannot be cancelled after the fact, so an armed guard sits on a sentinel history entry: a
  * copy of the page's own entry (same URL, same Next.js router state) pushed on top of its base entry. Back pops the
  * sentinel and leaves the URL as it was; this module keeps that popstate from the Next.js router and asks the page.
- * Cancel puts the sentinel back and the scroll position the user had; confirm takes the step the user asked for.
+ * Cancel puts the sentinel back and the scroll position the user had (once more after the page's dialog has closed and
+ * given focus back); confirm takes the step the user asked for.
  *
  * Next.js 16.2.6 patches history.pushState/replaceState and listens to popstate on window without capture
  * (next/dist/client/components/app-router.js). States that carry `__NA` pass the patch untouched, so guard entries
@@ -24,6 +25,14 @@ type LeaveCheck = () => Promise<boolean>;
  * handler returns early on a null state (onPopState). The decision is made once per trusted event by whichever reads
  * first, the router's getter call or this module's capture listener, which then stops the remaining listeners.
  * Synthetic popstates (the hand-over in leaveTo) pass both untouched.
+ *
+ * Guard entries over a page entry without Next.js router state (a fragment entry made outside the router, whose state
+ * is null) carry no `__NA` either: the copy has nothing to copy and Next.js's history patch finds nothing to add. For a
+ * truthy state without `__NA` Next.js's onPopState calls location.reload() (an entry of the pages router), which would
+ * put the page's beforeunload question in front of a step the guard lets through. The gate therefore also hands the
+ * router null for an unclaimed traversal that stays on the guarded page and lands on an entry holding nothing but guard
+ * keys, so the router does what it does for the original null-state entry: nothing (it already renders the page).
+ * Onto such an entry from another page (the guard gone or left behind), the reload still loads the right page.
  *
  * Which traversals are claimed while armed: every one except a step onto this guard's own sentinel or onto another
  * entry of the same page that is not its base (a fragment entry, for example from an in-page anchor). Those keep the
@@ -57,7 +66,7 @@ type LeaveCheck = () => Promise<boolean>;
  * one extra back), and so does a reload without the Navigation API; a sentinel removal whose popstate arrives after
  * `traversalTimeoutMs` lands on the base unannounced and, if the page re-armed in between, opens the question once; a
  * guard armed on a fragment entry made by a plain in-page anchor copies that entry's null state, so its entries carry
- * no Next.js router state; a traversal onto an older entry of the same URL that is not this guard's base counts as
+ * no Next.js router state (the state gate keeps them from the router, see above); a traversal onto an older entry of the same URL that is not this guard's base counts as
  * staying on the page, so the router restores it without asking.
  */
 const baseKey = "__ookulGuardBase";
@@ -349,9 +358,20 @@ function installStateGate() {
       const state: unknown = readState.call(this);
       // Synthetic events (the hand-over in leaveTo) and events of other types always carry their state.
       if (!this.isTrusted || this.type !== "popstate") return state;
-      return claimTraversal(this) ? null : state;
+      return claimTraversal(this) || isRouterlessGuardEntry(state) ? null : state;
     },
   });
+}
+
+/**
+ * A step within the guarded page onto an entry this module wrote over a page entry without Next.js router state: no
+ * `__NA`, nothing but guard keys. Next.js 16.2.6 reloads the page for such a state (onPopState in
+ * next/dist/client/components/app-router.js); for the null state the entry had before, it does nothing.
+ */
+function isRouterlessGuardEntry(state: unknown) {
+  if (!isRecord(state) || state.__NA || state._N) return false;
+  if (!activeGuard || !isGuardedPage(activeGuard)) return false;
+  return Object.keys(withoutGuardKeys(state)).length === 0;
 }
 
 /** Decides once per trusted popstate whether this module answers it; the router then never sees it. */
@@ -454,7 +474,20 @@ function restoreSentinel(guard: ActiveGuard, current: HistoryRecord) {
 }
 
 function restoreScroll(guard: ActiveGuard) {
-  window.scrollTo(guard.scroll.x, guard.scroll.y);
+  const { x, y } = guard.scroll;
+  window.scrollTo(x, y);
+  // The answer arrives while the page's dialog is still closing. Its cleanup gives focus back to the element focused
+  // before it opened (packages/ui Dialog, without preventScroll), and focus scrolls an off-screen field into view:
+  // Chromium 148 at once, WebKit 26.4 in its next rendering update, after that frame's animation callbacks (Playwright
+  // 1.60, 2026-11-03). The position goes back in the next two frames; focus stays where the Dialog put it.
+  const again = (framesLeft: number) => {
+    window.requestAnimationFrame(() => {
+      if (guard.pageGone) return;
+      window.scrollTo(x, y);
+      if (framesLeft > 1) again(framesLeft - 1);
+    });
+  };
+  again(2);
 }
 
 function distanceToSentinel(guard: ActiveGuard) {
