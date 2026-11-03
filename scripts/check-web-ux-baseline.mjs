@@ -432,6 +432,25 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
 // DEC-20260930-03 (G8): bağlantı duvarının CSS pin'leri emekli; eşdeğer kanıt yukarıdaki requireNoTokens,
 // kurum dashboard golden'ı (route-family-dashboard-*) ve aşağıdaki ölü CSS yasağı.
 requireNoTokens("apps/web/app/globals.css", [".next-dashboard-compact-links", ".next-institution-growth-side"]);
+// DEC-20260930-03 + DEC-20261102-08 (W10 CSS konsolidasyonu): hiçbir bileşenin üretmediği sınıfların CSS pin'leri
+// emekli. Eşdeğer kanıt: aşağıdaki ölü seçici yasağı, kaynakta sınıfın yokluğunu tutan requireNoTokens blokları
+// (kurum-dashboard, student-detail-page) ve değişmeyen ui-visual-qa / route-family golden'ları.
+// Eşleme tablosu: docs/css-consolidation-2026-11.md.
+requireNoTokens("apps/web/app/globals.css", [
+  ".next-role-grid",
+  ".next-role-fieldset",
+  ".next-student-decision-grid",
+  ".next-student-decision-card",
+  ".next-onboarding-check",
+  ".next-optical-answer-key-grid",
+  ".next-optical-answer-key-panel",
+  ".next-dashboard-overview-grid",
+  ".next-dashboard-overview-card",
+  ".next-invitation-context",
+  ".next-checkbox-row",
+  ".next-demo-account",
+  ".next-portal-today-list",
+]);
 
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "ActionCard,",
@@ -3692,15 +3711,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-exam-selected-meta",
   ".next-support-ticket-meta",
   ".next-material-selected-meta",
-  ".next-role-grid",
-  ".next-role-grid--compact",
-  ".next-role-grid .uh-checkbox",
-  ".next-role-grid .uh-checkbox:has(.uh-checkbox__input:checked)",
-  ".next-role-fieldset__hint",
-  ".next-student-decision-grid",
-  ".next-student-decision-card.uh-action-card",
-  ".next-student-decision-card .uh-action-card__value",
-  ".next-student-decision-card .uh-action-card__detail",
   'data-tone="success"',
   'data-tone="warning"',
   'data-tone="info"',
@@ -3737,7 +3747,6 @@ requireTokens("apps/web/app/globals.css", [
   '.next-onboarding-upload-status[data-state="ready"]',
   '.next-onboarding-upload-status[data-state="error"]',
   ".next-onboarding-class-counts .uh-field",
-  ".next-onboarding-check .uh-checkbox__input",
   "font-size: 30px",
   ".next-evidence-trust .uh-panel__header",
   ".next-evidence-trust__description",
@@ -5052,11 +5061,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-optical-format-grid",
   ".next-optical-format-panel .uh-panel__body",
   ".next-optical-format-details",
-  ".next-optical-answer-key-grid",
-  ".next-optical-answer-key-panel .uh-panel__body",
-  ".next-optical-answer-key-panel label",
-  ".next-optical-answer-key-panel select",
-  ".next-optical-answer-key-panel p",
   ".next-optical-upload-grid",
   ".next-optical-upload-panel .uh-panel__body",
   ".next-optical-upload-panel label",
@@ -5080,10 +5084,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-system-summary-card",
   ".next-system-summary-card .uh-metric-card__label",
   ".next-system-summary-card .uh-metric-card__description",
-  ".next-dashboard-overview-grid",
-  ".next-dashboard-overview-card",
-  ".next-dashboard-overview-card .uh-metric-card__label",
-  ".next-dashboard-overview-card .uh-metric-card__description",
   ".next-dashboard-onboarding .uh-panel__header",
   ".next-dashboard-onboarding .uh-panel__body:empty",
   ".next-attention-panel .uh-panel__body",

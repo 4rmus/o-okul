@@ -1,0 +1,85 @@
+/* W10 (DEC-20261102-08) dilimi: Donmuş karne grafik bölgesi: rapor çubukları ve kazanım radarı (birebir taşındı). */
+.next-report-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.next-report-bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(120px, 2fr) minmax(44px, auto);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.next-report-bar-row span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next-report-bar-row strong {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
+.next-report-bar-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-border-faint);
+}
+
+.next-report-bar-fill {
+  height: 100%;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+}
+
+.next-report-bar-fill--muted {
+  background: var(--color-success);
+}
+
+.next-report-bar-fill--accent {
+  background: var(--color-primary);
+}
+
+.next-outcome-radar {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.next-outcome-radar svg {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.next-outcome-radar text {
+  fill: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.next-outcome-radar__grid {
+  fill: var(--color-surface-muted);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.next-outcome-radar__axis {
+  stroke: var(--color-border-faint);
+  stroke-width: 1;
+}
+
+.next-outcome-radar__shape {
+  fill: color-mix(in oklab, var(--color-success) 24%, transparent);
+  stroke: var(--color-success);
+  stroke-linejoin: round;
+  stroke-width: 3;
+}

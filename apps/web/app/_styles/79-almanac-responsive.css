@@ -118,7 +118,6 @@
       width: 100%;
     }
 
-    .next-dashboard-overview-grid,
     .next-portal-action-strip__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -175,7 +174,6 @@
 
     .next-marketing-nav,
     .next-marketing-hero,
-    .next-marketing-proof,
     .next-marketing-section,
     .next-marketing-trust,
     .next-marketing-cta,
@@ -273,7 +271,6 @@
       font-size: 1.5rem;
     }
 
-    .next-dashboard-overview-grid,
     .next-portal-action-strip__grid,
     .next-portal-brief__grid.uh-metric-grid,
     .next-portal-summary-grid {
@@ -494,7 +491,6 @@
 
     .next-marketing-nav,
     .next-marketing-hero,
-    .next-marketing-proof,
     .next-marketing-section,
     .next-marketing-trust,
     .next-marketing-cta,
