@@ -72,6 +72,25 @@ describe("GradebookService", () => {
     expect(audit.record.mock.calls.filter(([entry]) => entry.action === "grade_assessment.published")).toHaveLength(2);
   });
 
+  it("list counts students with an unpublished draft so a pending correction is not shown as published (UAT U7)", async () => {
+    const { service } = setup();
+    const assessment = await createAssessment(service);
+    const listed = async () => (await service.listAssessments(admin, {})).find((record) => record.id === assessment.id);
+
+    await service.saveEntries(teacher("teacher-math"), assessment.id, { entries: [{ studentId: "student-a", score: 70, absent: false }] });
+    await expect(listed()).resolves.toMatchObject({ unpublishedDraftCount: 1 });
+    expect((await listed())?.publishedVersion).toBeUndefined();
+
+    await service.publish(admin, assessment.id, "u7-publish-1");
+    await expect(listed()).resolves.toMatchObject({ publishedVersion: 1, unpublishedDraftCount: 0 });
+
+    // A correction draft keeps publishedVersion at the published value and is counted separately.
+    await service.saveEntries(teacher("teacher-math"), assessment.id, { entries: [{ studentId: "student-a", score: 71, absent: false }] });
+    await expect(listed()).resolves.toMatchObject({ publishedVersion: 1, unpublishedDraftCount: 1 });
+    const detail = await service.getAssessment(admin, assessment.id);
+    expect(detail.assessment.unpublishedDraftCount).toBeUndefined();
+  });
+
   it("publish without Idempotency-Key is 400 and nothing to publish is 409", async () => {
     const { service } = setup();
     const assessment = await createAssessment(service);

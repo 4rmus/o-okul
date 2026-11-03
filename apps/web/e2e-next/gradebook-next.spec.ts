@@ -40,7 +40,12 @@ const students = [
   { id: "student-a", tenantId: "tenant-gb", firstName: "Ada", lastName: "Kaya", classId: "class-8a", status: "ACTIVE" },
   { id: "student-b", tenantId: "tenant-gb", firstName: "Bora", lastName: "Yılmaz", classId: "class-8a", status: "ACTIVE" },
   { id: "student-c", tenantId: "tenant-gb", firstName: "Can", lastName: "Demir", classId: "class-8a", status: "ACTIVE" },
+  // Added to the class later: the API returns them last, the grid still lists them by surname (UAT U8).
+  { id: "student-d", tenantId: "tenant-gb", firstName: "Ece", lastName: "Çakır", classId: "class-8a", status: "ACTIVE" },
+  { id: "student-e", tenantId: "tenant-gb", firstName: "Deniz", lastName: "Cura", classId: "class-8a", status: "ACTIVE" },
 ];
+// Turkish collation: C before Ç, so Cura precedes Çakır (root collation would put Çakır first).
+const surnameOrder = ["Deniz Cura", "Ece Çakır", "Can Demir", "Ada Kaya", "Bora Yılmaz"];
 const classes = [{ id: "class-8a", tenantId: "tenant-gb", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8" }];
 const courses = [{ id: "course-math", tenantId: "tenant-gb", name: "Matematik", code: "MAT" }];
 const terms = [{ id: "term-1", tenantId: "tenant-gb", academicYearId: "year-1", name: "2. Dönem", startsAt: "2026-02-01", endsAt: "2026-06-30", isActive: true }];
@@ -53,8 +58,14 @@ test.describe("Not defteri", () => {
     await open(page, "admin", "/kurum/not-defteri", captured);
     await expect(page.getByRole("heading", { level: 1, name: "Not Defteri" })).toBeVisible();
 
+    // UAT U7: v1 is published and Ada's v2 is only a draft, so the list must not read "Yayında v2" or plain "Yayında v1".
+    const list = page.getByRole("table", { name: "Not değerlendirmeleri" });
+    await expect(list.getByRole("row", { name: /1\. Yazılı/ })).toContainText("Yayında v1 · 1 not yayın bekliyor");
+    await expect(list.getByRole("row", { name: /2\. Yazılı/ })).toContainText("Giriş yok");
+
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
     const grid = page.getByRole("table", { name: "Öğrenci notları" });
+    await expect(grid.locator("tbody tr")).toContainText(surnameOrder);
     await expect(grid.getByRole("row", { name: /Ada Kaya/ })).toContainText("v1 72,3 · v2 75 (taslak)");
     await expect(grid.getByRole("row", { name: /Ada Kaya/ })).toContainText("Düzeltme taslağı v2");
     await expect(page.getByLabel("Bora Yılmaz notu", { exact: true })).toHaveCount(0);
@@ -120,6 +131,7 @@ test.describe("Not defteri", () => {
     await expect(panel).toBeVisible();
 
     await panel.getByLabel("Değerlendirme").selectOption("ga-1");
+    await expect(page.getByRole("table", { name: "Öğrenci notları" }).locator("tbody tr")).toContainText(surnameOrder);
     await expect(page.getByLabel("Bora Yılmaz notu", { exact: true })).toHaveCount(0);
     await page.getByLabel("Can Demir notu", { exact: true }).fill("88,5");
     await page.getByLabel("Can Demir notu", { exact: true }).press("Enter");
@@ -221,7 +233,9 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
     "/me/tenant": { id: "tenant-gb", name: "Not Akademi", institutionType: "Özel okul", slug: "not-akademi" },
     "/me/notification-devices": [],
     "/me/feature-rollouts": { enabledFeatureKeys: [] },
-    "/grade-assessments": captured.creates?.length ? [assessment, createdAssessment] : [assessment],
+    "/grade-assessments": persona === "admin"
+      ? [{ ...assessment, unpublishedDraftCount: 1 }, { ...createdAssessment, unpublishedDraftCount: 0 }]
+      : captured.creates?.length ? [assessment, createdAssessment] : [assessment],
     "/grade-assessments/ga-1": overrides.detail ? overrides.detail() : detail,
     "/grade-assessments/ga-2": { assessment: createdAssessment, entries: [] },
     "/grade-assessments/teacher-scopes": [{ classId: "class-8a", courseId: "course-math", termId: "term-1" }],

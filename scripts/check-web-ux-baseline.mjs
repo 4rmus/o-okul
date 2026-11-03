@@ -116,6 +116,9 @@ const files = {
     "apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx",
     "utf8",
   ),
+  "apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx": readFileSync("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", "utf8"),
+  "apps/web/app/(app)/_shared/gradebook/gradebook-api.ts": readFileSync("apps/web/app/(app)/_shared/gradebook/gradebook-api.ts", "utf8"),
+  "apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx": readFileSync("apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx", "utf8"),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
   "apps/web/app/(auth)/tenant-login-page.tsx": readFileSync("apps/web/app/(auth)/tenant-login-page.tsx", "utf8"),
   "apps/web/app/globals.css": readCssWithLocalImports("apps/web/app/globals.css"),
@@ -4818,6 +4821,27 @@ requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.ts
   "Sınıf veya branş öğretmeni olarak atandığınız bir sınıf bulunmuyor.",
   "Değerlendirme oluşturulamadı. Atandığınız sınıf ve dersi seçip tekrar deneyin.",
 ]);
+// UAT 2026-11-03 U6/U7/U8: kurum not defteri "siz" hitabıyla yazılır; liste yayın ve bekleyen taslağı ayrı söyler;
+// not tablosu soyada göre Türkçe sıralanır (öğretmen ve yönetici ekranı aynı yardımcıyı kullanır).
+requireNoTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", [
+  "notlarını tanımla,",
+  "kontrol et ve yayınla.",
+  "bir değerlendirme tanımla.\"",
+  "<StatusBadge tone=\"success\">{`Yayında v${row.publishedVersion}`}</StatusBadge>",
+]);
+requireTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", [
+  "Yazılı, performans ve proje notlarını tanımlayın, girilen notları kontrol edin ve yayınlayın.",
+  "assessmentPublicationStatus(row)",
+  "toGradeGridStudents(studentsQuery.data?.data ?? [])",
+]);
+requireTokens("apps/web/app/(app)/_shared/gradebook/gradebook-api.ts", [
+  "not yayın bekliyor",
+]);
+requireTokens("apps/web/app/(app)/_shared/gradebook/grade-entry-grid.tsx", [
+  "export function toGradeGridStudents(",
+  'new Intl.Collator("tr"',
+]);
+requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx", ["toGradeGridStudents("]);
 requireTokens("apps/web/app/(app)/portals/teacher-homework-create.tsx", [
   "Ödev verebileceğiniz sınıflar alınamadı.",
   "Sınıf veya branş öğretmeni ataması için kurum yöneticinizle görüşün.",

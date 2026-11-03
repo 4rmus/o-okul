@@ -3569,7 +3569,14 @@ export interface GradeAssessmentRecord {
   title: string;
   heldOn: string;
   maxScore: number;
+  /** Highest entry version published so far; a correction of one student raises it. */
   publishedVersion?: number;
+  /**
+   * List responses only (UAT 2026-11-03 U7): students whose newest entry is an unpublished draft, i.e. a first
+   * entry or a correction waiting for "Yayınla". Lets a list tell "published" from "published with a pending
+   * correction" without loading every assessment's entries. Absent on single-record responses.
+   */
+  unpublishedDraftCount?: number;
   createdById: string;
   createdAt: string;
 }

@@ -23,7 +23,7 @@ import {
   publishGradeAssessment,
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
-import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { discardUnsavedGradesRequest, GradeEntryGrid, toGradeGridStudents } from "../../_shared/gradebook/grade-entry-grid.js";
 import { useInAppNavigationGuard } from "../../_shell/navigation-guard.js";
 import { AccessPanel, PortalFrame } from "../../portals/_shared/portal-shell.js";
 
@@ -99,9 +99,7 @@ export function TeacherGradebookPage() {
   const options = authoringOptions(scopes, lookups, form);
   const detail = detailQuery.data;
   const students = useMemo(
-    () => (studentsQuery.data ?? [])
-      .filter((record) => detail && record.classId === detail.assessment.classId)
-      .map((record) => ({ id: record.id, name: `${record.firstName} ${record.lastName}` })),
+    () => toGradeGridStudents((studentsQuery.data ?? []).filter((record) => detail && record.classId === detail.assessment.classId)),
     [studentsQuery.data, detail],
   );
   const assessments = assessmentsQuery.data ?? [];

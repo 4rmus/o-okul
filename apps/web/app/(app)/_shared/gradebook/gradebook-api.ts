@@ -47,6 +47,30 @@ export function publishGradeAssessment(accessToken: string, id: string, idempote
   });
 }
 
+export interface GradeAssessmentPublicationStatus {
+  label: string;
+  tone: "success" | "info" | "warning" | "neutral";
+}
+
+/**
+ * List status of one assessment (UAT 2026-11-03 U7). `publishedVersion` is the highest published entry version,
+ * so a pending correction draft must not read as "Yayında": the published version and the waiting drafts are
+ * shown side by side, in line with Sınıf 360's "Düzeltme bekliyor · sürüm N". A record without
+ * `unpublishedDraftCount` (older API) falls back to the published version alone.
+ */
+export function assessmentPublicationStatus(
+  record: Pick<GradeAssessmentRecord, "publishedVersion" | "unpublishedDraftCount">,
+): GradeAssessmentPublicationStatus {
+  const drafts = record.unpublishedDraftCount ?? 0;
+  if (record.publishedVersion) {
+    return drafts > 0
+      ? { label: `Yayında v${record.publishedVersion} · ${drafts} not yayın bekliyor`, tone: "info" }
+      : { label: `Yayında v${record.publishedVersion}`, tone: "success" };
+  }
+  if (drafts > 0) return { label: `Yayınlanmadı · ${drafts} taslak not`, tone: "warning" };
+  return record.unpublishedDraftCount === 0 ? { label: "Giriş yok", tone: "neutral" } : { label: "Yayınlanmadı", tone: "warning" };
+}
+
 /** Every version of one student's grade, oldest first; the last one is current. */
 export function entriesByStudent(entries: readonly GradeEntryRecord[]): Map<string, GradeEntryRecord[]> {
   const byStudent = new Map<string, GradeEntryRecord[]>();
