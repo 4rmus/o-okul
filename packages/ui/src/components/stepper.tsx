@@ -21,13 +21,15 @@ export interface StepperProps {
 }
 
 const statusText: Record<StepperStatus, string> = {
-  blocked: "Engelli",
+  blocked: "Engel var",
   complete: "Tamam",
   current: "Sıradaki",
   upcoming: "Bekliyor",
 };
 
 // Adımlı iş akışı (§4): durum yalnız renkle değil metin ve simgeyle de verilir (gri tonda ayırt edilir).
+// `blocked` yalnız gerçek bir engel içindir (ör. eşleşmeyen satırlar); henüz sırası gelmemiş adımlar `upcoming`
+// ("Bekliyor") olarak verilir ve hata simgesi taşımaz.
 export function Stepper({ className, currentHref, label, linkComponent: LinkComponent, steps }: StepperProps) {
   return (
     <nav aria-label={label} className={classNames("uh-stepper", className)}>

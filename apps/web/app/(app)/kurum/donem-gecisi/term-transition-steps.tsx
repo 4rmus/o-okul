@@ -53,6 +53,7 @@ export function CalendarStep({ accessToken, loading, onCreated, onSelect, state,
   const notStarted = Boolean(
     selectedYear && selectedTerm && (selectedYear.startsAt.slice(0, 10) > today || selectedTerm.startsAt.slice(0, 10) > today),
   );
+  const selectedIsActive = Boolean(selectedYear?.isActive && selectedTerm?.isActive);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -163,7 +164,9 @@ export function CalendarStep({ accessToken, loading, onCreated, onSelect, state,
           <Alert tone={notStarted ? "warning" : "info"} title={`Seçilen dönem: ${selectedYear.name} ${selectedTerm.name}`}>
             {notStarted
               ? `Bu dönem ${formatDateKey(selectedTerm.startsAt)} tarihinde başlıyor. Hazırlık adımlarını şimdi yapabilirsiniz; geçiş dönem başladıktan sonra uygulanır.`
-              : "Sonraki adımda sınıfları yeni döneme eşleştirin."}
+              : selectedIsActive
+                ? "Bu dönem şu anda etkin dönem. Geçiş, bu döneme kaydı olmayan öğrencilerin kaydını bu döneme taşır. Sonraki adımda sınıfları eşleştirin."
+                : "Sonraki adımda sınıfları yeni döneme eşleştirin."}
           </Alert>
         ) : null}
       </div>
@@ -177,6 +180,9 @@ interface ClassMappingStepProps {
   onChange(classTargets: Record<string, string>): void;
   plan?: TransitionPlan;
   state: WizardState;
+  /** The target year and term are the active ones: listed students simply have no enrollment in this term yet. */
+  targetIsActive: boolean;
+  targetName: string;
 }
 
 interface SourceClassRow {
@@ -185,7 +191,7 @@ interface SourceClassRow {
   studentCount: number;
 }
 
-export function ClassMappingStep({ classes, loading, onChange, plan, state }: ClassMappingStepProps) {
+export function ClassMappingStep({ classes, loading, onChange, plan, state, targetIsActive, targetName }: ClassMappingStepProps) {
   const classNames = classNameMap(classes);
   const sortedClasses = [...classes].sort((left, right) => left.name.localeCompare(right.name, "tr-TR"));
   const rows: SourceClassRow[] = (plan?.sourceClassIds ?? [])
@@ -196,7 +202,8 @@ export function ClassMappingStep({ classes, loading, onChange, plan, state }: Cl
     }))
     .sort((left, right) => left.name.localeCompare(right.name, "tr-TR"));
   const columns: Array<DataTableColumn<SourceClassRow>> = [
-    { header: "Geçen yılın sınıfı", key: "source", mobilePriority: "primary", priority: "primary", render: (row) => row.name },
+    // U10: the source is the student's current class; it is last year's class only when the target is a new term.
+    { header: "Mevcut sınıf", key: "source", mobilePriority: "primary", priority: "primary", render: (row) => row.name },
     { align: "right", header: "Öğrenci", key: "count", render: (row) => row.studentCount },
     {
       header: "Yeni dönemde",
@@ -223,6 +230,11 @@ export function ClassMappingStep({ classes, loading, onChange, plan, state }: Cl
       description="Her sınıfın öğrencilerinin yeni dönemde hangi sınıfa geçeceğini ya da mezun olacağını seçin. Geçişe dahil edilmeyen sınıfların öğrencileri değişmez."
       title="Sınıf eşleştirme"
     >
+      {targetIsActive ? (
+        <Alert tone="info" title={`Hedef dönem etkin dönem: ${targetName}`}>
+          Listede bu döneme kaydı olmayan öğrencilerin mevcut sınıfları yer alır. Eşleştirdiğiniz sınıfların öğrencileri bu döneme kaydedilir.
+        </Alert>
+      ) : null}
       <DataTable
         caption="Sınıf eşleştirme listesi"
         columns={columns}
@@ -325,7 +337,7 @@ export function ExitReviewStep({ classes, confirmed, loading, onConfirm, onOverr
           <Field label="Ayrılacak öğrenci">
             <Select onChange={(event) => setLeaverChoice(event.target.value)} value={leaverChoice}>
               <option value="">Seçin</option>
-              {renewing.map((item) => (
+              {[...renewing].sort(compareByName).map((item) => (
                 <option key={item.student.id} value={item.student.id}>
                   {`${studentName(item.student)}${item.student.studentNo ? ` (${item.student.studentNo})` : ""}`}
                 </option>
@@ -446,17 +458,20 @@ interface PreviewRow {
 export function PreviewStep({ classes, error, loading, plan, preview, termStarted }: PreviewStepProps) {
   const classNames = classNameMap(classes);
   const students = new Map((plan?.renew ?? []).map((item) => [item.student.id, item.student]));
-  const rows: PreviewRow[] = (preview?.items ?? []).map((item) => ({
-    conflict: item.conflict,
-    name: students.has(item.studentId) ? studentName(students.get(item.studentId)!) : "—",
-    sourceClass: classNames.get(item.sourceClassId ?? "") ?? "—",
-    studentId: item.studentId,
-    targetClass: classNames.get(item.targetClassId ?? "") ?? "—",
-  }));
+  // U11: the server answers in request (id) order; the list reads by name with Turkish collation.
+  const rows: PreviewRow[] = (preview?.items ?? [])
+    .map((item) => ({
+      conflict: item.conflict,
+      name: students.has(item.studentId) ? studentName(students.get(item.studentId)!) : "—",
+      sourceClass: classNames.get(item.sourceClassId ?? "") ?? "—",
+      studentId: item.studentId,
+      targetClass: classNames.get(item.targetClassId ?? "") ?? "—",
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, "tr-TR") || left.studentId.localeCompare(right.studentId));
   const conflictCount = preview?.conflictStudentIds.length ?? 0;
   const columns: Array<DataTableColumn<PreviewRow>> = [
     { header: "Öğrenci", key: "student", mobilePriority: "primary", priority: "primary", render: (row) => row.name },
-    { header: "Geçen yıl", key: "source", render: (row) => row.sourceClass },
+    { header: "Mevcut sınıf", key: "source", render: (row) => row.sourceClass },
     { header: "Yeni dönem", key: "target", render: (row) => row.targetClass },
     {
       header: "Durum",
@@ -509,6 +524,11 @@ function classDefaultAction(item: PlannedStudent, state: WizardState): StudentAc
   const target = state.classTargets[item.student.classId ?? ""];
   if (!target) return "skip";
   return target === graduateTarget ? "graduate" : "renew";
+}
+
+/** U11: student lists of the wizard read by name with Turkish collation, the same order as the plan. */
+function compareByName(left: PlannedStudent, right: PlannedStudent) {
+  return studentName(left.student).localeCompare(studentName(right.student), "tr-TR") || left.student.id.localeCompare(right.student.id);
 }
 
 function classNameMap(classes: ClassRecord[]) {
