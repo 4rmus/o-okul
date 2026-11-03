@@ -93,7 +93,7 @@ const attendanceTimelineStatus: Record<Exclude<AttendanceRecord["status"], "PRES
 const defaultLinkLabels: Record<StudentTimelineEventKind, string> = {
   attendance: "Yoklama",
   development: "Gelişim kriterleri",
-  exam: "Sınav detayları",
+  exam: "Sınav sonuçları",
   finance: "Ödeme planları",
   grade: "Not defteri",
   homework: "Ödev ve materyal",
