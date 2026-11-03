@@ -111,6 +111,11 @@ const files = {
   "apps/web/e2e-next/student-portal-gelisimim-next.spec.ts": readFileSync("apps/web/e2e-next/student-portal-gelisimim-next.spec.ts", "utf8"),
   "apps/web/app/(app)/portals/teacher-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/teacher-today-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-today-page.tsx", "utf8"),
+  "apps/web/app/(app)/portals/teacher-homework-create.tsx": readFileSync("apps/web/app/(app)/portals/teacher-homework-create.tsx", "utf8"),
+  "apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx": readFileSync(
+    "apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx",
+    "utf8",
+  ),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
   "apps/web/app/(auth)/tenant-login-page.tsx": readFileSync("apps/web/app/(auth)/tenant-login-page.tsx", "utf8"),
   "apps/web/app/globals.css": readCssWithLocalImports("apps/web/app/globals.css"),
@@ -1999,7 +2004,8 @@ requireTokens("apps/web/app/(app)/app-shell.tsx", [
   "export function useInAppNavigationGuard(when: boolean, canLeave: LeaveCheck)",
   'document.addEventListener("click", handleClick, true);',
   'data-navigation-guard="manual"',
-  "void confirmInAppNavigation().then((canNavigate) => {",
+  "void confirmInAppNavigation({ navigate: () => onNavigate(href) });",
+  "void confirmInAppNavigation({ navigate: () => router.push(href) });",
 ]);
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
   "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
@@ -4791,6 +4797,30 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/homework-panels.tsx", [
   "?? assignment.termId",
 ]);
 
+// feat/ui-ux-takip-1 F2: öğretmen ekranları "siz" hitabıyla yazılır; "sen" biçimleri geri gelmemeli.
+// requireNoTokens alt dize eşleştirdiği için belirteçler "-ınız/-iniz" biçimleriyle çakışmayacak şekilde boşluk/bitişle seçildi.
+const teacherSenAddressTokens = [
+  "Atandığın ",
+  "atandığın ",
+  "verebileceğin ",
+  "yöneticinle",
+  "oluştur, notları gir ve yayınla.",
+  "projeyi tanımla.",
+];
+requireNoTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx", teacherSenAddressTokens);
+requireNoTokens("apps/web/app/(app)/portals/teacher-homework-create.tsx", teacherSenAddressTokens);
+requireTokens("apps/web/app/(app)/ogretmen/not-defteri/teacher-gradebook-page.tsx", [
+  'subtitle="Atandığınız sınıf ve derslerin yazılı, performans ve proje notları"',
+  "Atandığınız sınıf ve ders için değerlendirme oluşturun, notları girin ve yayınlayın.",
+  "ilk yazılı, performans ya da projeyi tanımlayın.",
+  "Sınıf veya branş öğretmeni olarak atandığınız bir sınıf bulunmuyor.",
+  "Değerlendirme oluşturulamadı. Atandığınız sınıf ve dersi seçip tekrar deneyin.",
+]);
+requireTokens("apps/web/app/(app)/portals/teacher-homework-create.tsx", [
+  "Ödev verebileceğiniz sınıflar alınamadı.",
+  "Sınıf veya branş öğretmeni ataması için kurum yöneticinizle görüşün.",
+]);
+
 // Berrak G7 (§5): öğretmen günlük aksiyon şeridi ve özeti; eski overview şerit pin'lerinin eşdeğeri.
 requireTokens("apps/web/app/(app)/portals/teacher-today-page.tsx", [
   "PortalActionStrip",
@@ -4854,9 +4884,9 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "AttendanceDailyUpsertResponse",
   "`${apiBaseUrl}/attendance/daily`",
   'aria-label="Not ekle"',
-  "Gelişim notunu branş, dönem ve görünürlük kapsamıyla kaydet.",
+  "Gelişim notunu branş, dönem ve görünürlük kapsamıyla kaydedin.",
   'aria-label="Materyal ata"',
-  "Seçili öğrenciye materyal, teslim tarihi, branş ve dönem bağlamı ata.",
+  "Seçili öğrenciye materyali teslim tarihi, branş ve dönem bilgisiyle atayın.",
   'id="portal-teacher-report"',
   "TeacherFocusPanel",
   'aria-label="Öğrenci çalışma alanı"',

@@ -806,7 +806,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
               as="form"
               aria-label="Not ekle"
               className="next-teacher-action-panel"
-              description="Gelişim notunu branş, dönem ve görünürlük kapsamıyla kaydet."
+              description="Gelişim notunu branş, dönem ve görünürlük kapsamıyla kaydedin."
               id="portal-teacher-note"
               title="Öğretmen Notu"
               onSubmit={(event) => void submitTeacherNote(event)}
@@ -880,7 +880,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
               as="form"
               aria-label="Materyal ata"
               className="next-teacher-action-panel"
-              description="Seçili öğrenciye materyal, teslim tarihi, branş ve dönem bağlamı ata."
+              description="Seçili öğrenciye materyali teslim tarihi, branş ve dönem bilgisiyle atayın."
               id="portal-teacher-material"
               title="Materyal Atama"
               onSubmit={(event) => void submitMaterialAssignment(event)}

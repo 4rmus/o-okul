@@ -1415,7 +1415,7 @@ Kaynak: Kapsam belgesi W1, seçenek C.
 Kanıt: `apps/web/app/(app)/app-shell.tsx`, `_shell/top-bar.tsx`, `finans/finance-page.tsx`,
 `destek/support-tickets-page.tsx` (LOCAL_STATIC).
 Etkilenen ADR: Yok
-Açık soru: `ContextBar` primitifi tüketicisiz kalır; temizliği CSS konsolidasyonuna bırakılır.
+Açık soru: `ContextBar` primitifi tüketicisiz kalır; temizliği CSS konsolidasyonuna bırakılır. Kapandı: primitif ve `uh-context-bar*` CSS kuralları `feat/ui-ux-takip-1` milestone'unda silindi.
 Son kontrol: 2026-11-02
 
 ### DEC-20261102-03 — Tenant geneli OPERATIONS_STAFF sınav çalışma alanına girer

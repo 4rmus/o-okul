@@ -98,9 +98,8 @@ export function CommandPalette({
       return;
     }
     onClose();
-    void confirmInAppNavigation().then((canNavigate) => {
-      if (canNavigate) onNavigate(href);
-    });
+    // The guard runs the navigation in the page's transition, so it can come back if the page stays.
+    void confirmInAppNavigation({ navigate: () => onNavigate(href) });
   }
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {

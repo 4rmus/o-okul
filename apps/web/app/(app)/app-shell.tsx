@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRoles, hasInstitutionAccess, hasSubjectPortalAccess, hasSystemAccess } from "./_shared/access.js";
 import { buildInstitutionRailGroups, institutionNavGroups, rolePortalNavGroups, systemNavGroups } from "./_shared/navigation.js";
 import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpener } from "./_shell/command-palette.js";
+import { confirmInAppNavigation, hasInAppNavigationGuard, rearmInAppNavigationGuard } from "./_shell/navigation-guard.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
 import { ThemeToggle } from "./_shell/theme-toggle.js";
@@ -148,6 +149,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isMobileNavOpen) return undefined;
+    // A drawer link on a page with unsaved work opens the page's dialog instead of navigating. This window capture
+    // listener runs before the guard's document listener, so the drawer closes before that dialog appears.
+    function handleDrawerLinkClick(event: MouseEvent) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!hasInAppNavigationGuard() || !(event.target instanceof Element)) return;
+      const anchor = event.target.closest("a[href]");
+      if (!anchor || !sidebarRef.current?.contains(anchor)) return;
+      setIsMobileNavOpen(false);
+      mobileNavTriggerRef.current?.focus();
+    }
+    window.addEventListener("click", handleDrawerLinkClick, true);
+    return () => window.removeEventListener("click", handleDrawerLinkClick, true);
+  }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) return undefined;
 
     window.setTimeout(() => mobileNavCloseRef.current?.focus(), 0);
 
@@ -186,22 +203,53 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
-    const confirmed = await logout();
+    // Unsaved work on the page (grade entry) asks first; cancel keeps the session and the page as they are. The
+    // redirect below replaces the guard's history entry, so no forward entry leads back into the page.
+    closeMobileNavBeforePageDialog();
+    if (!(await confirmInAppNavigation({ replace: true }))) return;
+    let confirmed: boolean;
+    try {
+      confirmed = await logout();
+    } catch {
+      // The session is still here, and so is the unsaved work: back must ask again.
+      rearmInAppNavigationGuard();
+      return;
+    }
     router.replace(loginPathAfterLogout(loginPathFor(pathname), !confirmed));
   }
 
   async function handlePersonaSwitch(target: ActivePersona) {
     if (isPersonaSwitching) return;
+    closeMobileNavBeforePageDialog();
+    // A persona the page does not allow is redirected with a history replace over the guard entry; a persona that keeps
+    // the page gets the guard back right away.
+    if (!(await confirmInAppNavigation({ replace: true }))) return;
     setIsPersonaSwitching(true);
     setPersonaSwitchError("");
     try {
-      await switchPersona(target);
+      const nextAuth = await switchPersona(target);
+      if (canAccessPath(nextAuth.session, pathname, searchParams)) rearmInAppNavigationGuard();
       closeMobileNav();
     } catch {
       setPersonaSwitchError("Çalışma alanı değiştirilemedi. Tekrar deneyin.");
+      // Nothing changed: the unsaved work is still on the page and back must ask again.
+      rearmInAppNavigationGuard();
     } finally {
       setIsPersonaSwitching(false);
     }
+  }
+
+  /**
+   * Moves focus to the content without a fragment navigation, which would add a history entry; an extra entry over
+   * the page's unsaved-work guard would turn the next back press into a step within the page.
+   */
+  function skipToContent(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const content = document.getElementById("next-content");
+    if (!content) return;
+    event.preventDefault();
+    content.scrollIntoView({ block: "start", inline: "nearest" });
+    content.focus({ preventScroll: true });
   }
 
   function isActive(href: string) {
@@ -259,6 +307,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.setTimeout(() => mobileNavTriggerRef.current?.focus(), 0);
   }
 
+  /**
+   * The page's unsaved-work dialog renders inside main, which the open drawer covers and hides from assistive
+   * technology, so the drawer closes first. Focus moves to the menu button now, not on a timer, so the dialog takes
+   * focus after it and hands it back there.
+   */
+  function closeMobileNavBeforePageDialog() {
+    if (!isMobileNavOpen || !hasInAppNavigationGuard()) return;
+    setIsMobileNavOpen(false);
+    mobileNavTriggerRef.current?.focus();
+  }
+
   function isGroupActive(group: NavigationGroup) {
     return group.items.some((item) => navCurrent(item) === "page");
   }
@@ -277,7 +336,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="next-app-shell" data-shell-version="v3">
-      <a className="next-skip-link" href="#next-content">
+      <a className="next-skip-link" href="#next-content" onClick={skipToContent}>
         İçeriğe geç
       </a>
       <header className="next-mobile-topbar">
