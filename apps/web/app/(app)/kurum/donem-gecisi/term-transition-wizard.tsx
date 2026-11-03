@@ -21,6 +21,7 @@ import {
 } from "./term-transition-api.js";
 import {
   buildTransitionPlan,
+  compareCalendarByStart,
   chunkStudents,
   exitSetFingerprint,
   isExitConfirmed,
@@ -78,8 +79,8 @@ export function TermTransitionWizard() {
     enabled: canRun,
     refetchOnWindowFocus: false,
   });
-  const years = useMemo(() => (yearsQuery.data ?? []).slice().sort(compareByStart), [yearsQuery.data]);
-  const terms = useMemo(() => (termsQuery.data ?? []).slice().sort(compareByStart), [termsQuery.data]);
+  const years = useMemo(() => (yearsQuery.data ?? []).slice().sort(compareCalendarByStart), [yearsQuery.data]);
+  const terms = useMemo(() => (termsQuery.data ?? []).slice().sort(compareCalendarByStart), [termsQuery.data]);
   const year = years.find((record) => record.id === state.academicYearId);
   const term = terms.find((record) => record.id === state.termId && record.academicYearId === state.academicYearId);
   const calendarReady = Boolean(year && term);
@@ -470,10 +471,6 @@ function RunStepItem({ fallback, label, nothingToDo, result }: { fallback: strin
 /** The year and the term have both started on `today` (YYYY-MM-DD, Türkiye); the server applies the same date rule. */
 function calendarHasStarted(year: AcademicYearRecord, term: AcademicTermRecord, today: string): boolean {
   return year.startsAt.slice(0, 10) <= today && term.startsAt.slice(0, 10) <= today;
-}
-
-function compareByStart(left: AcademicYearRecord | AcademicTermRecord, right: AcademicYearRecord | AcademicTermRecord) {
-  return right.startsAt.localeCompare(left.startsAt) || left.name.localeCompare(right.name, "tr-TR");
 }
 
 /** Today in Türkiye; the server compares term starts with the same calendar date. */

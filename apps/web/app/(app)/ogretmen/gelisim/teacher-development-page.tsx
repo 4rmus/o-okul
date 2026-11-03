@@ -254,7 +254,7 @@ export function TeacherDevelopmentPage() {
                     <span className="next-field-hint">{formatDate(assessment.createdAt)}</span>
                   </header>
                   <p>
-                    {assessment.scores
+                    {orderScoresByCriteria(assessment.scores, criteria)
                       .map((score) => {
                         const criterion = criterionNames.get(score.criterionId);
                         return `${criterion?.name ?? "Kriter"}: ${score.score}/${criterion?.scaleMax ?? "-"}`;
@@ -274,6 +274,18 @@ export function TeacherDevelopmentPage() {
 
 function studentName(student: Pick<StudentRecord, "firstName" | "lastName">) {
   return `${student.firstName} ${student.lastName}`;
+}
+
+/**
+ * Scores in the same order as the form fields (criterion sortOrder, then name); the API returns them by id.
+ * Scores of a criterion no longer listed keep their place after the known ones.
+ */
+function orderScoresByCriteria<T extends { criterionId: string }>(scores: readonly T[], orderedCriteria: readonly Pick<DevelopmentCriterionRecord, "id">[]): T[] {
+  const position = new Map(orderedCriteria.map((criterion, index) => [criterion.id, index]));
+  return scores
+    .map((score, index) => ({ index, rank: position.get(score.criterionId) ?? orderedCriteria.length, score }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map((entry) => entry.score);
 }
 
 function scaleValues(criterion: Pick<DevelopmentCriterionRecord, "scaleMin" | "scaleMax">) {

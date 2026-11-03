@@ -28,7 +28,11 @@ const history = [
     visibility: "INTERNAL",
     createdAt: "2026-10-15T09:00:00.000Z",
     mentorNote: "Ders içi katılımı arttı.",
-    scores: [{ id: "score-old", tenantId: "tenant-dev", assessmentId: "assessment-old", criterionId: "criterion-focus", score: 3 }],
+    // The API lists scores by criterion id; the page must show them in the form order (sortOrder).
+    scores: [
+      { id: "score-old-duty", tenantId: "tenant-dev", assessmentId: "assessment-old", criterionId: "criterion-duty", score: 2 },
+      { id: "score-old", tenantId: "tenant-dev", assessmentId: "assessment-old", criterionId: "criterion-focus", score: 3 },
+    ],
   },
 ];
 
@@ -60,7 +64,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     await studentSelect.selectOption("student-a");
     const historyPanel = page.getByRole("region", { exact: true, name: "Önceki gelişim değerlendirmeleri" });
     await expect(historyPanel).toContainText("2026 Ekim");
-    await expect(historyPanel).toContainText("Odaklanma: 3/5");
+    await expect(historyPanel).toContainText("Odaklanma: 3/5 · Sorumluluk: 2/3");
     await expect(historyPanel).toContainText("Yalnız okul içi");
 
     await form.getByLabel("Dönem").fill("2026 Kasım");
