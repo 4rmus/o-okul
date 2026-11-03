@@ -2981,17 +2981,18 @@ const studentEnrollmentActionRequestSchema = objectSchema({
   termId: stringSchema(),
 });
 
-// DEC-20261102-08: bulk renewal names its year and term; they must belong together.
+// DEC-20261102-08: bulk renewal names its year and term together (they must belong together) or neither, and then
+// uses the active year and its active term. At most 500 students per request (studentBulkMaxStudentCount).
 const studentBulkEnrollmentRequestSchema = objectSchema({
   academicYearId: stringSchema(),
   classId: stringSchema(),
   gradeLevelId: stringSchema(),
   classIdBySourceClassId: looseObjectSchema(),
   startsAt: stringSchema({ format: "date" }),
-  studentIds: arraySchema(stringSchema(), { minItems: 1 }),
+  studentIds: arraySchema(stringSchema(), { minItems: 1, maxItems: 500 }),
   termId: stringSchema(),
   useAutomaticClassMapping: { type: "boolean" },
-}, ["academicYearId", "studentIds", "termId"]);
+}, ["studentIds"]);
 
 const studentEnrollmentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -3107,6 +3108,7 @@ const studentBulkRenewDryRunResultSchema = objectSchema({
   termId: stringSchema(),
   termStartsAt: stringSchema({ format: "date" }),
   termStarted: { type: "boolean" },
+  canActivateCalendar: { type: "boolean" },
   items: arraySchema(objectSchema({
     studentId: stringSchema(),
     status: studentStatusSchema,
@@ -3125,7 +3127,7 @@ const studentBulkRenewDryRunResultSchema = objectSchema({
     incoming: integerSchema({ minimum: 0 }),
     wouldExceed: { type: "boolean" },
   }, ["limit", "current", "incoming", "wouldExceed"]),
-}, ["dryRun", "academicYearId", "termId", "termStartsAt", "termStarted", "items", "conflictStudentIds", "quota"]);
+}, ["dryRun", "academicYearId", "termId", "termStartsAt", "termStarted", "canActivateCalendar", "items", "conflictStudentIds", "quota"]);
 
 const studentBulkStatusRequestSchema = objectSchema({
   confirmIrreversible: { type: "boolean", enum: [true] },

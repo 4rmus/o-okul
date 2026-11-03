@@ -60,6 +60,7 @@ import { type LicenseTermStore, licenseTermStoreToken } from "../license/license
 import { type ReportSnapshotStore, reportSnapshotStoreToken } from "../report/report-snapshot-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken, istanbulDateString } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
+import { canActivateAcademicCalendar } from "../school/school.service.js";
 import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GradeLevelRecord, type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
@@ -171,8 +172,16 @@ interface BulkRenewalPlanItem {
   error?: HttpException;
 }
 
+interface BulkRenewalAcademicContext {
+  academicYearId: string;
+  termId: string;
+  termStartsAt: string;
+  /** True when the request named the year and term; false when the active pair was used. */
+  explicit: boolean;
+}
+
 interface BulkRenewalPlan {
-  academicContext: { academicYearId: string; termId: string; termStartsAt: string };
+  academicContext: BulkRenewalAcademicContext;
   items: BulkRenewalPlanItem[];
 }
 
@@ -1054,7 +1063,8 @@ export class StudentService {
       academicYearId: plan.academicContext.academicYearId,
       termId: plan.academicContext.termId,
       termStartsAt: plan.academicContext.termStartsAt,
-      termStarted: plan.academicContext.termStartsAt <= istanbulDateString(),
+      termStarted: plan.academicContext.termStartsAt.slice(0, 10) <= istanbulDateString(),
+      canActivateCalendar: canActivateAcademicCalendar(context),
       items,
       conflictStudentIds: items.filter((item) => item.conflict).map((item) => item.studentId),
       quota: { limit: quota.limit, current: quota.current, incoming: quota.incoming, wouldExceed: quota.wouldExceed },
@@ -1066,7 +1076,7 @@ export class StudentService {
     input: StudentBulkEnrollmentInput,
     idempotencyKey?: string,
   ): Promise<StudentBulkEnrollmentResult> {
-    const plan = await this.planBulkRenewal(context, input);
+    const plan = await this.planBulkRenewal(context, input, { requireStartedTerm: true });
     // DEC-20261102-08: renewal forces ACTIVE, so a graduated or transferred student would silently come back.
     // The whole batch is refused before any write and names the students to take out.
     const notActiveStudentIds = plan.items.filter((item) => item.student.status !== "ACTIVE").map((item) => item.student.id);
@@ -1294,15 +1304,39 @@ export class StudentService {
     return byStudent;
   }
 
-  private async planBulkRenewal(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<BulkRenewalPlan> {
+  /**
+   * Reads the students, their open enrollments and the target placements with a fixed number of queries: one student
+   * read, one class list (campus scope), one enrollment read, and one placement lookup per distinct target.
+   */
+  private async planBulkRenewal(
+    context: RequestContext,
+    input: StudentBulkEnrollmentInput,
+    options: { requireStartedTerm?: boolean } = {},
+  ): Promise<BulkRenewalPlan> {
     const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
     if (studentIds.length === 0) {
       throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
     }
     const academicContext = await this.resolveBulkRenewalAcademicContext(context, input);
-    const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
+    // DEC-20261102-08: a transition is applied only for a term that has started. The active pair (students page) has
+    // started by the activation rule; an explicitly named future term is refused before anything is written.
+    if (options.requireStartedTerm && academicContext.explicit && academicContext.termStartsAt.slice(0, 10) > istanbulDateString()) {
+      throw new ConflictException("ACADEMIC_TERM_NOT_STARTED");
+    }
+    const students = await this.findManyInScope(context, studentIds);
     const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
     const openEnrollments = await this.openActiveEnrollments(students.filter((student) => student.status === "ACTIVE"));
+    // Students of one source class share a target, so each distinct placement is resolved once.
+    const placements = new Map<string, Promise<{ gradeLevelId?: string; classId?: string }>>();
+    const resolvePlacement = (tenantId: string, placementInput: { gradeLevelId?: string; classId?: string }) => {
+      const key = [tenantId, placementInput.gradeLevelId ?? "", placementInput.classId ?? ""].join("\0");
+      let placement = placements.get(key);
+      if (!placement) {
+        placement = this.resolveStudentPlacement(context, tenantId, placementInput, true);
+        placements.set(key, placement);
+      }
+      return placement;
+    };
     const items = await Promise.all(students.map(async (student): Promise<BulkRenewalPlanItem> => {
       const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
       const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
@@ -1311,10 +1345,10 @@ export class StudentService {
       const addsToQuota = !(student.status === "ACTIVE" && open.length === 1);
       const currentTermId = open.length === 1 ? open[0]!.termId : undefined;
       try {
-        const placement = await this.resolveStudentPlacement(context, student.tenantId, {
+        const placement = await resolvePlacement(student.tenantId, {
           gradeLevelId: input.gradeLevelId ?? (classId ? undefined : student.gradeLevelId),
           classId: classId ?? student.classId,
-        }, true);
+        });
         return { student, placement, addsToQuota, currentTermId };
       } catch (error) {
         const conflict = toBulkRenewConflictCode(error);
@@ -1326,6 +1360,40 @@ export class StudentService {
   }
 
   /**
+   * `findOne` for many ids: same tenant and campus checks, in request order, with one student read and one class list
+   * instead of two reads per student. Falls back to `findOne` for a store without a batched read.
+   */
+  private async findManyInScope(context: RequestContext, ids: string[]): Promise<StudentRecord[]> {
+    if (!this.store.findManyByIds) {
+      return Promise.all(ids.map((id) => this.findOne(context, id)));
+    }
+    const restricted = this.isCampusRestricted(context);
+    const byId = new Map((await this.store.findManyByIds(ids)).map((student) => [student.id, student]));
+    const classById = restricted
+      ? new Map((await this.classStore.list()).map((record) => [record.id, record]))
+      : undefined;
+    const campusIds = new Set(context.campusScope?.campusIds ?? []);
+    return ids.map((id) => {
+      const student = byId.get(id);
+      if (!student) {
+        throw new NotFoundException("STUDENT_NOT_FOUND");
+      }
+      this.assertAccess(context, student);
+      if (classById) {
+        // Same rule as assertStudentCampusScope.
+        const schoolClass = student.classId ? classById.get(student.classId) : undefined;
+        if (!schoolClass || schoolClass.deletedAt || schoolClass.tenantId !== student.tenantId) {
+          throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+        }
+        if (!schoolClass.campusId || !campusIds.has(schoolClass.campusId)) {
+          throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+        }
+      }
+      return student;
+    });
+  }
+
+  /**
    * Bulk renewal names its year and term together; they must exist for the tenant and belong together. A request that
    * names neither uses the active year and its active term as one pair; naming only one of them is rejected, so an
    * explicit year is never paired with another year's active term.
@@ -1333,11 +1401,12 @@ export class StudentService {
   private async resolveBulkRenewalAcademicContext(
     context: RequestContext,
     input: StudentBulkEnrollmentInput,
-  ): Promise<{ academicYearId: string; termId: string; termStartsAt: string }> {
+  ): Promise<BulkRenewalAcademicContext> {
     const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
     const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
     let academicYearId = optionalText(input.academicYearId);
     let termId = optionalText(input.termId);
+    const explicit = Boolean(academicYearId || termId);
     if (!academicYearId && !termId) {
       const activeYear = years.find((year) => year.isActive);
       const activeTerm = activeYear ? terms.find((term) => term.isActive && term.academicYearId === activeYear.id) : undefined;
@@ -1357,7 +1426,7 @@ export class StudentService {
     if (term.academicYearId !== academicYearId) {
       throw new BadRequestException("STUDENT_ENROLLMENT_TERM_YEAR_MISMATCH");
     }
-    return { academicYearId, termId, termStartsAt: term.startsAt };
+    return { academicYearId, termId, termStartsAt: term.startsAt, explicit };
   }
 
   private async buildAutomaticClassMapping(context: RequestContext): Promise<Record<string, string>> {

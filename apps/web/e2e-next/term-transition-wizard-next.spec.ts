@@ -30,6 +30,7 @@ interface CapturedRequest {
 function createDb() {
   return {
     renewFailuresLeft: 1,
+    canActivateCalendar: true,
     years: [
       { id: "year-old", tenantId: "tenant-term", name: "2025-2026", startsAt: daysFromToday(-400), endsAt: daysFromToday(-30), isActive: true },
       { id: "year-new", tenantId: "tenant-term", name: "2026-2027", startsAt: daysFromToday(-60), endsAt: daysFromToday(300), isActive: false },
@@ -81,7 +82,7 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await expect(exits.getByLabel("Bora Demir için işlem")).toHaveValue("leave");
     const confirmation = exits.getByRole("checkbox", { name: /1 öğrencinin mezun, 1 öğrencinin ayrılan/ });
     await confirmation.check();
-    await expect(page).toHaveURL(/onay=1/);
+    await expect(page).toHaveURL(/onay=[0-9a-f]{16}/);
 
     await page.getByRole("button", { name: "Devam edin" }).click();
     const assignments = page.getByRole("region", { name: "Öğretmen atamaları", exact: true });
@@ -139,6 +140,54 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await expect(apply).toContainText("Başlangıç tarihi gelmemiş dönem için geçiş uygulanamaz.");
     await expect(apply).toContainText("geri alınamaz onayı verilmedi");
     await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeDisabled();
+    expect(writes(db)).toEqual([]);
+  });
+
+  test("takvimi etkinleştiremeyen kampüs kısıtlı hesapta geçiş engellenir ve hiçbir yazma yapılmaz", async ({ page }) => {
+    const db = createDb();
+    db.canActivateCalendar = false;
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await open(page, db, "/kurum/donem-gecisi?adim=6&yil=year-new&donem=term-new&e=class-8a%3Aclass-9a");
+
+    await expect(page.getByRole("status").filter({ hasText: "Bu hesapla geçiş uygulanamaz" })).toContainText("Kampüs yetkisiyle sınırlı hesaplar");
+    const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
+    await expect(apply).toContainText("kurum genelinde yetkili bir yönetici uygulamalıdır");
+    await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeDisabled();
+    expect(writes(db)).toEqual([]);
+  });
+
+  test("geri alınamaz onay mezun ve ayrılan öğrenci kümesine bağlıdır; küme değişince onay düşer", async ({ page }) => {
+    const db = createDb();
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await open(page, db, "/kurum/donem-gecisi?adim=3&yil=year-new&donem=term-new&e=class-12a%3Amezun");
+
+    const exits = page.getByRole("region", { name: "Mezun ve ayrılanlar", exact: true });
+    await expect(exits.getByRole("table", { name: "Mezun ve ayrılan öğrenciler" })).toContainText("Cem Yıldız");
+    await exits.getByRole("checkbox", { name: /1 öğrencinin mezun, 0 öğrencinin ayrılan/ }).check();
+    await expect(page).toHaveURL(/onay=[0-9a-f]{16}/);
+    const firstConfirmation = new URL(page.url()).searchParams.get("onay");
+
+    // Reopening the address keeps a confirmation that still matches the exit set.
+    await page.goto(`/kurum/donem-gecisi?adim=3&yil=year-new&donem=term-new&e=class-12a%3Amezun&e=class-8a%3Aclass-9a&onay=${firstConfirmation}`);
+    await expect(exits.getByRole("checkbox", { name: /1 öğrencinin mezun, 0 öğrencinin ayrılan/ })).toBeChecked();
+    // Adding a leaver changes the irreversible set: the confirmation is cleared and has to be given again.
+    await exits.getByLabel("Ayrılacak öğrenci").selectOption("student-bora");
+    await exits.getByRole("button", { name: "Ayrılan olarak ekleyin" }).click();
+    await expect(page).not.toHaveURL(/onay=/);
+    const secondBox = exits.getByRole("checkbox", { name: /1 öğrencinin mezun, 1 öğrencinin ayrılan/ });
+    await expect(secondBox).not.toBeChecked();
+    await secondBox.check();
+    await expect(page).toHaveURL(/onay=[0-9a-f]{16}/);
+    expect(new URL(page.url()).searchParams.get("onay")).not.toBe(firstConfirmation);
+
+    // A confirmation carried over to another exit set does not count at the apply step.
+    await page.goto(`/kurum/donem-gecisi?adim=6&yil=year-new&donem=term-new&e=class-12a%3Amezun&o=student-ada%3AA&onay=${firstConfirmation}`);
+    const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
+    await expect(apply).toContainText("geri alınamaz onayı verilmedi");
+    await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeDisabled();
+    await page.goto(`/kurum/donem-gecisi?adim=3&yil=year-new&donem=term-new&e=class-12a%3Amezun&o=student-ada%3AA&onay=${firstConfirmation}`);
+    await expect(exits).toContainText("Mezun veya ayrılan öğrenci listesi onayınızdan sonra değişti.");
+    await expect(exits.getByRole("checkbox", { name: /1 öğrencinin mezun, 1 öğrencinin ayrılan/ })).not.toBeChecked();
     expect(writes(db)).toEqual([]);
   });
 });
@@ -250,6 +299,7 @@ function dryRun(db: MockDb, body: Record<string, unknown>) {
     termId: body.termId,
     termStartsAt: db.terms[1]!.startsAt,
     termStarted: true,
+    canActivateCalendar: db.canActivateCalendar,
     items,
     conflictStudentIds: [],
     quota: { limit: 100, current: 3, incoming: 0, wouldExceed: false },

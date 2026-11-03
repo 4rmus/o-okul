@@ -21,10 +21,14 @@ import {
 } from "./term-transition-api.js";
 import {
   buildTransitionPlan,
+  chunkStudents,
+  exitSetFingerprint,
+  isExitConfirmed,
+  mergeDryRunResults,
   newRunId,
   readWizardState,
-  renewRequestBody,
-  statusRequestBody,
+  renewRequestBodies,
+  statusRequestBodies,
   stepRequestKey,
   wizardSteps,
   writeWizardState,
@@ -35,6 +39,9 @@ import {
 import { AssignmentStep, CalendarStep, ClassMappingStep, ExitReviewStep, PreviewStep } from "./term-transition-steps.js";
 
 const requiredCapabilities = ["setup:manage", "student:manage", "academic:manage"] as const;
+
+const calendarActivationDeniedMessage =
+  "Kampüs yetkisiyle sınırlı hesaplar kurum takvimini etkinleştiremez. Kayıt yenileme ve mezuniyet geri alınamayacağı için geçişi kurum genelinde yetkili bir yönetici uygulamalıdır.";
 
 type RunStepKey = "renew" | "status" | "activate";
 interface RunStepResult {
@@ -91,30 +98,37 @@ export function TermTransitionWizard() {
     () => (studentsQuery.data ?? []).filter((student) => student.status === "ACTIVE" && student.classId).map((student) => student.id).sort(),
     [studentsQuery.data],
   );
-  // Progress read back from the server: students whose open enrollment is already in the target term.
+  // Progress read back from the server: students whose open enrollment is already in the target term, and whether
+  // this account may activate the calendar (the last step). Read in batches of the server's per-request bound.
   const progressQuery = useQuery({
     queryKey: ["term-transition-progress", tenantKey, state.academicYearId, state.termId, classedStudentIds],
     queryFn: async () => {
-      if (classedStudentIds.length === 0) return new Set<string>();
-      const result = await dryRunBulkRenew(accessToken, {
-        studentIds: classedStudentIds,
-        academicYearId: state.academicYearId,
-        termId: state.termId,
-      });
-      return new Set(result.items.filter((item) => item.currentTermId === state.termId).map((item) => item.studentId));
+      const results = [];
+      for (const studentIds of chunkStudents(classedStudentIds)) {
+        results.push(await dryRunBulkRenew(accessToken, { studentIds, academicYearId: state.academicYearId, termId: state.termId }));
+      }
+      const merged = mergeDryRunResults(results);
+      return {
+        inTargetTerm: new Set((merged?.items ?? []).filter((item) => item.currentTermId === state.termId).map((item) => item.studentId)),
+        canActivateCalendar: merged?.canActivateCalendar,
+      };
     },
     enabled: canRun && needsPlan && studentsQuery.isSuccess,
     refetchOnWindowFocus: false,
   });
   const plan: TransitionPlan | undefined = useMemo(
-    () => studentsQuery.data && progressQuery.data ? buildTransitionPlan(studentsQuery.data, state, progressQuery.data) : undefined,
+    () => studentsQuery.data && progressQuery.data ? buildTransitionPlan(studentsQuery.data, state, progressQuery.data.inTargetTerm) : undefined,
     [progressQuery.data, state, studentsQuery.data],
   );
-  const renewBody = plan && plan.renew.length > 0 ? renewRequestBody(plan, state) : undefined;
+  const renewBodies = useMemo(() => plan && plan.renew.length > 0 ? renewRequestBodies(plan, state) : [], [plan, state]);
   const previewQuery = useQuery({
-    queryKey: ["term-transition-preview", tenantKey, renewBody],
-    queryFn: () => dryRunBulkRenew(accessToken, renewBody!),
-    enabled: canRun && state.step >= 5 && Boolean(renewBody),
+    queryKey: ["term-transition-preview", tenantKey, renewBodies],
+    queryFn: async () => {
+      const results = [];
+      for (const body of renewBodies) results.push(await dryRunBulkRenew(accessToken, body));
+      return mergeDryRunResults(results);
+    },
+    enabled: canRun && state.step >= 5 && renewBodies.length > 0,
     refetchOnWindowFocus: false,
   });
   const assignmentsQuery = useQuery({
@@ -131,7 +145,10 @@ export function TermTransitionWizard() {
       router.push(href);
       return;
     }
-    router.replace(href);
+    // Same-step changes only rewrite the address. A soft `router.replace` on a page opened directly with these
+    // parameters could restore the opened address, dropping a confirmation or an override. The state argument is null
+    // on purpose: Next.js copies its own history state and updates useSearchParams only for a call without its marker.
+    window.history.replaceState(null, "", href);
   }
 
   function stepHref(step: WizardStepNumber) {
@@ -150,16 +167,21 @@ export function TermTransitionWizard() {
   }
 
   const exitCount = (plan?.graduate.length ?? 0) + (plan?.leave.length ?? 0);
-  const calendarStarted = Boolean(year && term && year.startsAt.slice(0, 10) <= today && term.startsAt.slice(0, 10) <= today);
+  const exitConfirmed = plan ? isExitConfirmed(plan, state) : false;
+  const calendarStarted = Boolean(year && term && calendarHasStarted(year, term, today));
   const calendarActive = Boolean(year?.isActive && term?.isActive);
   const preview = previewQuery.data;
+  // DEC-20261102-08: renewal and graduation commit before the activation; an account that cannot activate the
+  // calendar (campus-restricted staff) must not start a transition it would leave half applied.
+  const calendarActivationDenied = progressQuery.data?.canActivateCalendar === false || preview?.canActivateCalendar === false;
   const isRefreshing = studentsQuery.isFetching || progressQuery.isFetching || previewQuery.isFetching || yearsQuery.isFetching || termsQuery.isFetching;
   const applyBlockers = [
-    !calendarStarted ? "Başlangıç tarihi gelmemiş dönem için geçiş uygulanamaz. Dönem başladığında bu sayfaya dönebilirsiniz." : "",
-    exitCount > 0 && !state.confirmed ? "Mezun ve ayrılan öğrenciler için geri alınamaz onayı verilmedi (3. adım)." : "",
+    calendarActivationDenied ? calendarActivationDeniedMessage : "",
+    !calendarStarted || preview?.termStarted === false ? "Başlangıç tarihi gelmemiş dönem için geçiş uygulanamaz. Dönem başladığında bu sayfaya dönebilirsiniz." : "",
+    exitCount > 0 && !exitConfirmed ? "Mezun ve ayrılan öğrenciler için geri alınamaz onayı verilmedi (3. adım)." : "",
     preview && preview.conflictStudentIds.length > 0 ? "Ön izlemede çakışan öğrenciler var (5. adım)." : "",
     preview?.quota.wouldExceed ? "Lisanstaki aktif öğrenci sınırı aşılıyor (5. adım)." : "",
-    renewBody && previewQuery.isError ? "Ön izleme alınamadı (5. adım)." : "",
+    renewBodies.length > 0 && previewQuery.isError ? "Ön izleme alınamadı (5. adım)." : "",
   ].filter(Boolean);
 
   const steps: StepperStep[] = wizardSteps.map((step, index) => {
@@ -175,18 +197,27 @@ export function TermTransitionWizard() {
 
   async function apply() {
     if (!plan || !year || !term || isApplying || applyBlockers.length > 0) return;
+    const snapshot = plan;
+    // Checked again on the snapshot the run uses: the confirmation must cover exactly these exits, and the term must
+    // have started today (the page may have stayed open since it was rendered).
+    if (!isExitConfirmed(snapshot, state) || !calendarHasStarted(year, term, istanbulToday())) {
+      setRunResults({ renew: { status: "error", message: "Uygulama başlatılmadı: dönem başlamamış ya da mezun ve ayrılan öğrenci onayı güncel değil." } });
+      return;
+    }
     const runId = state.runId || newRunId();
     if (!state.runId) navigate({ runId });
-    const snapshot = plan;
     let current: RunStepKey = "renew";
     setRunResults({});
     setIsApplying(true);
     try {
       setRunResults((results) => ({ ...results, renew: { status: "running", message: "Kayıtlar yenileniyor." } }));
       if (snapshot.renew.length > 0) {
-        const body = renewRequestBody(snapshot, state);
-        const result = await bulkRenew(accessToken, body, await stepRequestKey(runId, "yenileme", body));
-        setRunResults((results) => ({ ...results, renew: { status: "done", message: `${result.updatedCount} öğrencinin kaydı yeni döneme taşındı.` } }));
+        let updatedCount = 0;
+        for (const body of renewRequestBodies(snapshot, state)) {
+          const result = await bulkRenew(accessToken, body, await stepRequestKey(runId, "yenileme", body));
+          updatedCount += result.updatedCount;
+        }
+        setRunResults((results) => ({ ...results, renew: { status: "done", message: `${updatedCount} öğrencinin kaydı yeni döneme taşındı.` } }));
       } else {
         setRunResults((results) => ({ ...results, renew: { status: "done", message: "Yenilenecek öğrenci kalmadı." } }));
       }
@@ -199,9 +230,12 @@ export function TermTransitionWizard() {
         [snapshot.leave, "TRANSFERRED", "ayrılan"],
       ] as const) {
         if (items.length === 0) continue;
-        const body = statusRequestBody(items, status);
-        const result = await bulkUpdateStatus(accessToken, body, await stepRequestKey(runId, label === "mezun" ? "mezun" : "ayrilan", body));
-        messages.push(`${result.updatedCount + result.unchangedCount} öğrenci ${label} olarak işaretlendi.`);
+        let marked = 0;
+        for (const body of statusRequestBodies(items, status)) {
+          const result = await bulkUpdateStatus(accessToken, body, await stepRequestKey(runId, label === "mezun" ? "mezun" : "ayrilan", body));
+          marked += result.updatedCount + result.unchangedCount;
+        }
+        messages.push(`${marked} öğrenci ${label} olarak işaretlendi.`);
       }
       setRunResults((results) => ({ ...results, status: { status: "done", message: messages.join(" ") || "Bekleyen mezun veya ayrılan öğrenci kalmadı." } }));
 
@@ -239,6 +273,9 @@ export function TermTransitionWizard() {
     <div className="next-onboarding-fields">
       <Stepper currentHref={stepHref(state.step)} label="Dönem geçişi adımları" linkComponent={Link} steps={steps} />
       {loadError ? <Alert tone="danger">{loadError}</Alert> : null}
+      {calendarActivationDenied ? (
+        <Alert title="Bu hesapla geçiş uygulanamaz" tone="warning">{calendarActivationDeniedMessage}</Alert>
+      ) : null}
       {state.step === 1 || !calendarReady ? (
         <CalendarStep
           accessToken={accessToken}
@@ -246,7 +283,7 @@ export function TermTransitionWizard() {
             void queryClient.invalidateQueries({ queryKey: ["term-transition-years", tenantKey] });
             void queryClient.invalidateQueries({ queryKey: ["term-transition-terms", tenantKey] });
           }}
-          onSelect={(academicYearId, termId) => navigate({ academicYearId, termId, confirmed: false, step: 1 })}
+          onSelect={(academicYearId, termId) => navigate({ academicYearId, termId, confirmation: "", step: 1 })}
           loading={yearsQuery.isLoading || termsQuery.isLoading}
           state={state}
           terms={terms}
@@ -258,7 +295,7 @@ export function TermTransitionWizard() {
         <ClassMappingStep
           classes={classesQuery.data ?? []}
           loading={!plan || classesQuery.isLoading}
-          onChange={(classTargets) => navigate({ classTargets, confirmed: false })}
+          onChange={(classTargets) => navigate({ classTargets, confirmation: "" })}
           plan={plan}
           state={state}
         />
@@ -266,9 +303,10 @@ export function TermTransitionWizard() {
       {calendarReady && state.step === 3 ? (
         <ExitReviewStep
           classes={classesQuery.data ?? []}
+          confirmed={Boolean(plan && exitCount > 0 && exitConfirmed)}
           loading={!plan}
-          onConfirm={(confirmed) => navigate({ confirmed })}
-          onOverrides={(overrides) => navigate({ overrides, confirmed: false })}
+          onConfirm={(confirmed) => navigate({ confirmation: confirmed && plan ? exitSetFingerprint(plan) : "" })}
+          onOverrides={(overrides) => navigate({ overrides, confirmation: "" })}
           plan={plan}
           state={state}
         />
@@ -287,9 +325,9 @@ export function TermTransitionWizard() {
         <PreviewStep
           classes={classesQuery.data ?? []}
           error={previewQuery.isError ? describeError(previewQuery.error, "Ön izleme alınamadı.") : ""}
-          loading={!plan || (Boolean(renewBody) && previewQuery.isLoading)}
+          loading={!plan || (renewBodies.length > 0 && previewQuery.isLoading)}
           plan={plan}
-          preview={renewBody ? preview : undefined}
+          preview={renewBodies.length > 0 ? preview : undefined}
           termStarted={calendarStarted}
         />
       ) : null}
@@ -366,6 +404,11 @@ function RunStepItem({ fallback, label, pendingDone, result }: { fallback: strin
       <p role={result?.status === "error" ? "alert" : undefined}>{result?.message ?? fallback}</p>
     </li>
   );
+}
+
+/** The year and the term have both started on `today` (YYYY-MM-DD, Türkiye); the server applies the same date rule. */
+function calendarHasStarted(year: AcademicYearRecord, term: AcademicTermRecord, today: string): boolean {
+  return year.startsAt.slice(0, 10) <= today && term.startsAt.slice(0, 10) <= today;
 }
 
 function compareByStart(left: AcademicYearRecord | AcademicTermRecord, right: AcademicYearRecord | AcademicTermRecord) {
