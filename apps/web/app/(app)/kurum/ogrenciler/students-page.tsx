@@ -716,8 +716,8 @@ export function StudentsPage() {
         emptyState={
           <EmptyState
             title="Henüz öğrenci yok"
-            description="İlk öğrenciyi ekleyerek kurum kurulumunun çekirdek akışını tamamla."
-            hint={classes.length === 0 ? "Öğrenciyi sınıfsız ekleyebilir veya önce sınıf oluşturabilirsin." : undefined}
+            description="İlk öğrenciyi ekleyerek kurum kurulumunun çekirdek akışını tamamlayın."
+            hint={classes.length === 0 ? "Öğrenciyi sınıfsız ekleyebilir veya önce sınıf oluşturabilirsiniz." : undefined}
             primaryAction={{ label: "Öğrenci ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />
@@ -821,7 +821,7 @@ export function StudentsPage() {
           </>
         ) : null}
         <p className="next-field-hint">Toplu aktarım portal hesabı oluşturmaz; erişimi Öğrenci Portal Erişimi ekranından ayrıca açabilirsiniz.</p>
-        <p className="next-field-hint">Veli sütunları iletişim kişisi olarak yazılır; veli hesabı açılmaz, veli TC'si okunmaz. İletişim kişisi için contactFirstName, contactLastName, contactRelation, contactPhone ve contactEmail kolonlarını da kullanabilirsin. İzinler varsayılan kapalıdır.</p>
+        <p className="next-field-hint">Veli sütunları iletişim kişisi olarak yazılır; veli hesabı açılmaz, veli TC'si okunmaz. İletişim kişisi için contactFirstName, contactLastName, contactRelation, contactPhone ve contactEmail kolonlarını da kullanabilirsiniz. İzinler varsayılan kapalıdır.</p>
         {importDryRun && importDryRun.errors.length > 0 ? (
           <div className="next-form-guardians">
             <span className="next-field-hint">İlk hatalar</span>

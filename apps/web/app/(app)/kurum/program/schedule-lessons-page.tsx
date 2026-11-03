@@ -260,7 +260,7 @@ export function ScheduleLessonsPage() {
           <EmptyState
             title="Ders programı boş"
             description="Haftalık ders akışını oluşturmak için ilk dersi ekleyin."
-            hint="Sınıf, öğretmen ve ders kayıtları hazırsa programı buradan bağlayabilirsin."
+            hint="Sınıf, öğretmen ve ders kayıtları hazırsa programı buradan bağlayabilirsiniz."
             primaryAction={{ label: "Ders ekle", onClick: openCreateForm }}
           />
         }

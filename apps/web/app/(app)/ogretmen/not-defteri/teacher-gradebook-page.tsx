@@ -112,7 +112,11 @@ export function TeacherGradebookPage() {
     setBusy(true);
     try {
       await saveGradeEntries(accessToken, detail.assessment.id, entries);
-      await queryClient.invalidateQueries({ queryKey: ["teacher-gradebook-assessment", sessionKey, detail.assessment.id] });
+      // The list rows carry unpublishedDraftCount, so they are refreshed together with the detail.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["teacher-gradebook", sessionKey] }),
+        queryClient.invalidateQueries({ queryKey: ["teacher-gradebook-assessment", sessionKey, detail.assessment.id] }),
+      ]);
       // UAT F-24: a visible confirmation that also replaces the previous publish message, which no longer describes
       // the screen once a new draft exists.
       const publishLabel = detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla";

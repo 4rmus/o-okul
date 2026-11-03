@@ -155,6 +155,38 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByRole("link", { name: "Öğrencileri açın" })).toBeVisible();
   });
 
+  test("hedef değişince önceki uygulamanın sonucu tamamlandı göstermez; takvim seçilmeden adım tamam sayılmaz", async ({ page }) => {
+    const db = createDb();
+    db.renewFailuresLeft = 0;
+    await page.setViewportSize({ height: 900, width: 1280 });
+    // The address carries a later step but no year and term: no step reads as complete.
+    await open(page, db, "/kurum/donem-gecisi?adim=4");
+    const stepper = page.getByRole("navigation", { name: "Dönem geçişi adımları" });
+    await expect(stepper.getByText("Bekliyor", { exact: true }).first()).toBeVisible();
+    await expect(stepper.getByText("Tamam", { exact: true })).toHaveCount(0);
+    await expect(stepper).not.toContainText("✓");
+
+    await page.goto("/kurum/donem-gecisi?adim=6&yil=year-new&donem=term-new&e=class-8a%3Aclass-9a");
+    const apply = page.getByRole("region", { name: "Geçişi uygulama", exact: true });
+    await apply.getByRole("button", { name: "Geçişi uygulayın" }).click();
+    await page.getByRole("dialog", { name: "Dönem geçişini onaylayın" }).getByRole("button", { name: "Onaylayın ve uygulayın" }).click();
+    await expect(apply.getByText("Dönem geçişi tamamlandı.")).toBeVisible();
+    await expect(stepper.getByText("Tamam", { exact: true })).toHaveCount(6);
+
+    // Another target in the same page session: the finished run belongs to the old target and is not shown.
+    await stepper.getByRole("link", { name: /Yıl ve dönem/ }).click();
+    const calendar = page.getByRole("form", { name: "Yeni yıl ve dönem" });
+    await calendar.getByRole("combobox", { name: "Akademik yıl", exact: true }).selectOption("year-old");
+    await calendar.getByRole("combobox", { name: "Dönem", exact: true }).selectOption("term-old");
+    await expect(page).toHaveURL(/donem=term-old/);
+    await stepper.getByRole("link", { name: /Uygulama/ }).click();
+    await expect(apply).toBeVisible();
+    await expect(apply.getByText("Dönem geçişi tamamlandı.")).toHaveCount(0);
+    await expect(apply).not.toContainText("etkin dönem oldu");
+    await expect(apply.getByRole("button", { name: "Geçişi uygulayın" })).toBeVisible();
+    await expect(stepper.locator("li").nth(5)).not.toHaveAttribute("data-status", "complete");
+  });
+
   test("geri alınamaz onay verilmeden ve dönem başlamadan uygulama düğmesi kapalı kalır", async ({ page }) => {
     const db = createDb();
     db.terms[1]!.startsAt = daysFromToday(20);

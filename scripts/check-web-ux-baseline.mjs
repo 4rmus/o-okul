@@ -1478,8 +1478,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   'getByLabel("Rol önizleme bilgisi")',
   "Duyuruları oku: 1 okunmamış",
   "Bugün yapılacaklar",
-  "3 iş",
-  "7 iş",
+  '.next-portal-action-strip__summary span")).toHaveText("2 iş")',
   "Ödevi aç: 1 atama",
   "Son sınavı incele: %81,7",
   "successRateDelta: 11.7",
@@ -4830,6 +4829,26 @@ requireNoTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx",
   "bir değerlendirme tanımla.\"",
   "<StatusBadge tone=\"success\">{`Yayında v${row.publishedVersion}`}</StatusBadge>",
 ]);
+// UAT 2026-11-03 review: every kurum screen uses the "siz" address; these 2nd-person-singular forms must not return.
+// Substring match: each token ends with a space, a period or a quote so the "-sınız/-siniz" forms do not collide.
+requireNoTokensInFiles(
+  "apps/web/app/(app)/kurum",
+  appSourcePaths.filter((path) => path.startsWith("apps/web/app/(app)/kurum/")),
+  [
+    "abilirsin.",
+    "ebilirsin.",
+    "abilirsin ",
+    "ebilirsin ",
+    "denersen ",
+    "eklemen önerilir",
+    "tekrar yaz\"",
+    "akışını tamamla.",
+    "tek akışta toparla.",
+    "pakette sakla.",
+    "kontrol et;",
+    "parolanı ",
+  ],
+);
 requireTokens("apps/web/app/(app)/kurum/not-defteri/gradebook-admin-page.tsx", [
   "Yazılı, performans ve proje notlarını tanımlayın, girilen notları kontrol edin ve yayınlayın.",
   "assessmentPublicationStatus(row)",

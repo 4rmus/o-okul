@@ -355,7 +355,7 @@ function StudentDashboard({
   const progressIsComparable = isComparableStudentProgress(progress);
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
-  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, classHomework);
+  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, classHomework, classHomeworkQuery.isError);
   const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, canViewFinance);
   // Not ve portal ekranları henüz öğrenci ön seçimi almaz; not ekranı öğrencinin sınıfına süzülmüş açılır.
   const notesHref = detail.profile.classId ? `/kurum/notlar?classId=${encodeURIComponent(detail.profile.classId)}` : "/kurum/notlar";
@@ -1005,7 +1005,11 @@ function buildAuditRows(records: StudentAuditSummaryRecord[]): StudentDetailTabl
   }));
 }
 
-function buildStudentDashboardSummaryItems(detail: StudentBaseDetail, classHomework: StudentHomeworkRecord[]): OperationSummaryItem[] {
+function buildStudentDashboardSummaryItems(
+  detail: StudentBaseDetail,
+  classHomework: StudentHomeworkRecord[],
+  classHomeworkFailed = false,
+): OperationSummaryItem[] {
   // Açık ödev = teslim edilmemiş sınıf ödevi + açık materyal ataması (öğrenci ve veli portalıyla aynı tanım).
   const openClassHomeworkCount = classHomework.filter((record) => record.submission.status === "NOT_SUBMITTED").length;
   const openHomeworkCount = detail.openHomeworkCount + openClassHomeworkCount;
@@ -1031,12 +1035,15 @@ function buildStudentDashboardSummaryItems(detail: StudentBaseDetail, classHomew
       value: formatPercentNumber(latestSuccessRate),
     },
     {
-      // Metin aynı kalır (route-family-student-detail-768 golden); sayı artık sınıf ödevini de içerir.
-      description: "Öğrenciye atanan ödev ve materyal",
+      // Metin aynı kalır (route-family-student-detail-768 golden); sayı artık sınıf ödevini de içerir. Sınıf ödevi
+      // alınamazsa sayı kesin değildir: "en az N" ya da "Alınamadı" uyarı tonuyla yazılır.
+      description: classHomeworkFailed ? "Sınıf ödevleri alınamadı; sayı eksik olabilir" : "Öğrenciye atanan ödev ve materyal",
       key: "homework",
       label: "Açık ödev",
-      tone: openHomeworkCount > 0 ? "info" : "default",
-      value: formatCount(openHomeworkCount),
+      tone: classHomeworkFailed ? "warning" : openHomeworkCount > 0 ? "info" : "default",
+      value: classHomeworkFailed
+        ? openHomeworkCount > 0 ? `en az ${formatCount(openHomeworkCount)}` : "Alınamadı"
+        : formatCount(openHomeworkCount),
     },
     {
       description: watchNoteCount > 0 ? `${formatCount(watchNoteCount)} not takipte` : formatTeacherNoteSummary(detail.teacherNotes),

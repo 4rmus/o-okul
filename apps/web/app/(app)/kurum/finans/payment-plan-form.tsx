@@ -134,7 +134,7 @@ export function PaymentPlanFormModal({
       onCreated(plan);
     } catch (caught) {
       const code = caught instanceof ApiRequestError ? caught.code : undefined;
-      setError((code && planErrorMessages[code]) || "Ödeme planı oluşturulamadı. Tekrar denersen aynı plan iki kez açılmaz.");
+      setError((code && planErrorMessages[code]) || "Ödeme planı oluşturulamadı. Tekrar denerseniz aynı plan iki kez açılmaz.");
     } finally {
       setSubmitting(false);
     }

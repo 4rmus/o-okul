@@ -96,6 +96,22 @@ test.describe("Portal panel yalıtımı", () => {
     expect(countRequests(mock)["/me/guardian/students/student-a/homework/material-assignments"]).toBe(before["/me/guardian/students/student-a/homework/material-assignments"]);
   });
 
+  test("veli: bir ödev kaynağı düşünce özet sayaçları kesin ve başarılı sayı göstermez", async ({ page }) => {
+    const classHomeworkPath = "/me/guardian/students/student-a/homework";
+    await openPortal(page, "GUARDIAN", "/veli", guardianResponse, [classHomeworkPath]);
+
+    // Only the material assignment (1) arrived: the count is a lower bound in a warning tone, never "Tamam".
+    const actions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
+    const homeworkAction = actions.getByRole("link", { name: /Ödevi kontrol et: en az 1 açık ödev/ });
+    await expect(homeworkAction).toHaveAttribute("aria-label", /Eksik/);
+    await expect(homeworkAction).not.toHaveAttribute("aria-label", /Tamam/);
+    await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toContainText("en az 1 açık ödev");
+    const metric = page.getByRole("region", { exact: true, name: "Portal özeti" }).locator(".uh-metric-card").filter({ hasText: "Açık ödev" });
+    await expect(metric).toContainText("en az 1");
+    await expect(metric).toHaveClass(/uh-metric-card--warning/);
+    await expect(metric).not.toHaveClass(/uh-metric-card--success/);
+  });
+
   test("öğretmen: düşen program bölümü tek başına hata verir, Tekrar dene yalnız programı ister", async ({ page }) => {
     const mock = await openPortal(page, "TEACHER", "/ogretmen/ders-akisi", teacherResponse, ["/me/teacher/schedule"]);
 

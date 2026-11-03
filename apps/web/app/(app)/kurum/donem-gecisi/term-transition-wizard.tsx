@@ -60,7 +60,9 @@ export function TermTransitionWizard() {
   const tenantKey = auth?.session.tenantId ?? "anonymous";
   const canRun = Boolean(auth) && requiredCapabilities.every((capability) => hasCapabilityForRoles(auth?.session.roles ?? [], capability));
   const today = useMemo(() => istanbulToday(), []);
-  const [runResults, setRunResults] = useState<Partial<Record<RunStepKey, RunStepResult>>>({});
+  const [storedRunResults, setRunResults] = useState<Partial<Record<RunStepKey, RunStepResult>>>({});
+  // The target and plan the stored results belong to; a changed year, term, class mapping or override hides them.
+  const [runSignature, setRunSignature] = useState("");
   const [isApplying, setIsApplying] = useState(false);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -82,6 +84,8 @@ export function TermTransitionWizard() {
   const term = terms.find((record) => record.id === state.termId && record.academicYearId === state.academicYearId);
   const calendarReady = Boolean(year && term);
   const needsPlan = calendarReady && state.step >= 2;
+  const planSignature = writeWizardState({ ...state, step: 1, confirmation: "", runId: "" });
+  const runResults = runSignature === planSignature ? storedRunResults : {};
 
   const classesQuery = useQuery({
     queryKey: ["term-transition-classes", tenantKey],
@@ -197,7 +201,9 @@ export function TermTransitionWizard() {
   const steps: StepperStep[] = wizardSteps.map((step, index) => {
     const number = (index + 1) as WizardStepNumber;
     const locked = number > 1 && !calendarReady;
-    const done = number < state.step || (number === 6 && transitionDone);
+    // Without a chosen year and term no step was passed for this target, so none reads as complete (the address may
+    // still carry a later step number).
+    const done = calendarReady && (number < state.step || (number === 6 && transitionDone));
     return {
       href: locked ? undefined : stepHref(number),
       key: step.key,
@@ -226,6 +232,7 @@ export function TermTransitionWizard() {
     const snapshot = plan;
     // Checked again on the snapshot the run uses: the confirmation must cover exactly these exits, and the term must
     // have started today (the page may have stayed open since it was rendered).
+    setRunSignature(planSignature);
     if (!isExitConfirmed(snapshot, state) || !calendarHasStarted(year, term, istanbulToday())) {
       setRunResults({ renew: { status: "error", message: "Uygulama başlatılmadı: dönem başlamamış ya da mezun ve ayrılan öğrenci onayı güncel değil." } });
       return;

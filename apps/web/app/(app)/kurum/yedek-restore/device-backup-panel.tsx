@@ -71,7 +71,7 @@ export function DeviceBackupPanel() {
         const url = URL.createObjectURL(blob), link = document.createElement("a");
         link.href = url; link.download = `o-okul-${new Date().toISOString().slice(0,10)}.ookulbackup`;
         document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setNotice("İndirme başlatıldı. Dosyanın cihazına kaydedildiğini kontrol et; yedek parolanı ayrı ve güvenli bir yerde sakla.");
+        setNotice("İndirme başlatıldı. Dosyanın cihazınıza kaydedildiğini kontrol edin; yedek parolanızı ayrı ve güvenli bir yerde saklayın.");
       } else {
         const value = await response.json() as TenantDeviceBackupPreview | { data: TenantDeviceBackupPreview };
         if (!controller.signal.aborted) setPreview("data" in value ? value.data : value);
@@ -96,11 +96,11 @@ export function DeviceBackupPanel() {
     try{await apiRequest(auth.accessToken,`${apiBaseUrl}/device-restores/${restore.data.operation.operationId}/cancel`,{method:"POST"});await restore.refetch();restoreKey.current=null;}
     catch{setError("Talep iptal edilemedi; onaylanmış olabilir.");}finally{setPending(false);}
   }
-  return <Panel title="Cihazımda Şifreli Yedek" aria-label="Cihazda şifreli kurum yedeği" description="Kurum kayıtlarını ve bağlı dosyaları tek bir parola korumalı pakette sakla. Yüklemek kurum verilerini değiştirmez.">
+  return <Panel title="Cihazımda Şifreli Yedek" aria-label="Cihazda şifreli kurum yedeği" description="Kurum kayıtlarını ve bağlı dosyaları tek bir parola korumalı pakette saklayın. Yüklemek kurum verilerini değiştirmez.">
     {status.isPending ? <p role="status">Yedekleme kullanılabilirliği kontrol ediliyor.</p> : !enabled ? <p role="status">Güvenli cihaz yedeği henüz etkinleştirilmedi. Mevcut JSON dışa aktarımı, tam geri yükleme paketi değildir.</p> : null}
     <form onSubmit={event => void submit(event, "download")} aria-label="Şifreli yedeği indir">
       <Field label="Yeni yedek parolası"><Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} disabled={!enabled || pending} /></Field>
-      <Field label="Yedek parolasını tekrar yaz"><Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!enabled || pending} /></Field>
+      <Field label="Yedek parolasını tekrar yazın"><Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!enabled || pending} /></Field>
       <p>En az 12 karakter kullanın. Parola kaybolursa bu yedeği açamayabilirsiniz. İlk sürümün paket sınırı 32 MB; büyük kurumlar için eksik yedek üretilmez.</p>
       <Button type="submit" disabled={!enabled || pending}>{pending ? "İşlem sürüyor" : "Şifreli yedeği indir"}</Button>
     </form>
@@ -131,7 +131,7 @@ export function DeviceBackupPanel() {
       {restore.data?.operation ? <p role="status">Talep durumu: {({AWAITING_APPROVAL:"Sistem yöneticisinin onayı bekleniyor",QUEUED:"Sırada",RUNNING:"Geri yükleniyor",COMPLETED:"Tamamlandı",ABORTED:"Uygulanmadı; kurtarma sonucu kontrol edilmeli",BLOCKED:"İşlem inceleme bekliyor"})[restore.data.operation.state]}</p> : null}
       {restore.data?.operation?.state==="AWAITING_APPROVAL" ? <Button type="button" disabled={pending} onClick={()=>void cancelRestore()}>Talebi iptal et</Button> : null}
       {preview?.plan && (!restore.data?.operation || ["COMPLETED","ABORTED"].includes(restore.data.operation.state)) ? <form onSubmit={event=>void requestRestore(event)} aria-label="Geri yükleme talebi oluştur">
-        <Field label="Talep için yedek parolasını tekrar yaz"><Input type="password" autoComplete="off" minLength={12} maxLength={128} required value={uploadPassword} onChange={event=>setUploadPassword(event.target.value)} disabled={pending}/></Field>
+        <Field label="Talep için yedek parolasını tekrar yazın"><Input type="password" autoComplete="off" minLength={12} maxLength={128} required value={uploadPassword} onChange={event=>setUploadPassword(event.target.value)} disabled={pending}/></Field>
         <label><input type="checkbox" required disabled={pending}/> Seçtiğim yedeğe dönülmesini istiyorum. Onay sırasında kurum erişiminin geçici olarak kapanacağını anlıyorum.</label>
         <p>Bu sürüm en fazla 2.000 kaydı geri yükler. Mevcut finans, izin ve hesap güvenliği kayıtları korunur; eski oturumlar yeniden açılmaz.</p>
         <Button type="submit" disabled={pending||restore.isError||restore.isPending}>Geri yükleme talebi gönder</Button>

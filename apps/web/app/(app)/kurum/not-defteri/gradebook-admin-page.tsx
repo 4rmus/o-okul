@@ -213,7 +213,11 @@ export function GradebookAdminPage() {
     setBusy(true);
     try {
       await saveGradeEntries(accessToken, selected.assessment.id, entries);
-      await queryClient.invalidateQueries({ queryKey: ["gradebook-assessment", tenantKey, selected.assessment.id] });
+      // The list row carries unpublishedDraftCount (UAT U7), so it is refreshed together with the detail.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["gradebook-assessments", tenantKey] }),
+        queryClient.invalidateQueries({ queryKey: ["gradebook-assessment", tenantKey, selected.assessment.id] }),
+      ]);
     } finally {
       setBusy(false);
     }

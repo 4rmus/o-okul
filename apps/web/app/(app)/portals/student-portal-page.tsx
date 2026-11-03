@@ -191,6 +191,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const dueTodayCount = openHomework.filter((item) => studentHomeworkFeedGroup(item, now) === "today").length;
   // Özet ve aksiyon şeridi alt paneller yüklenirken de görünür; verisi gelmeyen kutu "Yükleniyor…" yazar.
   const homeworkLoading = homeworkAssignmentsQuery.isLoading || classHomeworkQuery.isLoading;
+  // A failed homework source makes the count a lower bound, never a definite "Tamam".
+  const homeworkPartial = !homeworkLoading && (homeworkAssignmentsQuery.isError || classHomeworkQuery.isError);
   const reportLoading = reportQuery.isLoading;
   const announcementsLoading = announcementsQuery.isLoading;
   const progressSummary = formatStudentProgressSummary(data.progress);
@@ -208,20 +210,24 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       href: studentPortalHref("/ogrenci/duyurular", isRolePreview),
       key: "announcement",
       label: "Duyuruları oku",
+      pending: unreadAnnouncements > 0,
       statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
       tone: unreadAnnouncements > 0 ? "warning" : "success",
       value: announcementsLoading ? panelLoadingValue : unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
     },
     {
-      actionLabel: openHomeworkCount > 0 ? "Tamamla" : "Hazır",
+      actionLabel: openHomeworkCount > 0 ? "Tamamla" : homeworkPartial ? "Kontrol" : "Hazır",
       contextLabel: "Ödev",
-      detail: "Materyal ve tekrar çalışması",
+      detail: homeworkPartial ? "Ödevlerin bir kısmı alınamadı" : "Materyal ve tekrar çalışması",
       href: studentPortalHref("/ogrenci/odevler", isRolePreview),
       key: "homework",
       label: "Ödevi aç",
-      statusLabel: openHomeworkCount > 0 ? "Çalışma var" : "Tamam",
-      tone: openHomeworkCount > 0 ? "info" : "success",
-      value: homeworkLoading ? panelLoadingValue : `${openHomeworkCount} atama`,
+      pending: openHomeworkCount > 0,
+      statusLabel: homeworkPartial ? "Eksik" : openHomeworkCount > 0 ? "Çalışma var" : "Tamam",
+      tone: homeworkPartial ? "warning" : openHomeworkCount > 0 ? "info" : "success",
+      value: homeworkLoading
+        ? panelLoadingValue
+        : homeworkPartial ? (openHomeworkCount > 0 ? `en az ${openHomeworkCount} atama` : "Alınamadı") : `${openHomeworkCount} atama`,
     },
     {
       actionLabel: "Kontrol",
@@ -230,6 +236,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       href: studentPortalHref("/ogrenci/devamsizlik", isRolePreview),
       key: "attendance",
       label: "Devamsızlığı kontrol et",
+      pending: false,
       statusLabel: (data.attendanceSummary?.absent ?? 0) > 0 || (data.attendanceSummary?.late ?? 0) > 0 ? "Dikkat" : "Düzenli",
       tone: (data.attendanceSummary?.absent ?? 0) > 0 || (data.attendanceSummary?.late ?? 0) > 0 ? "warning" : "success",
       value: attendanceStatus,
@@ -241,6 +248,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       href: studentPortalHref("/ogrenci/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
+      pending: openSupportTickets > 0,
       statusLabel: openSupportTickets > 0 ? "Açık" : isRolePreview ? "Yalnızca görüntüleme" : "Hazır",
       tone: openSupportTickets > 0 ? "warning" : "neutral",
       value: supportStatus,
@@ -252,6 +260,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       href: studentPortalHref("/ogrenci/raporlar", isRolePreview),
       key: "report",
       label: "Son sınavı incele",
+      pending: false,
       statusLabel: "Başarı %",
       tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
       value: reportLoading ? panelLoadingValue : formatPercentNumber(reportSuccess),
@@ -263,6 +272,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       href: studentPortalHref(isRolePreview ? "/ogrenci" : "/ogrenci/profil", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
+      pending: false,
       statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       tone: isRolePreview ? "neutral" : "info",
       value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",

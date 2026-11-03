@@ -44,7 +44,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const studentActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
       await expect(studentActions).toContainText("Bugün yapılacaklar");
       await expect(studentActions).toContainText("Öncelikli işler");
-      await expect(studentActions).toContainText("3 iş");
+      // UAT U18: the header counts pending cards only (unread announcement + open homework), not every card.
+      await expect(studentActions.locator(".next-portal-action-strip__summary span")).toHaveText("2 iş");
       await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
       await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
       await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toHaveAttribute("href", "/ogrenci/raporlar");
@@ -262,7 +263,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const guardianActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
       await expect(guardianActions).toContainText("Bugün yapılacaklar");
       await expect(guardianActions).toContainText("Öncelikli işler");
-      await expect(guardianActions).toContainText("7 iş");
+      // UAT U18: pending cards only: unread announcement + open homework; finance and support are closed here.
+      await expect(guardianActions.locator(".next-portal-action-strip__summary span")).toHaveText("2 iş");
       await expect(guardianActions).toContainText("1 öncelikli");
       await expect(guardianActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/veli/duyurular");
       await expect(guardianActions.getByRole("link", { name: /Öğrenci seç: Ada Kaya/ })).toHaveAttribute("href", "/veli/ogrenci");

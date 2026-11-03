@@ -82,6 +82,26 @@ test.describe("Not defteri", () => {
     expect(captured.publish[0]?.key).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  // UAT U7 follow-up: saving a draft refreshes the list row label in place, without a reload.
+  test("yönetici taslak kaydedince liste durumu yeniden yüklemeden güncellenir", async ({ page }) => {
+    const captured: Captured = { publish: [], saves: [] };
+    let ga2Drafts = 0;
+    await open(page, "admin", "/kurum/not-defteri", captured, 1280, {
+      assessments: () => [{ ...assessment, unpublishedDraftCount: 1 }, { ...createdAssessment, unpublishedDraftCount: ga2Drafts }],
+      onSave: () => {
+        ga2Drafts = 1;
+      },
+    });
+    const list = page.getByRole("table", { name: "Not değerlendirmeleri" });
+    await expect(list.getByRole("row", { name: /2\. Yazılı/ })).toContainText("Giriş yok");
+
+    await page.getByRole("button", { name: "2. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("80");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect.poll(() => captured.saves.length).toBe(1);
+    await expect(list.getByRole("row", { name: /2\. Yazılı/ })).toContainText("Yayınlanmadı · 1 taslak not");
+  });
+
   // DEC-20261012-01: the teacher creates for assigned scopes only and publishes behind a confirm dialog.
   for (const width of [1280, 390, 320]) {
     test(`öğretmen ${width}px görünümde değerlendirme oluşturur ve düzeltmeyi onayla yayınlar`, async ({ page }) => {
@@ -191,6 +211,7 @@ test.describe("Not defteri", () => {
 });
 
 interface Overrides {
+  assessments?: () => unknown;
   detail?: () => unknown;
   onSave?: () => void;
 }
@@ -222,10 +243,10 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
     await fulfill(route, createdAssessment);
     return;
   }
-  if (path === "/grade-assessments/ga-1/entries" && request.method() === "PUT") {
+  if (/^\/grade-assessments\/ga-[12]\/entries$/.test(path) && request.method() === "PUT") {
     captured.saves.push(request.postData() ?? "");
     overrides.onSave?.();
-    await fulfill(route, detail.entries);
+    await fulfill(route, path.includes("ga-1") ? detail.entries : []);
     return;
   }
   const responses: Record<string, unknown> = {
@@ -233,7 +254,7 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
     "/me/tenant": { id: "tenant-gb", name: "Not Akademi", institutionType: "Özel okul", slug: "not-akademi" },
     "/me/notification-devices": [],
     "/me/feature-rollouts": { enabledFeatureKeys: [] },
-    "/grade-assessments": persona === "admin"
+    "/grade-assessments": overrides.assessments ? overrides.assessments() : persona === "admin"
       ? [{ ...assessment, unpublishedDraftCount: 1 }, { ...createdAssessment, unpublishedDraftCount: 0 }]
       : captured.creates?.length ? [assessment, createdAssessment] : [assessment],
     "/grade-assessments/ga-1": overrides.detail ? overrides.detail() : detail,
