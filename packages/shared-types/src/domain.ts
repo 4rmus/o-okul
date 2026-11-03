@@ -2828,13 +2828,19 @@ export interface ReportStudentSnapshot {
   generatedAt?: string;
 }
 
+/**
+ * One point per exam: among the READY snapshots of an exam the caller may read, the broadest scope (fewest
+ * campus/grade level/class/course/term filters) wins, then the most recently generated one.
+ */
 export interface ReportStudentProgressPoint {
   snapshotId: string;
+  examId?: string;
   courseId?: string;
+  /** Exam title frozen in the snapshot (snapshotData.examTitle). */
   examTitle?: string;
-  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); absent for snapshots that did not store it. */
+  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); points are ordered by it. */
   examStartsAt?: string;
-  /** Report generation time; points are ordered by it. */
+  /** Report generation time; the ordering fallback for snapshots that did not store the exam date. */
   generatedAt?: string;
   termId?: string;
   total: ReportStudentScoreSummary;
@@ -3672,6 +3678,11 @@ export interface StudentPublishedGradeItem {
 /** One optical exam point. successRate is Başarı % on a 0-100 scale; net/questionCount are context. */
 export interface GuardianExamSeriesPoint {
   snapshotId: string;
+  examId?: string;
+  /** Exam title frozen in the snapshot. */
+  examTitle?: string;
+  /** Exam date frozen in the snapshot; the series is ordered by it (generatedAt is the fallback). */
+  examStartsAt?: string;
   generatedAt?: string;
   successRate?: number;
   net?: number;

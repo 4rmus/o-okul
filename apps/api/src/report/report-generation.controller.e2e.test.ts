@@ -519,34 +519,8 @@ describe("ReportGenerationController", () => {
       studentId: "student-a",
       points: [
         {
-          snapshotId: "snapshot-previous",
-          courseId: "course-turkish",
-          generatedAt: "2026-06-05T09:00:00.000Z",
-          termId: "term-2026-spring",
-          total: {
-            correct: 15,
-            wrong: 4,
-            blank: 1,
-            net: 14,
-            questionCount: 20,
-            rawScore: 70,
-            standardScore: 80,
-            successRate: 70,
-          },
-          branches: [
-            {
-              branch: "Matematik",
-              correct: 15,
-              wrong: 4,
-              blank: 1,
-              net: 14,
-              questionCount: 20,
-              successRate: 70,
-            },
-          ],
-        },
-        {
           snapshotId: "snapshot-a",
+          examId: "exam-a",
           courseId: "course-math",
           generatedAt: "2026-06-06T09:00:00.000Z",
           termId: "term-2026-spring",
@@ -573,9 +547,10 @@ describe("ReportGenerationController", () => {
           ],
         },
       ],
-      successRateDelta: 17.5,
-      netDelta: 3.5,
-      standardScoreDelta: 7.5,
+      // One point per exam: snapshot-a and snapshot-previous share a scope width, the newer snapshot-a is kept.
+      successRateDelta: 0,
+      netDelta: 0,
+      standardScoreDelta: 0,
     });
   });
 
@@ -590,13 +565,12 @@ describe("ReportGenerationController", () => {
 
     expect(snapshotStore.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     expect(response.body.points.map((point: { snapshotId: string }) => point.snapshotId)).toEqual([
-      "snapshot-previous",
       "snapshot-a",
       "snapshot-other-exam",
     ]);
-    expect(response.body.successRateDelta).toBe(30);
-    expect(response.body.netDelta).toBe(6);
-    expect(response.body.standardScoreDelta).toBe(10);
+    expect(response.body.successRateDelta).toBe(12.5);
+    expect(response.body.netDelta).toBe(2.5);
+    expect(response.body.standardScoreDelta).toBe(2.5);
   });
 
   it("başka tenant snapshot export edemez", async () => {

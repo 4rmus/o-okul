@@ -32,8 +32,12 @@ export class MeProgressSeriesService {
     ]);
     const courseNames = new Map(courses.map((course) => [course.id, course.name]));
     return {
+      // One point per exam, ordered by exam date (see ReportGenerationService.getStudentProgress).
       examSeries: progress.points.map((point) => ({
         snapshotId: point.snapshotId,
+        ...(point.examId ? { examId: point.examId } : {}),
+        ...(point.examTitle ? { examTitle: point.examTitle } : {}),
+        ...(point.examStartsAt ? { examStartsAt: point.examStartsAt } : {}),
         ...(point.generatedAt ? { generatedAt: point.generatedAt } : {}),
         ...pickNumbers(point.total, ["successRate", "net", "questionCount", "correct", "wrong", "blank"]),
       })),

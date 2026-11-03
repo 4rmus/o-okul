@@ -436,6 +436,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            jsonb_build_object(
              'generatedAt', snapshot."snapshotData"->'generatedAt',
              'examStartsAt', snapshot."snapshotData"->'examStartsAt',
+             'examTitle', snapshot."snapshotData"->'examTitle',
              'students', (
                SELECT jsonb_agg(student ORDER BY ordinality)
                FROM jsonb_array_elements(snapshot."snapshotData"->'students')
@@ -894,6 +895,9 @@ function toStudentProgressRecord(snapshot: ReportSnapshotRecord, studentId: stri
         : {}),
       ...(typeof snapshot.snapshotData?.examStartsAt === "string"
         ? { examStartsAt: snapshot.snapshotData.examStartsAt }
+        : {}),
+      ...(typeof snapshot.snapshotData?.examTitle === "string"
+        ? { examTitle: snapshot.snapshotData.examTitle }
         : {}),
       students: snapshotStudents(snapshot).filter((student) => student.studentId === studentId),
     },
