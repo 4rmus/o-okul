@@ -6624,7 +6624,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(teacherToday.getByText("Bugünün odağı")).toBeVisible();
   await expect(teacherToday.getByText("Bekleyen iş", { exact: true })).toBeVisible();
   await expect(teacherToday.getByText(/^(1 iş|Tamam)$/u).first()).toBeVisible();
-  await expect(page.getByLabel("Öğretmen günlük aksiyonları").getByRole("link", { name: /Yoklama al/ })).toHaveAttribute("href", "/ogretmen/ders-akisi");
+  // UAT U18: ders yokken kart "Yoklama al" işi değil, Ders akışı bağlantısıdır.
+  await expect(page.getByLabel("Öğretmen günlük aksiyonları").getByRole("link", { name: /^(Yoklama al|Ders akışı):/ })).toHaveAttribute("href", "/ogretmen/ders-akisi");
   await openPortalRoute(page, "Öğretmen Paneli", "Ders Akışı", /\/ogretmen\/ders-akisi$/);
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("Ayse Ogretmen")).toBeVisible();
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("Matematik").first()).toBeVisible();

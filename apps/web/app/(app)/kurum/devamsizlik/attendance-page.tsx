@@ -246,7 +246,7 @@ export function AttendancePage() {
         }
         aria-label="Devamsızlık yönetimi"
         columns={columns}
-        description="Geçmiş ve ders bağlı kayıtları görüntüle; günlük yoklamayı üstteki sınıf listesiyle kaydet."
+        description="Geçmiş ve ders bağlı kayıtları görüntüleyin; günlük yoklamayı üstteki sınıf listesiyle kaydedin."
         emptyState={
           <EmptyState
             title="Devamsızlık kaydı yok"

@@ -101,7 +101,7 @@ export function DeviceBackupPanel() {
     <form onSubmit={event => void submit(event, "download")} aria-label="Şifreli yedeği indir">
       <Field label="Yeni yedek parolası"><Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} disabled={!enabled || pending} /></Field>
       <Field label="Yedek parolasını tekrar yaz"><Input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!enabled || pending} /></Field>
-      <p>En az 12 karakter kullan. Parola kaybolursa bu yedeği açamayabilirsin. İlk sürümün paket sınırı 32 MB; büyük kurumlar için eksik yedek üretilmez.</p>
+      <p>En az 12 karakter kullanın. Parola kaybolursa bu yedeği açamayabilirsiniz. İlk sürümün paket sınırı 32 MB; büyük kurumlar için eksik yedek üretilmez.</p>
       <Button type="submit" disabled={!enabled || pending}>{pending ? "İşlem sürüyor" : "Şifreli yedeği indir"}</Button>
     </form>
     <form onSubmit={event => void submit(event, "preview")} aria-label="Yedeği yükle ve doğrula">

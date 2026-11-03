@@ -605,7 +605,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
            LIMIT 1
          ) access ON true
          WHERE e."tenantId" = $1 AND e."deletedAt" IS NULL
-         ORDER BY lower(e."lastName"), lower(e."firstName"), e."id"`,
+         ORDER BY ${turkishNameKeySql('e."lastName"')}, ${turkishNameKeySql('e."firstName"')}, e."id"`,
         [tenantId],
       );
       return result.rows.map(toEmployeeAccessRecord);
@@ -1394,6 +1394,15 @@ const employeeTeacherJoinSql = `LEFT JOIN "Teacher" t
            ON t."tenantId" = e."tenantId" AND t."employeeId" = e."id" AND t."deletedAt" IS NULL`;
 
 /** Keyset sort key per sort; `keyOf` is the in-memory counterpart of `keySql`. */
+/**
+ * UAT U12 (2026-11-03): name sorts follow the Turkish alphabet (Ö after O, before P; ı before i). Postgres sorts and
+ * compares the keyset under the ICU "tr-x-icu" collation, already required by the uppercase migrations; no schema
+ * change. The in-memory twin encodes the same order into a code-point-ordered key (`turkishSortKey`).
+ */
+function turkishNameKeySql(column: string): string {
+  return `(lower(${column} COLLATE "tr-x-icu") COLLATE "tr-x-icu")`;
+}
+
 function employeeSortDefinition(sort: EmployeeAccessSort): {
   keySql: string;
   keyOf(employee: EmployeeAccessRecord): string;
@@ -1401,14 +1410,34 @@ function employeeSortDefinition(sort: EmployeeAccessSort): {
 } {
   switch (sort) {
     case "-lastName":
-      return { keySql: 'lower(e."lastName")', keyOf: (employee) => employee.lastName.toLowerCase(), direction: "DESC" };
+      return { keySql: turkishNameKeySql('e."lastName"'), keyOf: (employee) => turkishSortKey(employee.lastName), direction: "DESC" };
     case "firstName":
-      return { keySql: 'lower(e."firstName")', keyOf: (employee) => employee.firstName.toLowerCase(), direction: "ASC" };
+      return { keySql: turkishNameKeySql('e."firstName"'), keyOf: (employee) => turkishSortKey(employee.firstName), direction: "ASC" };
     case "employeeNo":
       return { keySql: 'lower(coalesce(e."employeeNo", \'\'))', keyOf: (employee) => (employee.employeeNo ?? "").toLowerCase(), direction: "ASC" };
     case "lastName":
-      return { keySql: 'lower(e."lastName")', keyOf: (employee) => employee.lastName.toLowerCase(), direction: "ASC" };
+      return { keySql: turkishNameKeySql('e."lastName"'), keyOf: (employee) => turkishSortKey(employee.lastName), direction: "ASC" };
   }
+}
+
+const turkishAlphabet = "abcçdefgğhıijklmnoöpqrsştuüvwxyz";
+
+/**
+ * Lower-cases with Turkish rules and maps each letter to a private-use code point in alphabet order, so a plain
+ * code-point comparison (the in-memory cursor helper) orders names like Postgres "tr-x-icu". Other accented letters
+ * fall back to their base letter; digits, spaces and punctuation keep their code points and sort before letters.
+ */
+export function turkishSortKey(value: string): string {
+  let key = "";
+  for (const character of value.toLocaleLowerCase("tr-TR")) {
+    let index = turkishAlphabet.indexOf(character);
+    if (index < 0) {
+      const base = character.normalize("NFD").replace(/\p{M}+/gu, "");
+      index = base.length === 1 ? turkishAlphabet.indexOf(base) : -1;
+    }
+    key += index >= 0 ? String.fromCharCode(0xe000 + index) : character;
+  }
+  return key;
 }
 
 function matchesEmployeeSearch(employee: EmployeeAccessRecord, query: string): boolean {

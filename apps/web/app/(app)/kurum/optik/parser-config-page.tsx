@@ -890,7 +890,7 @@ export function ParserConfigPage({ routeExamId, routeTab }: { routeExamId?: stri
   return (
     <PageFrame
       title="Optik İşlemleri"
-      subtitle="Cevap anahtarı hazır sınavı seç, optik düzeni belirle ve dosya yüklemesini tek akışta kontrol et."
+      subtitle="Cevap anahtarı hazır sınavı seçin, optik düzeni belirleyin ve dosya yüklemesini tek akışta kontrol edin."
     >
       <OpticalExamSelector
         examId={examId}
@@ -921,7 +921,7 @@ function OpticalExamSelector({
       <Panel
         aria-label="Sınav seç"
         className="next-optical-selector-panel"
-        description="Cevap anahtarı hazırlanmış sınavı seç. Yeni sınav ve cevap anahtarı Sınavlar ekranında oluşturulur."
+        description="Cevap anahtarı hazırlanmış sınavı seçin. Yeni sınav ve cevap anahtarı Sınavlar ekranında oluşturulur."
         title="Sınav seç"
       >
         <Field label="Sınav seç">
@@ -1364,7 +1364,7 @@ function QuarantineResolutionPanel({
       <Panel
         aria-label="Eşleşmeyen satır listesi"
         className="next-optical-quarantine-panel next-optical-quarantine-panel--wide"
-        description="Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izle."
+        description="Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izleyin."
         title="Eşleşmeyen satırlar"
       >
         <form className="next-inline-form" onSubmit={(event) => void onStudentSearchSubmit(event)}>

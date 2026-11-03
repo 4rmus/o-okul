@@ -405,7 +405,7 @@ export function MessageTemplatesPage() {
         emptyState={
           <EmptyState
             title="Şablon yok"
-            description="SMS gönderimlerinde kullanmak için ilk mesaj şablonunu oluştur."
+            description="SMS gönderimlerinde kullanmak için ilk mesaj şablonunu oluşturun."
             primaryAction={{ label: "Şablon ekle", onClick: openCreateForm }}
           />
         }
@@ -434,7 +434,7 @@ export function MessageTemplatesPage() {
         <Panel
         aria-label="SMS gönderim"
         title="SMS gönderim"
-        description="Şablon seç, kapsamı filtrele, alıcı listesini kontrol et ve teslim raporunu izle."
+        description="Şablon seçin, kapsamı filtreleyin, alıcı listesini kontrol edin ve teslim raporunu izleyin."
         tone="muted"
       >
         <form className="next-sms-workflow" onSubmit={(event) => void handleSendSms(event)}>

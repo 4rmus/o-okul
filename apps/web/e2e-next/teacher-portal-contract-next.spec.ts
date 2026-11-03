@@ -591,7 +591,8 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   await expect(actionStrip).toBeVisible();
   await expect(actionStrip.getByRole("heading", { name: "Bekleyen işler" })).toBeVisible();
   await expect(actionStrip).toContainText("Bugün yapılacaklar");
-  await expect(actionStrip).toContainText("6 iş");
+  // UAT U18: başlık yalnız bekleyen kartları sayar ve "Bekleyen iş" kartıyla aynı sayıyı gösterir; rapor kartı iş sayılmaz.
+  await expect(actionStrip).toContainText("5 iş");
   await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", attendanceHref);
   await expect(actionStrip.getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
   await expect(actionStrip.getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })).toHaveAttribute("href", `/ogretmen/not-defteri${suffix}`);

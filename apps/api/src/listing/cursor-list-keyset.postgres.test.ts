@@ -303,6 +303,12 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
       expect(walk.records.every((record) => record.tenantId === tenantA)).toBe(true);
     });
 
+    it("orders last names by the Turkish alphabet across pages (UAT U12)", async () => {
+      const walk = await walkBothWays(fetchEmployees(tenantC, "lastName"), 4);
+      expect(walk.forward).toEqual(["aksoy", "bulut", "demir", "isik", "ismail", "ozturk"].map((key) => `${tenantC}-employee-${key}`));
+      expect(walk.backward).toEqual(walk.forward);
+    });
+
     it("never returns tenant B employees and rejects foreign, re-sorted and re-searched cursors", async () => {
       const tenantBWalk = await walkBothWays(fetchEmployees(tenantB, "lastName"), 4);
       expect(tenantBWalk.forward).toEqual(await employeeReferenceOrder(admin, tenantB, "lastName"));
@@ -758,9 +764,10 @@ async function seedTurkishFixtures(pool: pg.Pool, tenantId: string): Promise<voi
   }
 }
 
+// UAT U12: employee name sorts use the Turkish ICU collation (store keySql).
 const employeeSortSql: Record<string, string> = {
-  lastName: `lower("lastName")`,
-  firstName: `lower("firstName")`,
+  lastName: `(lower("lastName" COLLATE "tr-x-icu") COLLATE "tr-x-icu")`,
+  firstName: `(lower("firstName" COLLATE "tr-x-icu") COLLATE "tr-x-icu")`,
   employeeNo: `lower(coalesce("employeeNo", ''))`,
 };
 

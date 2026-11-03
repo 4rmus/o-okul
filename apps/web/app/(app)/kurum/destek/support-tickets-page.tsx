@@ -575,7 +575,7 @@ export function SupportTicketsPage() {
         emptyState={
           <EmptyState
             title="Destek bildirimi yok"
-            description="İlk destek bildirimini açarak takip ve yorum akışını başlat."
+            description="İlk destek bildirimini açarak takip ve yorum akışını başlatın."
             hint="Bildirim oluştuğunda ek, yorum ve durum işlemleri burada görünür."
             primaryAction={{ label: "Destek bildirimi aç", onClick: openCreateForm }}
           />
@@ -638,7 +638,7 @@ export function SupportTicketsPage() {
               </p>
             </div>
           ) : (
-            <p>Listeden bir destek bildirimi seç.</p>
+            <p>Listeden bir destek bildirimi seçin.</p>
           )}
           <div className="next-support-ticket-actions">
             <form className="next-support-ticket-form" onSubmit={(event) => void handleAttachmentSubmit(event)}>
@@ -702,7 +702,7 @@ export function SupportTicketsPage() {
             ) : (
               <article>
                 <h3>Seçili bildirim yok</h3>
-                <p>Ek ve yorum geçmişi için listeden bir bildirim seç.</p>
+                <p>Ek ve yorum geçmişi için listeden bir bildirim seçin.</p>
               </article>
             )}
           </section>

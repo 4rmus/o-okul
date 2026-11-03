@@ -156,9 +156,18 @@ export interface PortalActionItem {
   href: string;
   key: string;
   label: string;
+  /**
+   * UAT U18: kart bekleyen bir işi temsil ediyorsa true. Bir sayfa en az bir kartta bu alanı verirse başlık sayacı
+   * yalnız bekleyen kartları sayar; hiçbir kart vermezse eski davranış (tüm kartlar) korunur.
+   */
+  pending?: boolean;
   statusLabel?: string;
   tone?: StatusBadgeProps["tone"];
   value: string;
+}
+
+export function isPortalActionPending(item: PortalActionItem) {
+  return item.pending === true;
 }
 
 export function PortalDailyBrief({
@@ -236,14 +245,18 @@ export function PortalActionStrip({
   const primaryItems = candidates.slice(0, 3);
   const secondaryItems = candidates.slice(3);
   const attentionCount = candidates.filter((item) => item.tone === "warning" || item.tone === "danger").length;
+  // Tek tanım: sayfa kartlarda "pending" verirse sayaç yalnız bekleyen işleri sayar (ör. öğretmen Bugün kartıyla aynı sayı).
+  const tracksPending = candidates.some((item) => item.pending !== undefined);
+  const workCount = tracksPending ? candidates.filter(isPortalActionPending).length : candidates.length;
+  const workLabel = tracksPending && workCount === 0 ? "Bekleyen iş yok" : `${workCount} iş`;
   return (
     <Panel
       actions={
         <div
           className="next-portal-action-strip__summary"
-          aria-label={`${candidates.length} iş, ${attentionCount} öncelikli`}
+          aria-label={`${workLabel}, ${attentionCount} öncelikli`}
         >
-          <span>{candidates.length} iş</span>
+          <span>{workLabel}</span>
           <strong>{attentionCount > 0 ? `${attentionCount} öncelikli` : "Planlı işler"}</strong>
         </div>
       }

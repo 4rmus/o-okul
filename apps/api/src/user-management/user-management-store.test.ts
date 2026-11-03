@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryUserManagementStore, PostgresUserManagementStore } from "./user-management-store.js";
+import { InMemoryUserManagementStore, PostgresUserManagementStore, turkishSortKey } from "./user-management-store.js";
 
 describe("PostgresUserManagementStore", () => {
   it("çalışan erişim projeksiyonunu tenant RLS ile okur", async () => {
@@ -77,7 +77,7 @@ describe("PostgresUserManagementStore", () => {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
             if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
-            if (sql.includes('ORDER BY lower(e."lastName") ASC, e."id" ASC')) {
+            if (sql.includes('ORDER BY (lower(e."lastName" COLLATE "tr-x-icu") COLLATE "tr-x-icu") ASC, e."id" ASC')) {
               return {
                 rows: [{
                   id: "employee-a",
@@ -120,7 +120,7 @@ describe("PostgresUserManagementStore", () => {
       meta: { limit: 50 },
     });
 
-    const employeeQuery = queries.find((query) => query.sql.includes('ORDER BY lower(e."lastName") ASC, e."id" ASC'));
+    const employeeQuery = queries.find((query) => query.sql.includes('ORDER BY (lower(e."lastName" COLLATE "tr-x-icu") COLLATE "tr-x-icu") ASC, e."id" ASC'));
     expect(employeeQuery?.values).toEqual(["tenant-a", "%ada%", 51]);
     expect(employeeQuery?.sql).toContain('LIKE $2 ESCAPE');
     expect(employeeQuery?.sql).toContain("lower(translate(");
@@ -725,6 +725,25 @@ describe("InMemoryUserManagementStore çalışan cursor dayanıklılığı ve T�
 
     const legacy = Buffer.from(JSON.stringify({ v: 1, context: "x", sort: "lastName", id: "employee-admin-a" }), "utf8").toString("base64url");
     await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: legacy })).rejects.toThrow("EMPLOYEE_CURSOR_INVALID");
+  });
+
+  it("soyad ve ad sıralaması Türkçe alfabeyi izler (UAT U12)", async () => {
+    const store = new InMemoryUserManagementStore();
+    for (const lastName of ["Yönetici", "ÖĞRETMEN", "Deneme", "İSİM", "Muhasebe", "IŞIK", "Ozan"]) {
+      await store.createEmployee("tenant-a", employee("Ada", lastName));
+    }
+    const lastNames = async (sort: "lastName" | "-lastName") =>
+      (await store.listEmployeeAccessPage("tenant-a", { direction: "next", limit: 20, sort })).records.map((record) => record.lastName);
+
+    const ascending = ["Deneme", "IŞIK", "İSİM", "Muhasebe", "Ozan", "ÖĞRETMEN", "Yönetici"];
+    expect((await lastNames("lastName")).filter((name) => ascending.includes(name))).toEqual(ascending);
+    expect((await lastNames("-lastName")).filter((name) => ascending.includes(name))).toEqual([...ascending].reverse());
+  });
+
+  it("Türkçe sıralama anahtarı kod noktası karşılaştırmasında alfabe sırasını korur", () => {
+    const sorted = ["zeki", "Çelik", "ılgaz", "İnci", "Cem", "öykü", "Oya", "şule", "Sena", "Ümit", "Uğur", "Ğ", "Gül", "Aysu 2", "Aysu"]
+      .sort((left, right) => (turkishSortKey(left) < turkishSortKey(right) ? -1 : turkishSortKey(left) > turkishSortKey(right) ? 1 : 0));
+    expect(sorted).toEqual(["Aysu", "Aysu 2", "Cem", "Çelik", "Gül", "Ğ", "ılgaz", "İnci", "Oya", "öykü", "Sena", "şule", "Uğur", "Ümit", "zeki"]);
   });
 
   it("I/İ/ı/i varyantlarını ad ve soyadda eşler", async () => {

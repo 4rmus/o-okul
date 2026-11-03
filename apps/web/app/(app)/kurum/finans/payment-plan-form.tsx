@@ -32,7 +32,7 @@ const emptyDraft: PlanDraft = {
 
 const planErrorMessages: Record<string, string> = {
   FINANCE_CAMPUS_SCOPE_FORBIDDEN: "Bu kampüs için ödeme planı oluşturma yetkin yok.",
-  IDEMPOTENCY_KEY_BODY_MISMATCH: "Form gönderildikten sonra değişti. Formu kapatıp yeniden aç.",
+  IDEMPOTENCY_KEY_BODY_MISMATCH: "Form gönderildikten sonra değişti. Formu kapatıp yeniden açın.",
   PAYMENT_PLAN_CAMPUS_NOT_FOUND: "Seçilen kampüs bulunamadı.",
   PAYMENT_PLAN_CLASS_CAMPUS_MISMATCH: "Seçilen kampüs öğrencinin sınıfıyla uyuşmuyor.",
   STUDENT_NOT_FOUND: "Öğrenci bulunamadı.",
@@ -98,7 +98,7 @@ export function PaymentPlanFormModal({
       return;
     }
     if (draft.installments.length === 0) {
-      setError("En az bir taksit ekle. Eşit taksit önerisini kullanabilirsin.");
+      setError("En az bir taksit ekleyin. Eşit taksit önerisini kullanabilirsiniz.");
       return;
     }
     if (draft.installments.some((installment) => !parseKurus(installment.amount) || !installment.dueDate)) {
@@ -142,7 +142,7 @@ export function PaymentPlanFormModal({
 
   return (
     <FormModal
-      description="Öğrenci için taksitli ödeme planı aç. Tutarlar TL olarak girilir, kuruşa çevrilerek kaydedilir."
+      description="Öğrenci için taksitli ödeme planı açın. Tutarlar TL olarak girilir, kuruşa çevrilerek kaydedilir."
       onCancel={cancel}
       onSubmit={(event) => void submit(event)}
       open={open}

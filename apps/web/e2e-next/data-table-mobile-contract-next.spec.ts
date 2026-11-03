@@ -750,6 +750,11 @@ test.describe("DataTable mobil sözleşmesi", () => {
       { key: "course", label: "Ders", text: "Matematik" },
       { key: "status", label: "Durum", text: "Tamam" },
     ]);
+    // UAT U5: sınıf + branş ataması olan öğretmen tek satırda, roller birleşik; değerlendirme bir kez sayılır.
+    await expect(teacherEntries.locator('td[data-column-key="teacher"]')).toHaveCount(1);
+    await expect(teacherEntries.locator('td[data-column-key="teacher"]')).toContainText("Sınıf öğretmeni · Branş öğretmeni");
+    await expect(teacherEntries.locator('td[data-column-key="course"]').first()).toHaveText("Tüm dersler · branş: Matematik");
+    await expect(teacherEntries.locator('td[data-column-key="assessments"]').first()).toHaveText("1");
 
     await detailRegion.getByRole("tab", { name: "Raporlar" }).click();
     await expect.poll(() => reportReadPaths).toEqual([
@@ -1405,6 +1410,16 @@ function createClassOverview() {
       courseId: "course-math",
       courseName: "Matematik",
       termId: "term-2026",
+      assessmentCount: 1,
+      missingEntryAssessmentCount: 0,
+      unpublishedDraftAssessmentCount: 0,
+      assessments: [assessment],
+    }, {
+      // UAT U5: aynı öğretmen sınıf öğretmeni de olduğunda API iki atama döner; ekran tek satır gösterir.
+      assignmentId: "assignment-class",
+      teacherId: "teacher-math",
+      teacherName: "Zeynep Arslan",
+      role: "CLASS_TEACHER",
       assessmentCount: 1,
       missingEntryAssessmentCount: 0,
       unpublishedDraftAssessmentCount: 0,
