@@ -714,6 +714,36 @@ export class HomeworkService {
       }));
   }
 
+  /**
+   * DEC-20261102-08 Student 360 timeline (staff only): the homework of the student's current class with that student's
+   * derived hand-in state. The student read enforces tenant, campus and teacher-assignment scope; a teacher sees only
+   * homework of classes in their own scope. One store read per call, never one request per homework.
+   */
+  async listStudentHomeworkForViewer(context: RequestContext, studentId: string): Promise<StudentHomeworkRecord[]> {
+    if (context.subjectType === "STUDENT" || context.subjectType === "GUARDIAN") {
+      throw new ForbiddenException("STAFF_CONTEXT_REQUIRED");
+    }
+    const student = await this.students.findOneForViewer(context, studentId);
+    if (!student.classId) {
+      return [];
+    }
+    const [homework, rows] = await Promise.all([this.store.list(), this.store.listSubmissionsByStudent(student.id)]);
+    const rowByHomework = new Map(filterTenantResources(context, rows).map((row) => [row.homeworkId, row]));
+    const scoped = await this.filterHomeworkForTeacherScope(
+      context,
+      filterTenantResources(context, homework).filter((record) => !record.deletedAt && record.classId === student.classId),
+    );
+    return scoped.map((record) => ({
+      id: record.id,
+      classId: record.classId,
+      title: record.title,
+      description: record.description,
+      sourceMaterialTitle: record.sourceMaterialTitle,
+      dueAt: record.dueAt,
+      submission: toSubmissionRecord(record.id, student.id, rowByHomework.get(record.id)),
+    }));
+  }
+
   async submitCurrentStudentHomework(
     context: RequestContext,
     homeworkId: string,

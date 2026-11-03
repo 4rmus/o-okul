@@ -6,6 +6,7 @@ import type {
   HomeworkMaterialRecord,
   HomeworkRecord,
   HomeworkSubmissionRecord,
+  StudentHomeworkRecord,
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
@@ -127,6 +128,13 @@ export class HomeworkController {
   @RequireCapability("academic:manage")
   deleteMaterial(@Param("id") id: string): Promise<void> {
     return this.homework.deleteMaterial(getRequestContext(), id);
+  }
+
+  /** DEC-20261102-08 Student 360 timeline: one student's class homework with that student's hand-in state. */
+  @Get("students/:studentId")
+  @RequireCapability("homework:read-assigned")
+  listStudentHomework(@Param("studentId") studentId: string): Promise<StudentHomeworkRecord[]> {
+    return this.homework.listStudentHomeworkForViewer(getRequestContext(), studentId);
   }
 
   @Get(":id")

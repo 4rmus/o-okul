@@ -3458,6 +3458,19 @@ const kv4SchoolGradesSchema = arraySchema(objectSchema({
   maxScore: { type: "number" },
   version: integerSchema({ minimum: 1 }),
 }, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"]));
+const studentPublishedGradeItemSchema = objectSchema({
+  assessmentId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  kind: gradeAssessmentKindSchema,
+  title: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
+  absent: { type: "boolean" },
+  maxScore: { type: "number" },
+  version: integerSchema({ minimum: 1 }),
+  publishedAt: stringSchema({ format: "date-time" }),
+}, ["assessmentId", "classId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version", "publishedAt"]);
 const guardianStudentOverviewSchema = objectSchema({
   student: objectSchema({
     id: stringSchema(),
@@ -3557,6 +3570,9 @@ const operationContracts: Record<string, OperationContract> = {
       courseId: stringSchema({ minLength: 1 }),
       termId: stringSchema({ minLength: 1 }),
     }, ["classId"])),
+  },
+  "get /api/v1/grade-assessments/students/{studentId}/published": {
+    responseBody: arraySchema(studentPublishedGradeItemSchema),
   },
   "get /api/v1/grade-assessments/{id}": {
     responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, entries: arraySchema(gradeEntryRecordSchema) }, ["assessment", "entries"]),
@@ -4899,6 +4915,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/homework/{id}": {
     responseBody: homeworkRecordSchema,
+  },
+  "get /api/v1/homework/students/{studentId}": {
+    responseBody: arraySchema(studentHomeworkRecordSchema),
   },
   "post /api/v1/homework": {
     requestBody: homeworkCreateRequestSchema,

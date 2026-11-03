@@ -143,6 +143,52 @@ describe("GradebookService", () => {
     await expect(service.getAssessment(otherCampus, assessment.id)).rejects.toMatchObject({ status: 404 });
   });
 
+  describe("Student 360 published grades (DEC-20261102-08)", () => {
+    it("returns only the latest published version; a newer draft stays hidden until published", async () => {
+      const { service } = setup();
+      const assessment = await createAssessment(service);
+      await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 60, absent: false }] });
+      await expect(service.listPublishedForStaffViewer(admin, "student-a")).resolves.toEqual([]);
+      await service.publish(admin, assessment.id, "staff-read-v1");
+      await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 70, absent: false }] });
+
+      const afterDraft = await service.listPublishedForStaffViewer(admin, "student-a");
+      expect(afterDraft).toEqual([expect.objectContaining({ assessmentId: assessment.id, classId: "class-a", score: 60, version: 1, maxScore: 100 })]);
+      expect(typeof afterDraft[0]?.publishedAt).toBe("string");
+
+      await service.publish(admin, assessment.id, "staff-read-v2");
+      await expect(service.listPublishedForStaffViewer(admin, "student-a")).resolves.toEqual([
+        expect.objectContaining({ assessmentId: assessment.id, score: 70, version: 2 }),
+      ]);
+    });
+
+    it("keeps teacher assignment, campus, tenant and portal persona boundaries", async () => {
+      const { service } = setup();
+      const assessment = await createAssessment(service);
+      await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 55, absent: false }] });
+      await service.publish(admin, assessment.id, "staff-read-scope");
+
+      await expect(service.listPublishedForStaffViewer(teacher("teacher-math"), "student-a")).resolves.toEqual([
+        expect.objectContaining({ assessmentId: assessment.id }),
+      ]);
+      await expect(service.listPublishedForStaffViewer(teacher("teacher-other-course"), "student-a")).resolves.toEqual([]);
+
+      const otherCampus: RequestContext = {
+        ...admin, userId: "ops-a", roles: ["OPERATIONS_STAFF"], campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-other"] },
+      };
+      await expect(service.listPublishedForStaffViewer(otherCampus, "student-a")).rejects.toMatchObject({ status: 404 });
+      const sameCampus: RequestContext = { ...otherCampus, campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] } };
+      await expect(service.listPublishedForStaffViewer(sameCampus, "student-a")).resolves.toHaveLength(1);
+
+      await expect(service.listPublishedForStaffViewer(admin, "student-b")).rejects.toMatchObject({ status: 404 });
+      await expect(service.listPublishedForStaffViewer(admin, "student-missing")).rejects.toMatchObject({ status: 404 });
+      const studentPersona: RequestContext = {
+        userId: "user-student", tenantId: "tenant-a", roles: ["STUDENT"], activePersona: "STUDENT", subjectType: "STUDENT", subjectId: "student-a", bypassRls: false,
+      };
+      await expect(service.listPublishedForStaffViewer(studentPersona, "student-a")).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
   it("rejects out-of-range, over-precise, absent-with-score, duplicate and out-of-class entries", async () => {
     const { service } = setup();
     const assessment = await createAssessment(service);

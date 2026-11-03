@@ -30,6 +30,7 @@ import { useAuth } from "../../providers.js";
 import { PushPermissionPrompt } from "../_shell/push-devices.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
+import { PortalAttendanceCalendar } from "./_shared/attendance-calendar.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, PaymentPlansPanel } from "./_shared/guardian-panels.js";
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
@@ -596,6 +597,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
             {view === "overview" || view === "student" ? (
               <PortalPanelGate label="Devamsızlık" queries={[attendanceQuery]} subject="Devamsızlık kayıtları" title="Devamsızlık">
                 <AttendancePanel records={data?.attendance ?? []} summary={data?.attendanceSummary} />
+                {/* Aylık takvim öğrenci görünümündedir; genel bakış listeyle kalır. Veri aynı yoklama isteğinden gelir. */}
+                {view === "student" ? <PortalAttendanceCalendar records={data?.attendance ?? []} /> : null}
               </PortalPanelGate>
             ) : null}
           </>

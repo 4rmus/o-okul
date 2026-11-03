@@ -3615,6 +3615,26 @@ export interface GuardianSchoolGradeItem {
   version: number;
 }
 
+/**
+ * DEC-20261102-08 staff read (`GET /grade-assessments/students/:studentId/published`, Student 360 timeline): the latest
+ * published version per assessment, newest first. Each grade stays on its own scale (0..maxScore) and is a separate
+ * series from Başarı %; draft (unpublished) entries are never returned.
+ */
+export interface StudentPublishedGradeItem {
+  assessmentId: string;
+  classId: string;
+  courseId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  /** Score on the assessment's own scale (0..maxScore); null when absent. */
+  score: number | null;
+  absent: boolean;
+  maxScore: number;
+  version: number;
+  publishedAt: string;
+}
+
 /** One optical exam point. successRate is Başarı % on a 0-100 scale; net/questionCount are context. */
 export interface GuardianExamSeriesPoint {
   snapshotId: string;
