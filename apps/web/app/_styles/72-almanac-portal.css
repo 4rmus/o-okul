@@ -176,10 +176,6 @@
     font-size: var(--text-sm);
   }
 
-  .next-dashboard-overview-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .next-portal-brief,
   .next-portal-action-strip {
     border-radius: var(--radius-panel);
@@ -263,33 +259,7 @@
   }
 }
 
-/* Berrak G7 (§5): öğretmen günlük özeti — bekleyen ödev listesi ve satır içi metin aksiyonları. */
-.next-portal-today-list {
-  display: grid;
-  gap: var(--space-2xs);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.next-portal-today-list li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--space-xs);
-  padding-block: var(--space-xs);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.next-portal-today-list li:last-child {
-  border-bottom: 0;
-}
-
-.next-portal-today-list span {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
+/* Berrak G7 (§5): öğretmen günlük özeti — satır içi metin aksiyonları. */
 .next-row-actions--text a {
   padding-inline: var(--space-sm);
 }

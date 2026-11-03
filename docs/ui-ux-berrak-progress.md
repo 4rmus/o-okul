@@ -754,3 +754,11 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
 - Diğer açık maddeler: deploy workflow'u pre-migration kapısı düşünce durdurduğu servisleri geri
   başlatmıyor; staging yanıt süreleri 1–3 sn (sunucu yükü düşük, ağ/Cloudflare yolu incelenmeli).
 
+
+## W10 — CSS consolidation (DEC-20261102-08, 2026-11-03)
+
+- Pixel-identical by construction: dead rules removed, `20-application-base.css` cut into 12 contiguous
+  `20-application-NN-*.css` slices imported at the original position; karne/report region moved verbatim.
+- DEC-20260930-03 mapping for the retired `globals.css` pins (role grid, student decision card/grid,
+  onboarding check, optical answer key, dashboard overview) and the dead-selector proof:
+  `docs/css-consolidation-2026-11.md` §2 and §5.

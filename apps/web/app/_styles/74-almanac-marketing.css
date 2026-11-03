@@ -193,13 +193,6 @@
     padding-top: var(--space-xs);
   }
 
-  .next-marketing-proof {
-    border-color: var(--color-rule);
-    border-radius: 0;
-    background: var(--color-paper-raised);
-    color: var(--color-ink-secondary);
-  }
-
   .next-marketing-outcome-card {
     grid-template-columns: auto minmax(0, 1fr);
     border: 0;
@@ -249,50 +242,6 @@
     transform: none;
   }
 
-  .next-marketing-capability-grid {
-    border-color: var(--color-rule);
-    border-radius: var(--radius-panel);
-    background: var(--color-rule);
-  }
-
-  .next-marketing-capability-grid article {
-    background: var(--color-paper-raised);
-  }
-
-  .next-marketing-reporting__visual {
-    border-color: var(--color-rule);
-    border-radius: var(--radius-dialog);
-    background: var(--color-paper-raised);
-    box-shadow: none;
-  }
-
-  .next-marketing-reporting__visual::before {
-    display: none;
-  }
-
-  .next-marketing-reporting__header > span {
-    background: var(--color-accent-soft);
-    color: var(--color-accent-hover);
-  }
-
-  .next-marketing-reporting__chart {
-    border-bottom-color: var(--color-rule);
-    background: var(--color-paper-raised);
-  }
-
-  .next-marketing-reporting__chart span {
-    background: var(--color-ink-secondary);
-  }
-
-  .next-marketing-reporting__chart span:nth-child(5) {
-    background: var(--color-accent);
-  }
-
-  .next-marketing-reporting__summary div {
-    border-radius: var(--radius-control);
-    background: var(--color-paper);
-  }
-
   .next-marketing-role-card {
     border-color: var(--color-rule);
     border-radius: var(--radius-panel);
@@ -315,7 +264,6 @@
     color: var(--color-paper);
   }
 
-  .next-marketing-showcase,
   .next-marketing-trust,
   .next-marketing-cta {
     background: var(--color-paper-muted);
@@ -649,7 +597,6 @@
   }
 
   /* Pazarlama yüzeyinde odak halkası uygulama ile aynı token'dır (UI/UX F11); UA varsayılanı yerine. */
-  .next-marketing-nav__links a:focus-visible,
   .next-marketing-login:focus-visible,
   .next-marketing-text-link:focus-visible,
   .next-marketing-footer nav a:focus-visible,
