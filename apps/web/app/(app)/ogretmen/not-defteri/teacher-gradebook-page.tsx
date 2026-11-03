@@ -151,7 +151,7 @@ export function TeacherGradebookPage() {
       setSelectedId(created.id);
       setPublishMessage("");
     } catch {
-      setFormError("Değerlendirme oluşturulamadı. Atandığın sınıf ve dersi seçip tekrar deneyin.");
+      setFormError("Değerlendirme oluşturulamadı. Atandığınız sınıf ve dersi seçip tekrar deneyin.");
     } finally {
       setBusy(false);
     }
@@ -220,7 +220,7 @@ export function TeacherGradebookPage() {
     : "Yayınlanacak taslak yok. Notları girip “Taslağı kaydet” ile kaydedin; düğme sonra açılır.";
 
   return (
-    <PortalFrame title="Öğretmen Portalı" subtitle="Atandığın sınıf ve derslerin yazılı, performans ve proje notları">
+    <PortalFrame title="Öğretmen Portalı" subtitle="Atandığınız sınıf ve derslerin yazılı, performans ve proje notları">
       <Panel
         actions={scopes.length > 0 ? (
           <Button onClick={() => void openForm()}>
@@ -229,7 +229,7 @@ export function TeacherGradebookPage() {
           </Button>
         ) : undefined}
         aria-label="Öğretmen not girişi"
-        description="Atandığın sınıf ve ders için değerlendirme oluştur, notları gir ve yayınla. Yayınlanan not değişmez, düzeltme yeni sürüm olur."
+        description="Atandığınız sınıf ve ders için değerlendirme oluşturun, notları girin ve yayınlayın. Yayınlanan not değişmez, düzeltme yeni sürüm olur."
         title="Not defteri"
       >
         {assessmentsQuery.isError ? <p className="next-field-hint" role="alert">Değerlendirmeler alınamadı.</p> : null}
@@ -237,8 +237,8 @@ export function TeacherGradebookPage() {
           <EmptyState
             title="Henüz değerlendirme yok"
             description={scopes.length > 0
-              ? "Atandığın sınıf ve ders için “Değerlendirme oluştur” ile ilk yazılı, performans ya da projeyi tanımla."
-              : "Sınıf veya branş öğretmeni olarak atandığın bir sınıf bulunmuyor."}
+              ? "Atandığınız sınıf ve ders için “Değerlendirme oluştur” ile ilk yazılı, performans ya da projeyi tanımlayın."
+              : "Sınıf veya branş öğretmeni olarak atandığınız bir sınıf bulunmuyor."}
           />
         ) : (
           <Field label="Değerlendirme">
