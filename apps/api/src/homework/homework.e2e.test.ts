@@ -1194,6 +1194,89 @@ describe("Homework API", () => {
       await request(server).get("/homework/students/student-a").expect(401);
     });
 
+    it("veli bağlı öğrencinin sınıf ödevlerini teslim durumuyla salt okunur görür; kontrol eden bilgisi dönmez (DEC-20261103-01)", async () => {
+      const guardianLogin = await request(server).post("/auth/login").send(testLoginBody("guardian-a@example.test")).expect(200);
+      const guardianAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
+      const homeworkId = await createClassAHomework("Veli Görünümü Ödevi");
+      await request(server)
+        .patch(`/homework/${homeworkId}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ description: "Sayfa 12-14", dueAt: "2026-11-10T09:00:00.000Z" })
+        .expect(200);
+
+      const before = await request(server)
+        .get("/me/guardian/students/student-a/homework")
+        .set("Authorization", `Bearer ${guardianAccessToken}`)
+        .expect(200);
+      expect(before.body).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: homeworkId,
+          classId: "class-a",
+          title: "Veli Görünümü Ödevi",
+          description: "Sayfa 12-14",
+          dueAt: expect.stringContaining("2026-11-10"),
+          submission: { homeworkId, studentId: "student-a", status: "NOT_SUBMITTED" },
+        }),
+      ]));
+      expect((before.body as Array<{ classId: string }>).every((record) => record.classId === "class-a")).toBe(true);
+      expect(JSON.stringify(before.body)).not.toContain("homework-b");
+
+      await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .expect(201);
+      await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-a"] })
+        .expect(201);
+
+      const after = await request(server)
+        .get("/me/guardian/students/student-a/homework")
+        .set("Authorization", `Bearer ${guardianAccessToken}`)
+        .expect(200);
+      const record = (after.body as Array<Record<string, unknown>>).find((item) => item.id === homeworkId);
+      expect(record).toMatchObject({ submission: { status: "CHECKED" } });
+      // Allow-list: the student record shape only; the checker, the class-level check and tenant id never leave.
+      expect(Object.keys(record ?? {}).sort()).toEqual(["classId", "description", "dueAt", "id", "submission", "title"]);
+      expect(JSON.stringify(after.body)).not.toMatch(/checkedBy|tenantId|teacher-a|note|score/);
+
+      // The guardian read is read-only: there is no guardian submission write.
+      await request(server)
+        .post(`/me/guardian/students/student-a/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${guardianAccessToken}`)
+        .expect(404);
+    });
+
+    it("veli bağlı olmadığı veya başka tenanttaki öğrencinin sınıf ödevini okuyamaz (DEC-20261103-01)", async () => {
+      const guardianLogin = await request(server).post("/auth/login").send(testLoginBody("guardian-a@example.test")).expect(200);
+      const guardianAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
+      await createClassAHomework("Sınıf Arkadaşı Ödevi");
+      const classmate = await request(server)
+        .post("/students")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ firstName: "Bağsız", lastName: "Sınıf Arkadaşı", classId: "class-a" })
+        .expect(201);
+      const classmateId = (classmate.body as { id: string }).id;
+
+      const sameTenant = await request(server)
+        .get(`/me/guardian/students/${classmateId}/homework`)
+        .set("Authorization", `Bearer ${guardianAccessToken}`)
+        .expect(403);
+      expect(JSON.stringify(sameTenant.body)).not.toContain("Sınıf Arkadaşı Ödevi");
+
+      const crossTenant = await request(server)
+        .get("/me/guardian/students/student-b/homework")
+        .set("Authorization", `Bearer ${guardianAccessToken}`);
+      expect([403, 404]).toContain(crossTenant.status);
+      expect(JSON.stringify(crossTenant.body)).not.toContain("homework-b");
+
+      // Other personas never reach the guardian read.
+      await request(server).get("/me/guardian/students/student-a/homework").set("Authorization", `Bearer ${studentAAccessToken}`).expect(403);
+      await request(server).get("/me/guardian/students/student-a/homework").set("Authorization", `Bearer ${tenantAAccessToken}`).expect(403);
+      await request(server).get("/me/guardian/students/student-a/homework").expect(401);
+    });
+
     it("teslim etmemiş öğrenci varsa kontrol isteğinin tamamı 409 ile reddedilir, kısmi yazma olmaz", async () => {
       const homeworkId = await createClassAHomework("Defter Kontrolü");
       const classmate = await request(server)

@@ -25,6 +25,7 @@ import type {
   StudentContactRecord,
   StudentOverviewLatestExamRecord,
   StudentOverviewRecord,
+  StudentHomeworkRecord,
   StudentProfileRecord,
   TeacherAssignmentRecord,
   TeacherNoteRecord,
@@ -337,11 +338,24 @@ function StudentDashboard({
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
 }) {
+  const { auth } = useAuth();
   const [activeSection, setActiveSection] = useState<"overview" | "records">("overview");
+  // UAT U1 / DEC-20261103-01: "Açık ödev" ve Ödevler paneli sınıf ödevini de sayar. Zaman çizelgesiyle aynı sorgu
+  // anahtarı tek isteği paylaşır; rol ödev okuyamıyorsa istek atılmaz ve yalnız materyal atamaları görünür.
+  const canReadClassHomework = hasCapabilityForRoles(auth?.session.roles ?? [], "homework:read-assigned");
+  const classHomeworkQuery = useQuery({
+    queryKey: ["next-student-timeline-homework", auth?.session.tenantId ?? "anonymous", studentId],
+    queryFn: () => apiRequest<StudentHomeworkRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/homework/students/${encodeURIComponent(studentId)}`),
+    enabled: Boolean(auth) && canReadClassHomework,
+    refetchOnWindowFocus: false,
+    // Kayıtlar sekmesi açılınca zaman çizelgesi aynı veriyi yeniden istemez.
+    staleTime: 60_000,
+  });
+  const classHomework = classHomeworkQuery.data ?? [];
   const progressIsComparable = isComparableStudentProgress(progress);
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
-  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail);
+  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, classHomework);
   const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, canViewFinance);
   // Not ve portal ekranları henüz öğrenci ön seçimi almaz; not ekranı öğrencinin sınıfına süzülmüş açılır.
   const notesHref = detail.profile.classId ? `/kurum/notlar?classId=${encodeURIComponent(detail.profile.classId)}` : "/kurum/notlar";
@@ -422,14 +436,23 @@ function StudentDashboard({
           <Panel
             aria-label="Ödevler"
             className="next-student-detail-panel"
-            description="Öğrenciye atanan ödev ve materyaller; teslim tarihi olanları buradan izleyin."
+            description="Sınıf ödevleri öğrencinin teslim durumuyla, materyal atamaları ders ve dönem bağlamıyla; teslim tarihi olanları buradan izleyin."
             title="Ödevler"
           >
+            {classHomeworkQuery.isError ? (
+              <Alert tone="warning">
+                {"Sınıf ödevleri şu an alınamadı; yalnız materyal atamaları listeleniyor. "}
+                <Button size="sm" type="button" variant="secondary" onClick={() => void classHomeworkQuery.refetch()}>Tekrar dene</Button>
+              </Alert>
+            ) : null}
             <StudentDetailRowsTable
               caption="Öğrenci ödev kayıtları"
-              emptyText="Atanmış ödev yok"
-              headers={{ primary: "Materyal", detail: "Ders ve dönem", status: "Durum", meta: "Teslim" }}
-              rows={buildHomeworkRows(detail.homeworkAssignments, courseNameById, termNameById)}
+              emptyText={classHomeworkQuery.isLoading ? "Ödevler yükleniyor…" : "Sınıf ödevi veya materyal ataması yok"}
+              headers={{ primary: "Ödev", detail: "Bağlam", status: "Durum", meta: "Teslim" }}
+              rows={[
+                ...buildClassHomeworkRows(classHomework),
+                ...buildHomeworkRows(detail.homeworkAssignments, courseNameById, termNameById),
+              ]}
             />
           </Panel>
         </div>
@@ -917,9 +940,42 @@ function buildEnrollmentRows(
     id: record.id,
     meta: formatDateRange(record.startsAt, record.endsAt),
     primary: formatEnrollmentReason(record.reason),
-    status: formatStudentStatus(record.status),
-    tone: studentStatusTone(record.status),
+    status: formatEnrollmentStatus(record),
+    tone: record.endsAt && record.status === "ACTIVE" ? "neutral" : studentStatusTone(record.status),
   }));
+}
+
+/** UAT U15: bitiş tarihi olan kayıt kapanmıştır; yenilemede eski satır API'de ACTIVE kalsa da "Aktif" yazılmaz. */
+function formatEnrollmentStatus(record: Pick<StudentEnrollmentRecord, "endsAt" | "status">) {
+  if (record.endsAt && record.status === "ACTIVE") return "Kapandı";
+  return formatStudentStatus(record.status);
+}
+
+const classHomeworkStatusLabels: Record<StudentHomeworkRecord["submission"]["status"], string> = {
+  CHECKED: "Kontrol edildi",
+  NOT_SUBMITTED: "Teslim edilmedi",
+  SUBMITTED: "Teslim edildi",
+};
+
+/** Açık sınıf ödevleri (teslim edilmemiş) teslim tarihine göre önce, teslim edilenler sonra listelenir. */
+function buildClassHomeworkRows(records: StudentHomeworkRecord[], now = new Date()): StudentDetailTableRow[] {
+  return [...records]
+    .sort((left, right) => {
+      const leftOpen = left.submission.status === "NOT_SUBMITTED" ? 0 : 1;
+      const rightOpen = right.submission.status === "NOT_SUBMITTED" ? 0 : 1;
+      return leftOpen - rightOpen || (left.dueAt ?? "9999").localeCompare(right.dueAt ?? "9999");
+    })
+    .map((record) => {
+      const overdue = record.submission.status === "NOT_SUBMITTED" && Boolean(record.dueAt) && new Date(record.dueAt!).getTime() < now.getTime();
+      return {
+        detail: ["Sınıf ödevi", record.sourceMaterialTitle].filter(Boolean).join(" · "),
+        id: `class-homework-${record.id}`,
+        meta: record.dueAt ? formatDate(record.dueAt) : "Teslim tarihi yok",
+        primary: record.title,
+        status: overdue ? "Teslim edilmedi · süresi geçti" : classHomeworkStatusLabels[record.submission.status],
+        tone: record.submission.status === "NOT_SUBMITTED" ? (overdue ? "danger" : "warning") : record.submission.status === "CHECKED" ? "success" : "info",
+      };
+    });
 }
 
 function buildHomeworkRows(
@@ -949,7 +1005,10 @@ function buildAuditRows(records: StudentAuditSummaryRecord[]): StudentDetailTabl
   }));
 }
 
-function buildStudentDashboardSummaryItems(detail: StudentBaseDetail): OperationSummaryItem[] {
+function buildStudentDashboardSummaryItems(detail: StudentBaseDetail, classHomework: StudentHomeworkRecord[]): OperationSummaryItem[] {
+  // Açık ödev = teslim edilmemiş sınıf ödevi + açık materyal ataması (öğrenci ve veli portalıyla aynı tanım).
+  const openClassHomeworkCount = classHomework.filter((record) => record.submission.status === "NOT_SUBMITTED").length;
+  const openHomeworkCount = detail.openHomeworkCount + openClassHomeworkCount;
   const attendance = detail.attendanceSummary;
   const latestExam = detail.latestExam;
   const latestSuccessRate = reportSuccessRate(latestExam?.total);
@@ -972,11 +1031,12 @@ function buildStudentDashboardSummaryItems(detail: StudentBaseDetail): Operation
       value: formatPercentNumber(latestSuccessRate),
     },
     {
+      // Metin aynı kalır (route-family-student-detail-768 golden); sayı artık sınıf ödevini de içerir.
       description: "Öğrenciye atanan ödev ve materyal",
       key: "homework",
       label: "Açık ödev",
-      tone: detail.openHomeworkCount > 0 ? "info" : "default",
-      value: formatCount(detail.openHomeworkCount),
+      tone: openHomeworkCount > 0 ? "info" : "default",
+      value: formatCount(openHomeworkCount),
     },
     {
       description: watchNoteCount > 0 ? `${formatCount(watchNoteCount)} not takipte` : formatTeacherNoteSummary(detail.teacherNotes),
@@ -1517,10 +1577,13 @@ function formatEnrollmentReason(reason: string | undefined) {
   const labels: Record<string, string> = {
     CLASS_CHANGED: "Sınıf değişikliği",
     CREATED: "İlk kayıt",
+    GRADE_LEVEL_CHANGED: "Seviye değişikliği",
+    REACTIVATED: "Yeniden etkinleştirme",
     RENEWED: "Kayıt yenileme",
     TRANSFERRED: "Nakil",
   };
-  return reason ? labels[reason] ?? reason : "Kayıt";
+  // Bilinmeyen sistem kodu ham gösterilmez; serbest metin neden olduğu gibi yazılır.
+  return reason ? labels[reason] ?? (/^[A-Z0-9_]+$/.test(reason) ? "Kayıt değişikliği" : reason) : "Kayıt";
 }
 
 function formatGuardianPermissionLabels(link: GuardianStudentRecord, includeFinance = true) {

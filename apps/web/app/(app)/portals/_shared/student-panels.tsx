@@ -146,7 +146,7 @@ export function StudentHistoryPanel({
       organization: formatClassOrganization(record),
       context: record.termId ? termNames.get(record.termId) ?? "Dönem bilgisi yok" : "-",
       startsAt: record.startsAt,
-      result: record.endsAt ? `${formatStudentStatus(record.status)} / ${formatDate(record.endsAt)}` : formatStudentStatus(record.status),
+      result: formatEnrollmentResult(record),
       reason: formatEnrollmentReason(record.reason),
     }))
     .sort((first, second) => second.startsAt.localeCompare(first.startsAt));
@@ -193,13 +193,13 @@ export function StudentHistoryPanel({
   return (
     <Panel
       aria-label="Sınıf ve kayıt geçmişi"
-      description="Sınıf hareketleri, kayıt dönemleri ve aktif öğrenci durumu."
+      description="Sınıf hareketleri ve kayıt dönemleri; bitiş tarihi olan kayıt kapanmıştır."
       title="Sınıf ve Kayıt Geçmişi"
     >
       <DataTable
         caption="Sınıf ve kayıt geçmişi"
         columns={columns}
-        description="Sınıf hareketleri, kayıt dönemleri ve aktif öğrenci durumu."
+        description="Sınıf hareketleri ve kayıt dönemleri; bitiş tarihi olan kayıt kapanmıştır."
         density="compact"
         emptyText="Sınıf veya kayıt geçmişi yok."
         getRowKey={(row) => row.id}
@@ -230,15 +230,32 @@ function formatClassOrganization(record: { campusName?: string; gradeLevelName?:
   return parts.length > 0 ? parts.join(" / ") : "-";
 }
 
-function formatEnrollmentReason(reason: string | undefined) {
-  if (!reason) return "-";
+/**
+ * UAT U15: kapanmış kayıt (bitiş tarihi olan) "Aktif" görünmez. Kayıt yenilemede eski satırın durumu API'de ACTIVE
+ * kalır; bitiş tarihi kaydın kapandığını söyler. Mezun, nakil ve pasif kapanışlar kendi durumuyla yazılır.
+ */
+export function formatEnrollmentResult(record: Pick<StudentEnrollmentRecord, "endsAt" | "status">) {
+  if (!record.endsAt) return formatStudentStatus(record.status);
+  const closedLabel = record.status === "ACTIVE" ? "Kapandı" : formatStudentStatus(record.status);
+  return `${closedLabel} / ${formatDate(record.endsAt)}`;
+}
+
+/** UAT U20: serbest metin neden yoksa kayıt türü yazılır (ör. dönem geçişindeki yenileme "Kayıt yenileme"). */
+export function formatEnrollmentReason(reason: string | undefined) {
+  if (!reason) return "Kayıt";
   const labels: Record<string, string> = {
+    CLASS_CHANGED: "Sınıf değişikliği",
     CREATED: "İlk kayıt",
+    GRADE_LEVEL_CHANGED: "Seviye değişikliği",
     MANUAL_CORRECTION: "Düzeltme",
-    REASSIGNED: "Sınıf değişimi",
+    REACTIVATED: "Yeniden etkinleştirme",
+    REASSIGNED: "Sınıf değişikliği",
+    RENEWED: "Kayıt yenileme",
     TERM_ROLLOVER: "Dönem geçişi",
+    TRANSFERRED: "Nakil",
   };
-  return labels[reason] ?? "Neden bilgisi yok";
+  // Bilinmeyen sistem kodu ham gösterilmez; kodu olmayan serbest metin olduğu gibi yazılır.
+  return labels[reason] ?? (/^[A-Z0-9_]+$/.test(reason) ? "Kayıt değişikliği" : reason);
 }
 
 function formatStudentStatus(status: StudentEnrollmentRecord["status"]) {

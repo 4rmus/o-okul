@@ -715,6 +715,34 @@ export class HomeworkService {
   }
 
   /**
+   * DEC-20261103-01 guardian view: the linked student's class homework, read-only, with that student's derived hand-in
+   * state. `findOneForViewer` enforces the guardian link, tenant and campus scope exactly like the guardian
+   * material-assignment read. The record is the student allow-list shape: no teacher check note, checker or score.
+   */
+  async listCurrentGuardianStudentHomework(context: RequestContext, studentId: string): Promise<StudentHomeworkRecord[]> {
+    if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+    const student = await this.students.findOneForViewer(context, studentId);
+    if (!student.classId) {
+      return [];
+    }
+    const [homework, rows] = await Promise.all([this.store.list(), this.store.listSubmissionsByStudent(student.id)]);
+    const rowByHomework = new Map(filterTenantResources(context, rows).map((row) => [row.homeworkId, row]));
+    return filterTenantResources(context, homework)
+      .filter((record) => !record.deletedAt && record.classId === student.classId)
+      .map((record) => ({
+        id: record.id,
+        classId: record.classId,
+        title: record.title,
+        description: record.description,
+        sourceMaterialTitle: record.sourceMaterialTitle,
+        dueAt: record.dueAt,
+        submission: toSubmissionRecord(record.id, student.id, rowByHomework.get(record.id)),
+      }));
+  }
+
+  /**
    * DEC-20261102-08 Student 360 timeline (staff only): the homework of the student's current class with that student's
    * derived hand-in state. The student read enforces tenant, campus and teacher-assignment scope; a teacher sees only
    * homework of classes in their own scope. One store read per call, never one request per homework.

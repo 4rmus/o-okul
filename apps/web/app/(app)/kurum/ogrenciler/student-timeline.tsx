@@ -106,6 +106,8 @@ export function StudentTimelinePanel({
     queryFn: () => apiRequest<StudentHomeworkRecord[]>(accessToken, `${apiBaseUrl}/homework/students/${encodedStudentId}`),
     enabled: Boolean(auth) && canReadHomework,
     refetchOnWindowFocus: false,
+    // UAT U1: Genel bakış "Açık ödev" kartı aynı anahtarla bu veriyi önce okur; sekme geçişi ikinci istek atmaz.
+    staleTime: 60_000,
   });
   const developmentQuery = useQuery({
     queryKey: ["next-student-timeline-development", tenantKey, studentId],
@@ -187,7 +189,7 @@ export function StudentTimelinePanel({
     <Panel
       aria-label="Öğrenci zaman çizelgesi"
       className="next-student-detail-panel next-student-detail-panel--wide"
-      description="Yoklama, okul notu, sınav, ödev, öğretmen notu ve gelişim kayıtları en yeniden eskiye; her satır kaynak ekrana bağlanır."
+      description="Yoklama (yalnız yok, geç ve izinli), okul notu, sınav, ödev, öğretmen notu ve gelişim kayıtları en yeniden eskiye; her satır kaynak ekrana bağlanır."
       title="Zaman çizelgesi"
     >
       <div aria-label="Zaman çizelgesi süzgeçleri" role="group" style={controlsStyle}>
@@ -232,7 +234,9 @@ export function StudentTimelinePanel({
         columns={timelineColumns}
         density="compact"
         description={loading ? "Yükleniyor…" : `${filteredEvents.length} olay · ${formatDateKey(fromKey)} – ${formatDateKey(todayKey)}`}
-        emptyText="Seçilen dönemde olay yok."
+        emptyText={kindFilter === "attendance"
+          ? "Seçilen dönemde devamsızlık, geç kalma veya izin kaydı yok. \"Var\" yoklamaları zaman çizelgesine girmez; yoklama takviminde görünür."
+          : "Seçilen dönemde olay yok."}
         getRowKey={(event) => event.id}
         loading={loading}
         rows={visibleEvents}
