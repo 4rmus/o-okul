@@ -117,7 +117,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-general");
 
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Rapor iş akışı" })).not.toContainText("Excel/PDF hazır");
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
@@ -151,7 +151,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.evaluate(() => window.history.forward());
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
 
     releaseSnapshotRequest();
     await page.evaluate(
@@ -200,7 +200,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await examSelect.selectOption("exam-report-general");
     await expect(examSelect).toHaveValue("exam-report-general");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
     await page.getByRole("button", { name: "Raporu getir" }).click();
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
@@ -274,7 +274,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.evaluate(() => window.history.back());
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
 
     releaseStudentReportRequest();
     await page.evaluate(
@@ -321,7 +321,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.evaluate(() => window.history.forward());
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
 
     const jobResponse = page.waitForResponse((response) =>
       response.request().method() === "POST"
@@ -392,7 +392,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.evaluate(() => window.history.back());
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
-    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rapor getirilmedi" })).toBeVisible();
 
     releasePollingRequest();
     await page.evaluate(
