@@ -47,7 +47,8 @@ test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
     await expect(examTable).toContainText("%81,7");
     await expect(examTable).toContainText("24,5 / 30");
     // L8: the row is dated by the exam (5 May), not by the report generation (20 May), and carries the exam title.
-    await expect(examTable).toContainText("05.05.2026");
+    // tr-TR short date is d.MM.y, so 5 May renders as "5.05.2026" (no leading zero on the day).
+    await expect(examTable).toContainText(/(?<!\d)5\.05\.2026/);
     await expect(examTable).toContainText("LGS Deneme 1");
     await expect(examTable).not.toContainText("20.05.2026");
     await expect(examTable).toContainText("17.06.2026");

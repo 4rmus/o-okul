@@ -131,9 +131,10 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect.poll(() => requestedPaths.includes("/exams/exam-b/reports/students/student-a/progress")).toBe(true);
     // L8: the exam history labels each point with the exam title and the exam date, not the report generation date.
     const examHistory = page.getByRole("table", { name: "Öğrenci sınav geçmişi" });
-    await expect(examHistory).toContainText("Deneme A (05.10.2026)");
+    // tr-TR short date is d.MM.y: 5 Oct renders as "5.10.2026", 3 Nov as "3.11.2026".
+    await expect(examHistory).toContainText("Deneme A (5.10.2026)");
     await expect(examHistory).toContainText("Deneme B (15.10.2026)");
-    await expect(examHistory).not.toContainText("03.11.2026");
+    await expect(examHistory).not.toContainText("3.11.2026");
     expect(requestedPaths.some((path) => path.endsWith("/snapshots"))).toBe(false);
     expect(requestedPaths.some((path) => path.includes("/reports/snapshots/"))).toBe(false);
 
