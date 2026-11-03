@@ -4036,6 +4036,10 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/me/guardian/students/{studentId}/homework": {
+    responseBody: arraySchema(studentHomeworkRecordSchema),
+    listResponse: true,
+  },
   "get /api/v1/me/guardian/students/{studentId}/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
     listResponse: true,

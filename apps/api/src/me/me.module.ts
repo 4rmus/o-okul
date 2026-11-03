@@ -20,6 +20,7 @@ import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
 import { MeGuardianOverviewService } from "./me-guardian-overview.service.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
+import { MePortalProfileService } from "./me-portal-profile.service.js";
 import { MeProgressSeriesService } from "./me-progress-series.service.js";
 import { MeStudentOverviewService } from "./me-student-overview.service.js";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
@@ -55,6 +56,7 @@ import { createTeacherTodayStore, teacherTodayStoreToken } from "./me-teacher-to
   providers: [
     MeGuardianOverviewService,
     MeInstitutionDashboardService,
+    MePortalProfileService,
     MeProgressSeriesService,
     MeStudentOverviewService,
     MeTeacherTodayService,

@@ -84,6 +84,7 @@ import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from ".
 import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 import { MeGuardianOverviewService } from "./me-guardian-overview.service.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
+import { MePortalProfileService } from "./me-portal-profile.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { MeStudentOverviewService } from "./me-student-overview.service.js";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
@@ -107,6 +108,7 @@ export class MeController {
     private readonly payments: PaymentService,
     private readonly guardianOverview: MeGuardianOverviewService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
+    private readonly portalProfiles: MePortalProfileService,
     private readonly reportIndex: MeReportIndexService,
     private readonly studentSelfOverview: MeStudentOverviewService,
     private readonly teacherTodaySummary: MeTeacherTodayService,
@@ -210,7 +212,7 @@ export class MeController {
   @Get("student/profile")
   @RequireCapability("portal:student")
   studentProfile(): Promise<StudentProfileRecord> {
-    return this.students.findCurrentStudentProfile(getRequestContext());
+    return this.portalProfiles.getCurrentStudentProfile(getRequestContext());
   }
 
   @Get("student/guardians")
@@ -401,7 +403,7 @@ export class MeController {
   guardianStudentProfile(@Param("studentId") studentId: string): Promise<StudentProfileRecord> {
     const context = getRequestContext();
     assertGuardianContext(context);
-    return this.students.findProfileForViewer(context, studentId);
+    return this.portalProfiles.getGuardianStudentProfile(context, studentId);
   }
 
   @Get("guardian/students/:studentId/enrollments")
@@ -424,6 +426,15 @@ export class MeController {
     const context = getRequestContext();
     assertGuardianContext(context);
     return this.homework.listCurrentGuardianStudentMaterialAssignments(context, studentId);
+  }
+
+  /** DEC-20261103-01: the linked student's class homework, read-only; no teacher check note or score. */
+  @Get("guardian/students/:studentId/homework")
+  @RequireCapability("portal:guardian")
+  guardianStudentHomework(@Param("studentId") studentId: string): Promise<StudentHomeworkRecord[]> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    return this.homework.listCurrentGuardianStudentHomework(context, studentId);
   }
 
   @Get("guardian/students/:studentId/attendance")
