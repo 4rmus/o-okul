@@ -38,7 +38,17 @@ export interface TeacherStore {
    * (KV-3c rule B). Works on an already deleted teacher, so a retried delete stays idempotent.
    */
   endLinkedEmployee(tenantId: string, id: string, endedAt: string): Promise<TeacherEmployeeEndResult>;
-  /** Anonymises the teacher and, in the same transaction, the personal fields of its linked Employee row. */
+  /**
+   * KVKK purge path only (privacy:manage): the request tenant's teachers including soft-deleted ones, so a deleted
+   * teacher's remaining personal data stays visible to the KVKK inventory and can be purged. No other caller.
+   */
+  listForPiiPurge(): Promise<TeacherRecord[]>;
+  /** KVKK purge path only (privacy:manage): like findById, but also finds a soft-deleted teacher. No other caller. */
+  findByIdForPiiPurge(id: string): Promise<TeacherRecord | undefined>;
+  /**
+   * Anonymises the teacher and, in the same transaction, the personal fields of its linked Employee row. A
+   * soft-deleted teacher is purged too (DEC-20261102-08: its ended Employee copy holds the same personal data).
+   */
   purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined>;
 }
 
@@ -152,8 +162,16 @@ export class InMemoryTeacherStore implements TeacherStore {
     return "NO_EMPLOYEE";
   }
 
+  async listForPiiPurge(): Promise<TeacherRecord[]> {
+    return this.teachers;
+  }
+
+  async findByIdForPiiPurge(id: string): Promise<TeacherRecord | undefined> {
+    return this.teachers.find((candidate) => candidate.id === id);
+  }
+
   async purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined> {
-    const record = await this.findById(id);
+    const record = await this.findByIdForPiiPurge(id);
     if (!record) return undefined;
 
     record.firstName = teacherAnonymousFirstName;
@@ -402,8 +420,22 @@ export class PostgresTeacherStore implements TeacherStore {
     });
   }
 
+  async listForPiiPurge(): Promise<TeacherRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<TeacherRow>(`SELECT * FROM "Teacher"`);
+      return result.rows.map(toTeacherRecord);
+    });
+  }
+
+  async findByIdForPiiPurge(id: string): Promise<TeacherRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<TeacherRow>(`SELECT * FROM "Teacher" WHERE "id" = $1 LIMIT 1`, [id]);
+      return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+    });
+  }
+
   async purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined> {
-    const existing = await this.findById(id);
+    const existing = await this.findByIdForPiiPurge(id);
     if (!existing) return undefined;
 
     return withTenantQuery(this.pool, async (client) => {

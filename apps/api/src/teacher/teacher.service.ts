@@ -73,6 +73,19 @@ export class TeacherService {
 
   async listTeachers(context: RequestContext): Promise<TeacherRecord[]> {
     const teachers = filterTenantResources(context, await this.teacherStore.list()).filter((record) => !record.deletedAt);
+    return this.filterCampusScopedTeachers(context, teachers);
+  }
+
+  /**
+   * KVKK inventory only (the privacy controller, privacy:manage): the teachers listTeachers returns plus soft-deleted
+   * ones, because a deleted teacher keeps personal data until it is purged. Same tenant and campus scope rules.
+   */
+  async listTeachersForPiiPurge(context: RequestContext): Promise<TeacherRecord[]> {
+    const teachers = filterTenantResources(context, await this.teacherStore.listForPiiPurge());
+    return this.filterCampusScopedTeachers(context, teachers);
+  }
+
+  private async filterCampusScopedTeachers(context: RequestContext, teachers: TeacherRecord[]): Promise<TeacherRecord[]> {
     if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
       throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_MISSING");
     }
@@ -221,8 +234,31 @@ export class TeacherService {
     });
   }
 
+  /**
+   * DEC-20261102-08: the purge also reaches a soft-deleted teacher (and its ENDED Employee copy); every other path
+   * keeps answering TEACHER_NOT_FOUND for deleted teachers. Same tenant and campus checks as findTeacher.
+   */
+  private async findTeacherForPiiPurge(context: RequestContext, id: string): Promise<TeacherRecord> {
+    const record = await this.teacherStore.findByIdForPiiPurge(id);
+    if (!record) {
+      throw new NotFoundException("TEACHER_NOT_FOUND");
+    }
+
+    assertTenantAccess(context, record);
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_MISSING");
+    }
+    if (
+      context.campusScope?.scopeMode === "CAMPUSES"
+      && !(await this.listTeachersForPiiPurge(context)).some((candidate) => candidate.id === record.id)
+    ) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    return record;
+  }
+
   async purgeTeacherPii(context: RequestContext, id: string): Promise<TeacherRecord> {
-    const existing = await this.findTeacher(context, id);
+    const existing = await this.findTeacherForPiiPurge(context, id);
     const purged = await this.teacherStore.purgePii(id);
     if (!purged) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
@@ -245,6 +281,7 @@ export class TeacherService {
           phonePresent: Boolean(existing.phone),
         },
         linkedAccount,
+        ...(existing.deletedAt ? { isTeacherDeleted: true } : {}),
         // DEC-20261102-08: the linked Employee row's personal fields are purged in the same transaction.
         ...(purged.employeeId ? { linkedEmployeeId: purged.employeeId } : {}),
       },

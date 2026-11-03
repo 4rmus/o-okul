@@ -4,6 +4,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { hasCapability, type Capability } from "../rbac/role-capabilities.js";
 import { AuditLogService } from "./audit-log.service.js";
+import { normalizeFiltersSummary } from "./list-export-validation.js";
 
 /**
  * The capability that opens each exportable list's GET endpoint. Exporting needs exactly the right to read the list
@@ -16,9 +17,6 @@ export const listExportCapabilities: Record<ListExportKind, Capability> = {
   teachers: "staff:read-teachers",
 };
 
-// Search text is free text and may hold a person's name; the audit keeps only that a search was active.
-const valuelessFilterKeys = new Set(["q", "search"]);
-
 @Injectable()
 export class ListExportAuditService {
   constructor(
@@ -27,7 +25,7 @@ export class ListExportAuditService {
   ) {}
 
   /**
-   * Writes one audit event (user, list, row count, active filter keys) before the browser builds the CSV. The row
+   * Writes one audit event (user, list, row count, the list's allow-listed filter keys) before the browser builds the CSV. The row
    * content never reaches the API. Portals have no export, so only a tenant STAFF persona may record one.
    */
   async record(context: RequestContext, input: ListExportAuditRequest, idempotencyKey?: string): Promise<ListExportAuditRecord> {
@@ -39,7 +37,7 @@ export class ListExportAuditService {
     if (!key) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
 
     const normalized: ListExportAuditRequest = {
-      filtersSummary: normalizeFiltersSummary(input.filtersSummary),
+      filtersSummary: normalizeFiltersSummary(input.list, input.filtersSummary),
       list: input.list,
       rowCount: input.rowCount,
     };
@@ -83,16 +81,4 @@ function requireTenantStaffContext(context: RequestContext): string {
     throw new ForbiddenException("TENANT_STAFF_CONTEXT_REQUIRED");
   }
   return context.tenantId;
-}
-
-export function normalizeFiltersSummary(value: string): string {
-  return value
-    .split(";")
-    .map((pair) => pair.trim())
-    .filter(Boolean)
-    .map((pair) => {
-      const [key = ""] = pair.split("=", 1);
-      return valuelessFilterKeys.has(key.toLowerCase()) ? key : pair;
-    })
-    .join(";");
 }

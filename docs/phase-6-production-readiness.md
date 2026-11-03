@@ -842,6 +842,9 @@ pnpm backup:restore:smoke
   `employee.workEmail`; veli için `firstName`, `lastName`, `phone`;
   kullanıcı hesabı için `email`, `name`; `StudentContact` için ad, ilişki, şifreli/hash iletişim,
   izin ve consent alanlarının anonimleştirme/temizleme kapsamı doğrulanır.
+  Silinmiş (soft-delete) öğretmen ve ENDED bağlı Çalışan kopyası imha edilene kadar kişisel veri taşır: `/privacy/inventory`
+  silinmiş öğretmeni de listeler, `POST /teachers/:id/purge-pii` (privacy:manage) onu da imha eder ve
+  `kvkk.teacher_pii_purged` denetimine `isTeacherDeleted=true` yazar; diğer öğretmen okumaları silinmiş kaydı göstermez.
   `whatsappConsent` bloğu bu release'te `recordCount=0`, exact
   `eventRecordCount=0`,
   `piiRelevantStoredFields=[phoneHash,purpose,canReceiveWhatsapp,version,noticeVersion,source,recordedAt,withdrawnAt]`,
