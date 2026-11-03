@@ -11,16 +11,23 @@ import {
   LANDING_SCREENS,
   LANDING_SCREENS_DATASET_FILES,
   LANDING_SCREENS_FORBIDDEN_ROUTE_PREFIXES,
+  LANDING_SCREENS_LGS_SCORING,
+  LANDING_SCREENS_RUN_STATUSES,
+  LANDING_SCREENS_UNKNOWN_FAILURE,
   LANDING_SCREENS_VIEWPORTS,
   assertDisposableDatabaseUrl,
   assertLoopbackUrl,
   assertProvidersDisabled,
   buildProvenanceManifest,
+  manifestFailureCode,
   findEnabledProviderEnv,
+  lgsExamCreateBody,
+  planMissingExamParticipants,
   previousSchoolDays,
   resolveOutputDir,
   schoolCalendar,
   sha256Hex,
+  stripLeadingArgSeparator,
   verifyDataset,
 } from "./landing-screens-contract.mjs";
 
@@ -201,6 +208,8 @@ test("provenance manifest records dataset, commit and viewport and starts unrevi
   assert.equal(manifest.review.status, "PENDING_HUMAN_PII_REVIEW");
   assert.equal(manifest.review.reviewer, null);
   assert.equal(manifest.publication.status, "NOT_APPROVED");
+  assert.equal(manifest.status, "COMPLETED");
+  assert.equal(manifest.failure, null);
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [{ ...screen, route: "/veli" }] }), /FORBIDDEN_ROUTE/);
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [{ ...screen, route: "/kurum/finans/tahsilat" }] }), /FORBIDDEN_ROUTE/);
 });
@@ -216,3 +225,90 @@ function manifestInput() {
     tool: {},
   };
 }
+
+test("a stopped run writes a FAILED manifest that keeps gaps and adjustments", () => {
+  assert.deepEqual(LANDING_SCREENS_RUN_STATUSES, ["COMPLETED", "FAILED"]);
+  const manifest = buildProvenanceManifest({
+    ...manifestInput(),
+    adjustments: ["TENANT_BOOTSTRAP: test"],
+    failure: "LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED",
+    gaps: ["TEACHER_IMPORT_IDENTITY_PAIR: test"],
+    screens: [],
+    status: "FAILED",
+  });
+  assert.equal(manifest.status, "FAILED");
+  assert.equal(manifest.failure, "LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED");
+  assert.deepEqual(manifest.gaps, ["TEACHER_IMPORT_IDENTITY_PAIR: test"]);
+  assert.deepEqual(manifest.adjustments, ["TENANT_BOOTSTRAP: test"]);
+  assert.equal(manifest.review.status, "PENDING_HUMAN_PII_REVIEW");
+  assert.equal(manifest.publication.status, "NOT_APPROVED");
+  assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [], status: "FAILED" }), /RUN_FAILURE_REQUIRED/);
+  assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [], status: "DONE" }), /RUN_STATUS_INVALID/);
+  // A completed run never carries a failure code.
+  assert.equal(buildProvenanceManifest({ ...manifestInput(), screens: [], failure: "x" }).failure, null);
+  // The pipeline writes the partial manifest from its finally block, after the stack has stopped.
+  assert.match(pipelineSource, /finally \{[\s\S]*if \(!manifestWritten\)[\s\S]*status: "FAILED"/);
+});
+
+test("the manifest failure field takes only a LANDING_SCREENS_* code; other errors become UNKNOWN_FAILURE and stay in logs/", () => {
+  assert.equal(LANDING_SCREENS_UNKNOWN_FAILURE, "LANDING_SCREENS_UNKNOWN_FAILURE");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED")), "LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_WEB_NOT_READY")), "LANDING_SCREENS_WEB_NOT_READY");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_DATABASE_URL_REQUIRED\nat requireEnv (scripts/landing-screens.mjs:1:1)")), "LANDING_SCREENS_DATABASE_URL_REQUIRED");
+  // Driver, network and runtime messages never reach the manifest.
+  assert.equal(manifestFailureCode(new Error("connect ECONNREFUSED 127.0.0.1:5432")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error('password authentication failed for user "app"')), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new TypeError("fetch failed")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode("string thrown"), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(undefined), LANDING_SCREENS_UNKNOWN_FAILURE);
+  // A code with an oversized suffix is not written as is.
+  assert.equal(manifestFailureCode(new Error(`LANDING_SCREENS_API_FAILED:${"x".repeat(200)}`)), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error("landing_screens_lowercase")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error("Error: LANDING_SCREENS_WEB_NOT_READY")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  // The pipeline stores the filtered code and appends the full error to logs/run.log.
+  assert.match(pipelineSource, /failure = manifestFailureCode\(error\);/);
+  assert.match(pipelineSource, /appendFileSync\(join\(outDir, "logs", "run\.log"\)/);
+  assert.doesNotMatch(pipelineSource, /failure = errorCode\(/);
+});
+
+test("LGS exams are created with the official scoring profile and its exam year", () => {
+  assert.deepEqual({ ...LANDING_SCREENS_LGS_SCORING }, { examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1", wrongPenalty: 1 / 3 });
+  const body = lgsExamCreateBody({
+    title: "SENTETİK LGS 1",
+    gradeLevelId: "g",
+    classIds: ["a", "b"],
+    startsAt: "2026-10-05T09:00:00+03:00",
+    answerKey: { version: "sentetik-lgs-1-v1", fileBase64: "eA==" },
+  });
+  assert.equal(body.examType, "LGS");
+  assert.equal(body.examYear, 2026);
+  assert.equal(body.scoringProfileId, "TR-LGS-2026-NOSD-V1");
+  assert.deepEqual(body.classIds, ["a", "b"]);
+  assert.deepEqual(body.answerKey, { version: "sentetik-lgs-1-v1", fileBase64: "eA==", scoringConfig: { wrongPenalty: 1 / 3 } });
+  // The profile id must match the API's official table, not a local copy that can drift.
+  const examService = readFileSync(join(repoRoot, "apps", "api", "src", "exam", "exam.service.ts"), "utf8");
+  assert.match(examService, /"TR-LGS-2026-NOSD-V1": \{ examTypes: \["LGS"\], examYear: 2026 \}/);
+  assert.match(pipelineSource, /api\(token, "POST", "\/exams", lgsExamCreateBody\(/);
+});
+
+test("participants enrolled through classIds are not added again", () => {
+  const studentsByNo = new Map([["101", { id: "s1" }], ["102", { id: "s2" }], ["901", { id: "s9" }]]);
+  const rows = [{ studentNo: 101, booklet: "A" }, { studentNo: "102", booklet: "B" }, { studentNo: "901", booklet: "A" }];
+  assert.deepEqual(planMissingExamParticipants(rows, studentsByNo, [{ studentId: "s1" }, { studentId: "s2" }]), [
+    { studentId: "s9", participantNo: "901", bookletType: "A" },
+  ]);
+  assert.deepEqual(planMissingExamParticipants(rows, studentsByNo, [{ studentId: "s1" }, { studentId: "s2" }, { studentId: "s9" }]), []);
+  // A duplicated optical row does not post the same student twice.
+  assert.deepEqual(planMissingExamParticipants([rows[2], rows[2]], studentsByNo, []).length, 1);
+  assert.throws(() => planMissingExamParticipants([{ studentNo: "999", booklet: "A" }], studentsByNo, []), /PARTICIPANT_MISSING/);
+});
+
+test("a leading pnpm argument separator is ignored", () => {
+  assert.deepEqual(stripLeadingArgSeparator(["--", "--build", "--with-exams"]), ["--build", "--with-exams"]);
+  assert.deepEqual(stripLeadingArgSeparator(["--build"]), ["--build"]);
+  assert.deepEqual(stripLeadingArgSeparator(["--build", "--", "x"]), ["--build", "--", "x"]);
+  assert.match(pipelineSource, /args: stripLeadingArgSeparator\(process\.argv\.slice\(2\)\)/);
+  const runbook = readFileSync(join(repoRoot, "docs", "landing-screens-runbook.md"), "utf8");
+  assert.doesNotMatch(runbook, /pnpm landing:screens -- /);
+  assert.match(runbook, /pnpm landing:screens --build/);
+});

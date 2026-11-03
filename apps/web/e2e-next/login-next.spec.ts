@@ -4068,7 +4068,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "Sınav Raporu" })).toBeVisible();
   const emptyReportContext = page.getByLabel("Sayfa bilgileri");
   await expect(emptyReportContext).toContainText("SınavLGS deneme sınavı");
-  await expect(emptyReportContext).toContainText("Rapor sürümüHenüz oluşturulmadı");
+  // UAT L2: before "Raporu getir" the page does not know the report state, so it does not claim none exists.
+  await expect(emptyReportContext).toContainText("Rapor sürümüRapor getirilmedi");
   const governanceDialog = await openCommandPalette(page);
   await governanceDialog.getByLabel("Komut ara").fill("kvkk");
   await expect(governanceDialog.getByRole("option", { name: /KVKK/ })).toBeVisible();

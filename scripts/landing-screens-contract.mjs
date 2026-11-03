@@ -22,6 +22,30 @@ export const LANDING_SCREENS_DATASET_FILES = Object.freeze({
   ]),
 });
 
+/**
+ * Scoring identity the exam form sends for an LGS exam (apps/web exams-page, apps/api assertOfficialScoringProfile):
+ * POST /exams with examType LGS is refused with SCORING_PROFILE_REQUIRED unless the official 2026 profile and its exam
+ * year are named, and the answer key import checks the profile's wrong-answer penalty.
+ */
+export const LANDING_SCREENS_LGS_SCORING = Object.freeze({
+  examType: "LGS",
+  examYear: 2026,
+  scoringProfileId: "TR-LGS-2026-NOSD-V1",
+  wrongPenalty: 1 / 3,
+});
+
+/** Run states written to manifest.json; a FAILED run still records its gaps and adjustments. */
+export const LANDING_SCREENS_RUN_STATUSES = Object.freeze(["COMPLETED", "FAILED"]);
+export const LANDING_SCREENS_UNKNOWN_FAILURE = "LANDING_SCREENS_UNKNOWN_FAILURE";
+// The manifest `failure` field carries a LANDING_SCREENS_* code only (the first line of the error, at most 160
+// characters, a code optionally followed by `:` details). Any other error text stays in logs/run.log.
+const MANIFEST_FAILURE_CODE = /^LANDING_SCREENS_[A-Z0-9_]+(?::[^\r\n]*)?$/;
+
+export function manifestFailureCode(error) {
+  const message = (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0].trim();
+  return message.length <= 160 && MANIFEST_FAILURE_CODE.test(message) ? message : LANDING_SCREENS_UNKNOWN_FAILURE;
+}
+
 /** Light theme only; sizes are fixed so later runs are comparable frame by frame. */
 export const LANDING_SCREENS_VIEWPORTS = Object.freeze([
   Object.freeze({ id: "desktop-1440", width: 1440, height: 900 }),
@@ -232,11 +256,58 @@ export function previousSchoolDays(today, count, notBefore) {
   return days;
 }
 
+/**
+ * `pnpm landing:screens -- --build` hands the script a literal "--" under pnpm 11; parseArgs would then read every
+ * flag after it as a positional and stop with ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL. Only a leading separator is
+ * dropped, so a later "--" keeps its usual meaning.
+ */
+export function stripLeadingArgSeparator(argv) {
+  return argv[0] === "--" ? argv.slice(1) : [...argv];
+}
+
+/** The LGS exam create body: the official scoring identity plus the answer key with the profile's penalty. */
+export function lgsExamCreateBody({ title, gradeLevelId, classIds, startsAt, answerKey }) {
+  return {
+    title,
+    examType: LANDING_SCREENS_LGS_SCORING.examType,
+    examYear: LANDING_SCREENS_LGS_SCORING.examYear,
+    scoringProfileId: LANDING_SCREENS_LGS_SCORING.scoringProfileId,
+    gradeLevelId,
+    classIds,
+    startsAt,
+    answerKey: {
+      version: answerKey.version,
+      fileBase64: answerKey.fileBase64,
+      scoringConfig: { wrongPenalty: LANDING_SCREENS_LGS_SCORING.wrongPenalty },
+    },
+  };
+}
+
+/**
+ * Exam create with classIds already enrolls every student of those classes (participant without participantNo or
+ * booklet); raw import matching reads the student number, so those rows match as they are. Only expected optical
+ * rows whose student is not yet a participant are added; adding an enrolled student again is EXAM_PARTICIPANT_EXISTS.
+ */
+export function planMissingExamParticipants(expectedRows, studentsByNo, existingParticipants) {
+  const enrolled = new Set(existingParticipants.map((participant) => participant.studentId));
+  const missing = [];
+  for (const row of expectedRows) {
+    const student = studentsByNo.get(String(row.studentNo));
+    if (!student) throw new Error("LANDING_SCREENS_PARTICIPANT_MISSING");
+    if (enrolled.has(student.id)) continue;
+    enrolled.add(student.id);
+    missing.push({ studentId: student.id, participantNo: String(row.studentNo), bookletType: row.booklet });
+  }
+  return missing;
+}
+
 export function istanbulDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
-export function buildProvenanceManifest({ adjustments = [], capturedAt, commit, dataset, examsLoaded, gaps, queueAvailable = false, runId, screens, tool }) {
+export function buildProvenanceManifest({ adjustments = [], capturedAt, commit, dataset, examsLoaded, failure = null, gaps, queueAvailable = false, runId, screens, status = "COMPLETED", tool }) {
+  if (!LANDING_SCREENS_RUN_STATUSES.includes(status)) throw new Error(`LANDING_SCREENS_RUN_STATUS_INVALID:${status}`);
+  if (status === "FAILED" && !failure) throw new Error("LANDING_SCREENS_RUN_FAILURE_REQUIRED");
   for (const screen of screens) {
     if (LANDING_SCREENS_FORBIDDEN_ROUTE_PREFIXES.some((prefix) => screen.route === prefix || screen.route.startsWith(`${prefix}/`) || screen.route.startsWith(`${prefix}?`))) {
       throw new Error(`LANDING_SCREENS_FORBIDDEN_ROUTE:${screen.id}`);
@@ -248,6 +319,9 @@ export function buildProvenanceManifest({ adjustments = [], capturedAt, commit, 
     decision: "DEC-20261102-08",
     runId,
     capturedAt,
+    // FAILED keeps the gaps and adjustments of a run that stopped; `failure` is the error code only, never a body.
+    status,
+    failure: status === "FAILED" ? failure : null,
     evidenceClass: "LOCAL_TEST",
     dataset,
     source: {

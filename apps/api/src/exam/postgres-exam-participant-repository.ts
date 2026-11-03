@@ -9,10 +9,21 @@ export class PostgresExamParticipantRepository implements ExamParticipantReposit
 
   async list(tenantId: string, examId: string): Promise<ExamParticipantRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
+      // The raw import writes ExamResult rows and leaves the participant status REGISTERED, so a live result is the
+      // attendance evidence the read model carries (hasResult); the status column itself is not rewritten.
       const result = await client.query<ExamParticipantRow>(
-        `SELECT * FROM "ExamParticipant"
-         WHERE "tenantId" = $1 AND "examId" = $2 AND "deletedAt" IS NULL
-         ORDER BY "createdAt" DESC`,
+        `SELECT participant.*,
+                EXISTS (
+                  SELECT 1
+                  FROM "ExamResult" result
+                  WHERE result."tenantId" = $1
+                    AND result."examId" = participant."examId"
+                    AND result."participantId" = participant."id"
+                    AND result."deletedAt" IS NULL
+                ) AS "hasResult"
+         FROM "ExamParticipant" participant
+         WHERE participant."tenantId" = $1 AND participant."examId" = $2 AND participant."deletedAt" IS NULL
+         ORDER BY participant."createdAt" DESC`,
         [tenantId, examId],
       );
       return result.rows.map(toExamParticipantRecord);
@@ -48,6 +59,7 @@ interface ExamParticipantRow {
   participantNo: string | null;
   bookletType: string | null;
   status: string;
+  hasResult?: boolean | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -61,6 +73,7 @@ function toExamParticipantRecord(row: ExamParticipantRow): ExamParticipantRecord
     ...(row.participantNo ? { participantNo: row.participantNo } : {}),
     ...(row.bookletType ? { bookletType: row.bookletType } : {}),
     status: row.status,
+    hasResult: row.hasResult === true,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };

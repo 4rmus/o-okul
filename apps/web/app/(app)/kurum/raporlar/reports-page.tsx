@@ -185,13 +185,17 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
     [campusNameById, classNameById, courseNameById, gradeLevelNameById, latestSnapshot, termNameById],
   );
   const isSnapshotReady = latestSnapshot?.status === "READY";
+  // UAT L2: the report data loads only on "Raporu getir"; until then nothing is known about the exam's report versions,
+  // so the page says the report was not fetched instead of claiming none exists.
+  const isReportFetched = reportData !== null;
+  const unfetchedReportLabel = isReportLoading ? "Rapor getiriliyor" : "Rapor getirilmedi";
   const snapshotGeneratedAt = formatDateTime(latestSnapshot?.snapshotData?.generatedAt);
   const snapshotInputRefs = useMemo(() => latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "Henüz girdi yok", [latestSnapshot]);
   const snapshotExportReadiness = latestSnapshot
     ? isSnapshotReady
       ? "Excel/PDF hazır"
       : "Hazır rapor sürümü gerekli"
-    : "Hazır rapor yok";
+    : isReportFetched ? "Hazır rapor yok" : "Rapor bekliyor";
   const selectedExamLabel = useMemo(() => formatSelectedExamLabel(loadedExamId || examId, exams), [examId, exams, loadedExamId]);
   const selectedExamExists = exams.some((exam) => exam.id === examId);
   const hasSelectedExam = Boolean(examId.trim());
@@ -205,7 +209,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
         ? "Rapor hazırlandı"
         : reportJobState === "error"
           ? "Hata"
-          : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Rapor sürümü yok";
+          : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : isReportFetched ? "Rapor sürümü yok" : unfetchedReportLabel;
   const productionStatusTone = reportJobState === "completed"
     ? "success"
     : reportJobState === "error"
@@ -563,7 +567,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
         <details className="next-report-meta-details">
           <summary>Rapor ayrıntıları</summary>
           <dl>
-            <div><dt>{productTerms.reportVersion}</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
+            <div><dt>{productTerms.reportVersion}</dt><dd>{latestSnapshot || isReportFetched ? formatSnapshotStatus(latestSnapshot?.status) : unfetchedReportLabel}</dd></div>
             <div><dt>Hazırlanma zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
             <div><dt>Bağlam</dt><dd>{snapshotContext}</dd></div>
             <div><dt>Girdi</dt><dd>{snapshotInputRefs}</dd></div>
@@ -592,7 +596,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
       >
         {!latestSnapshot && !isReportLoading ? (
           <EmptyState
-            title="Hazır rapor yok"
+            title={isReportFetched ? "Hazır rapor yok" : "Rapor getirilmedi"}
             description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu açın veya hazırlayın."
             primaryAction={examId && !isReportJobBusy
               ? { label: "Raporu hazırla", onClick: () => void enqueueReportGeneration() }
@@ -710,7 +714,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
           <div><dt>Sınav</dt><dd>{selectedExamLabel}</dd></div>
           <div>
             <dt>{productTerms.reportVersion}</dt>
-            <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Henüz oluşturulmadı"}</dd>
+            <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : isReportFetched ? "Henüz oluşturulmadı" : unfetchedReportLabel}</dd>
           </div>
         </dl>
       }

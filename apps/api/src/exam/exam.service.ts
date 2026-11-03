@@ -71,6 +71,8 @@ export interface ExamRepository {
   create(input: CreateExamRepositoryInput): Promise<ExamRecord>;
   list(tenantId: string): Promise<ExamRecord[]>;
   findById(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
+  /** Tenant-scoped batch read of live exams; callers fall back to findById when a repository does not offer it. */
+  listByIds?(tenantId: string, examIds: string[]): Promise<ExamRecord[]>;
   update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined>;
   publish(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
   delete(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
@@ -264,9 +266,9 @@ export class ExamService {
       exam,
       participantSummary: {
         total: participants.length,
-        registered: countParticipantStatus(participants, "REGISTERED"),
-        attended: countParticipantStatus(participants, "ATTENDED"),
-        absent: countParticipantStatus(participants, "ABSENT"),
+        registered: participants.filter(isRegisteredParticipant).length,
+        attended: participants.filter(isAttendedParticipant).length,
+        absent: participants.filter(isAbsentParticipant).length,
       },
       readiness,
       nextAction,
@@ -846,7 +848,21 @@ function isUniqueViolation(error: unknown): boolean {
   return error.message === "EXAM_PARTICIPANT_EXISTS" || "code" in error && error.code === "23505";
 }
 
-function countParticipantStatus(participants: ExamParticipantRecord[], status: string): number {
-  return participants.filter((participant) => participant.status === status).length;
+/**
+ * Attendance rule shared with the institution dashboard (me-institution-dashboard.store): the raw import writes
+ * ExamResult rows and never moves the participant status off REGISTERED, so a participant with a live result attended
+ * whatever its status says; ABSENT counts only a participant marked absent that has no result; REGISTERED is the rest
+ * of the enrolled roster that neither attended nor was marked absent.
+ */
+export function isAttendedParticipant(participant: Pick<ExamParticipantRecord, "status" | "hasResult">): boolean {
+  return participant.status === "ATTENDED" || participant.hasResult === true;
+}
+
+export function isAbsentParticipant(participant: Pick<ExamParticipantRecord, "status" | "hasResult">): boolean {
+  return participant.status === "ABSENT" && participant.hasResult !== true;
+}
+
+export function isRegisteredParticipant(participant: Pick<ExamParticipantRecord, "status" | "hasResult">): boolean {
+  return participant.status === "REGISTERED" && participant.hasResult !== true;
 }
 

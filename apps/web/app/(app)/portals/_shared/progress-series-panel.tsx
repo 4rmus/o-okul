@@ -2,6 +2,7 @@
 
 import { Button, DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import type { GuardianExamSeriesPoint, GuardianSchoolGradeItem } from "@o-okul/shared-types";
+import { formatDate as formatInstantDate } from "../../_shared/format.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 /**
@@ -26,8 +27,10 @@ export function ProgressSeriesPanel({
   title?: string;
   unavailable?: boolean;
 }) {
+  // Deneme noktası sınavın kendi tarihine yerleşir; sınav tarihi saklanmamış eski raporlarda rapor tarihi kullanılır.
   const examColumns: Array<DataTableColumn<GuardianExamSeriesPoint>> = [
-    { header: "Tarih", key: "date", priority: "primary", render: (point) => formatDate(point.generatedAt), sticky: "left" },
+    { header: "Tarih", key: "date", priority: "primary", render: (point) => formatInstantDate(point.examStartsAt ?? point.generatedAt), sticky: "left" },
+    { header: "Sınav", key: "exam", priority: "secondary", render: (point) => point.examTitle?.trim() || "-" },
     { align: "right", header: "Başarı % (0-100)", key: "success", priority: "primary", render: (point) => formatPercentNumber(reportSuccessRate(point)) },
     { align: "right", header: "Net / Soru", key: "net", priority: "secondary", render: (point) => `${formatNumber(point.net)} / ${formatNumber(reportQuestionCount(point))}` },
   ];

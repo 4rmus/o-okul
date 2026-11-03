@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { runWithRequestContext, type RequestContext } from "../context/request-context.js";
+import { reportSnapshotPreferenceExpectedOrder, reportSnapshotPreferenceFixture } from "../report/report-snapshot-preference.fixture.js";
+import { reportSnapshotPreferenceOrderBySql } from "../report/report-snapshot-preference.js";
 import { PostgresClassStore } from "../school/class-store.js";
 import { PostgresStudentStore } from "../student/student-store.js";
 import { PostgresSupportTicketStore } from "../support-ticket/support-ticket-store.js";
@@ -73,7 +75,9 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
           );
         }
         await db.query('INSERT INTO "Exam" (id,"tenantId",title,status,"startsAt","updatedAt") VALUES ($1,$2,\'Deneme\',\'PUBLISHED\',now(),now())', [t("exam"), tenant]);
-        for (const [student, status] of [["s1", "ATTENDED"], ["s2", "ATTENDED"], ["s3", "ABSENT"]] as const) {
+        // s4 is auto-registered (class roster) and then matched by the raw import: its status stays REGISTERED and only
+        // the ExamResult row says it attended. s3 is marked absent and has only a deleted result.
+        for (const [student, status] of [["s1", "ATTENDED"], ["s2", "ATTENDED"], ["s3", "ABSENT"], ["s4", "REGISTERED"]] as const) {
           await db.query(
             'INSERT INTO "ExamParticipant" (id,"tenantId","examId","studentId",status,"updatedAt") VALUES ($1,$2,$3,$4,$5,now())',
             [t(`participant-${student}`), tenant, t("exam"), t(student), status],
@@ -92,7 +96,25 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
           'INSERT INTO "ReportSnapshot" (id,"tenantId","examId","reportType","contentHash","inputRefs",status,"snapshotData","generatedAt","updatedAt") VALUES ($1,$2,$3,\'EXAM\',\'h\',\'{}\'::jsonb,\'READY\',$4::jsonb,now(),now())',
           [t("snapshot"), tenant, t("exam"), JSON.stringify(snapshotData)],
         );
+        // Newer scoped snapshots of the same exam: campus-only (one filter) and campus+class (two filters). The
+        // tenant-wide snapshot above stays the headline; without it the campus-only one wins over the newer class one.
+        for (const [name, campusId, classId, resultCount, hoursAhead] of [
+          ["snapshot-campus", t("campus-1"), null, 11, 1],
+          ["snapshot-class", t("campus-1"), t("c1"), 22, 2],
+        ] as const) {
+          await db.query(
+            'INSERT INTO "ReportSnapshot" (id,"tenantId","examId","campusId","classId","reportType","contentHash","inputRefs",status,"snapshotData","generatedAt","updatedAt") VALUES ($1,$2,$3,$4,$5,\'EXAM\',$1,\'{}\'::jsonb,\'READY\',$6::jsonb,now()+($7::int * interval \'1 hour\'),now())',
+            [t(name), tenant, t("exam"), campusId, classId, JSON.stringify({ ...snapshotData, resultCount }), hoursAhead],
+          );
+        }
         await db.query('INSERT INTO "RawImport" (id,"tenantId","examId","sourceType","fileName","s3Key",sha256,"parserConfigVersion","updatedAt") VALUES ($1,$2,$3,\'TXT\',\'a.txt\',\'k\',\'s\',\'v1\',now())', [t("raw"), tenant, t("exam")]);
+        await db.query('INSERT INTO "AnswerKey" (id,"tenantId","examId",version,"keyData","updatedAt") VALUES ($1,$2,$3,\'v1\',\'{}\'::jsonb,now())', [t("answer-key"), tenant, t("exam")]);
+        for (const [student, deletedAt] of [["s4", null], ["s3", "2026-11-01T00:00:00Z"]] as const) {
+          await db.query(
+            'INSERT INTO "ExamResult" (id,"tenantId","examId","studentId","participantId","rawImportId","answerKeyId","answerKeyVersion","parserConfigVersion","engineVersion","resultKey","scoreData","computedAt","deletedAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,\'v1\',\'v1\',\'e1\',$1,\'{}\'::jsonb,now(),$8::timestamptz,now())',
+            [t(`result-${student}`), tenant, t("exam"), t(student), t(`participant-${student}`), t("raw"), t("answer-key"), deletedAt],
+          );
+        }
         await db.query('INSERT INTO "ImportQuarantine" (id,"tenantId","examId","rawImportId","rowNumber","rawRow",reason,status,"updatedAt") VALUES ($1,$2,$3,$4,1,\'{}\'::jsonb,\'NO_MATCH\',\'OPEN\',now())', [t("quarantine"), tenant, t("exam"), t("raw")]);
         // t1 names campus-1, t2 a campus-2 class, t3 a campus-1 student, t4 nothing attributable, t5 a campusless class
         // and a campus-1 student (falls through to the student's class campus).
@@ -118,7 +140,7 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
 
   afterAll(async () => {
     try {
-      for (const table of ["SupportTicket", "ImportQuarantine", "RawImport", "ReportSnapshot", "ExamParticipant", "Exam", "Attendance", "Student", "Class", "Campus"]) {
+      for (const table of ["SupportTicket", "ImportQuarantine", "ExamResult", "AnswerKey", "RawImport", "ReportSnapshot", "ExamParticipant", "Exam", "Attendance", "Student", "Class", "Campus"]) {
         await admin.query(`DELETE FROM "${table}" WHERE "tenantId"=ANY($1::text[])`, [[tenantA, tenantB]]);
       }
       await admin.query('DELETE FROM "Tenant" WHERE id=ANY($1::text[])', [[tenantA, tenantB]]);
@@ -135,13 +157,54 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
       activeStudentCount: 4,
       attention: { attendanceAlertCount: 3, openImportQuarantineCount: 1, openSupportTicketCount: 5 },
       latestExam: {
-        registeredParticipantCount: 3,
-        attendedParticipantCount: 2,
+        registeredParticipantCount: 4,
+        attendedParticipantCount: 3,
         absentParticipantCount: 1,
-        report: { resultCount: 3, net: 28 },
+        report: { snapshotId: id(tenantA, "snapshot"), resultCount: 3, net: 28 },
       },
     });
     expect(dashboard.latestExam?.report?.classes).toHaveLength(3);
+  });
+
+  it("the headline report is the tenant-wide snapshot, else the fewest-filter one, never just the newest", async () => {
+    const store = new PostgresInstitutionDashboardStore(app);
+    const headline = async () => {
+      const dashboard = await runWithRequestContext(context(tenantA), () => store.load(tenantA, today));
+      return dashboard.latestExam?.report;
+    };
+    // The newer campus and campus+class snapshots exist, yet the unfiltered one is the headline.
+    expect(await headline()).toMatchObject({ snapshotId: id(tenantA, "snapshot"), resultCount: 3 });
+
+    await admin.query('UPDATE "ReportSnapshot" SET "deletedAt"=now() WHERE "tenantId"=$1 AND id=$2', [tenantA, id(tenantA, "snapshot")]);
+    try {
+      // Without a tenant-wide snapshot the campus-only one (one filter) beats the newer campus+class one (two filters).
+      expect(await headline()).toMatchObject({ snapshotId: id(tenantA, "snapshot-campus"), resultCount: 11 });
+    } finally {
+      await admin.query('UPDATE "ReportSnapshot" SET "deletedAt"=NULL WHERE "tenantId"=$1 AND id=$2', [tenantA, id(tenantA, "snapshot")]);
+    }
+    expect(await headline()).toMatchObject({ snapshotId: id(tenantA, "snapshot") });
+  });
+
+  it("the SQL preference ranks the shared fixture like the TS comparator, a NULL generatedAt row by its createdAt", async () => {
+    // Same rows as report-snapshot-preference.test.ts, on a separate exam held before the headline exam; the single
+    // scope filter of the fixture is campus-1 here (ReportSnapshot.campusId references Campus).
+    await admin.query('INSERT INTO "Exam" (id,"tenantId",title,status,"startsAt","updatedAt") VALUES ($1,$2,\'Sıralama\',\'PUBLISHED\',\'2020-01-01T00:00:00Z\',now())', [id(tenantA, "exam-order"), tenantA]);
+    try {
+      for (const row of reportSnapshotPreferenceFixture) {
+        await admin.query(
+          'INSERT INTO "ReportSnapshot" (id,"tenantId","examId","campusId","reportType","contentHash","inputRefs",status,"snapshotData","generatedAt","createdAt","updatedAt") VALUES ($1,$2,$3,$4,\'EXAM\',$1,\'{}\'::jsonb,\'READY\',\'{}\'::jsonb,$5::timestamptz,$6::timestamptz,now())',
+          [id(tenantA, row.id), tenantA, id(tenantA, "exam-order"), row.campusId ? id(tenantA, "campus-1") : null, row.generatedAt ?? null, row.createdAt],
+        );
+      }
+      const ordered = await admin.query<{ id: string }>(
+        `SELECT snapshot."id" FROM "ReportSnapshot" snapshot WHERE snapshot."tenantId" = $1 AND snapshot."examId" = $2 ORDER BY ${reportSnapshotPreferenceOrderBySql("snapshot")}`,
+        [tenantA, id(tenantA, "exam-order")],
+      );
+      expect(ordered.rows.map((row) => row.id)).toEqual(reportSnapshotPreferenceExpectedOrder.map((name) => id(tenantA, name)));
+    } finally {
+      await admin.query('DELETE FROM "ReportSnapshot" WHERE "tenantId"=$1 AND "examId"=$2', [tenantA, id(tenantA, "exam-order")]);
+      await admin.query('DELETE FROM "Exam" WHERE "tenantId"=$1 AND id=$2', [tenantA, id(tenantA, "exam-order")]);
+    }
   });
 
   it("a campus-scoped viewer sees only its campus rows and no tenant-wide latest exam", async () => {

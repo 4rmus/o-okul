@@ -2828,13 +2828,23 @@ export interface ReportStudentSnapshot {
   generatedAt?: string;
 }
 
+/**
+ * One point per exam: among the READY snapshots of an exam the caller may read, the broadest scope (fewest
+ * campus/grade level/class/course/term filters) wins, then the most recently generated one.
+ */
 export interface ReportStudentProgressPoint {
   snapshotId: string;
+  examId?: string;
   courseId?: string;
+  /** Exam title frozen in the snapshot (snapshotData.examTitle). */
   examTitle?: string;
-  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); absent for snapshots that did not store it. */
+  /**
+   * Exam date the points are ordered by: snapshotData.examStartsAt when the snapshot froze it, otherwise the Exam
+   * row's startsAt read for snapshots generated before the exam date was frozen (2026-07-28). Absent only when the
+   * snapshot stored no date and the exam could not be read.
+   */
   examStartsAt?: string;
-  /** Report generation time; points are ordered by it. */
+  /** Report generation time; the ordering fallback only for a point without examStartsAt. */
   generatedAt?: string;
   termId?: string;
   total: ReportStudentScoreSummary;
@@ -3267,6 +3277,11 @@ export interface ExamParticipantRecord {
   participantNo?: string;
   bookletType?: string;
   status: ExamParticipantStatus | string;
+  /**
+   * True when a live (not deleted) ExamResult row exists for this participant. The raw import never moves `status`
+   * off REGISTERED, so a result is the attendance evidence; clients show "Katıldı" for it without inferring further.
+   */
+  hasResult?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -3672,6 +3687,14 @@ export interface StudentPublishedGradeItem {
 /** One optical exam point. successRate is Başarı % on a 0-100 scale; net/questionCount are context. */
 export interface GuardianExamSeriesPoint {
   snapshotId: string;
+  examId?: string;
+  /** Exam title frozen in the snapshot. */
+  examTitle?: string;
+  /**
+   * Exam date the series is ordered by: frozen in the snapshot, else read from the Exam row for older snapshots
+   * (ReportStudentProgressPoint.examStartsAt); generatedAt is the fallback only when both are missing.
+   */
+  examStartsAt?: string;
   generatedAt?: string;
   successRate?: number;
   net?: number;

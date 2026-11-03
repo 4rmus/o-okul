@@ -155,6 +155,20 @@ test.describe("Dönem geçişi sihirbazı", () => {
     await expect(page.getByRole("region", { name: "Geçişi uygulama", exact: true }).getByRole("link", { name: "Öğrencileri açın" })).toBeVisible();
   });
 
+  test("yıl ve dönem seçenekleri başlangıç tarihine göre eskiden yeniye sıralanır", async ({ page }) => {
+    const db = createDb();
+    // Before the fix the wizard sorted newest first and listed "2. Dönem" above "1. Dönem".
+    db.terms.push({ id: "term-new-2", tenantId: "tenant-term", academicYearId: "year-new", name: "2. Dönem", startsAt: daysFromToday(100), endsAt: daysFromToday(290), isActive: false });
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await open(page, db, "/kurum/donem-gecisi");
+
+    const calendar = page.getByRole("form", { name: "Yeni yıl ve dönem" });
+    const yearSelect = calendar.getByRole("combobox", { name: "Akademik yıl", exact: true });
+    await expect(yearSelect.locator("option")).toHaveText([/^Seçin$/, /^2025-2026 /, /^2026-2027 /, /^Yeni akademik yıl/]);
+    await yearSelect.selectOption("year-new");
+    await expect(calendar.getByRole("combobox", { name: "Dönem", exact: true }).locator("option")).toHaveText([/^Seçin$/, /^1\. Dönem /, /^2\. Dönem /, /^Yeni dönem/]);
+  });
+
   test("hedef değişince önceki uygulamanın sonucu tamamlandı göstermez; takvim seçilmeden adım tamam sayılmaz", async ({ page }) => {
     const db = createDb();
     db.renewFailuresLeft = 0;

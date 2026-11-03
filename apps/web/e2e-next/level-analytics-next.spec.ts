@@ -68,6 +68,10 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
     await expect(firstRow).toContainText("55,35");
     await expect(firstRow).toContainText("90");
     await expect(firstRow).toContainText("40");
+    // UAT L3: every table in the panel carries a caption; the chart's data table opens from its details block.
+    for (const caption of await lgs.locator("table caption").allTextContents()) expect(caption.trim()).not.toBe("");
+    await lgs.getByText("Ayrıntılı veriyi göster", { exact: true }).click();
+    await expect(lgs.getByRole("table", { name: "LGS Başarı % grafiğinin verisi" })).toBeVisible();
 
     const stale = region.getByRole("region", { exact: true, name: "Yenilenmesi gereken seviye raporları" });
     await expect(stale.getByRole("link", { name: "LGS Deneme 3" })).toHaveAttribute("href", "/kurum/sinavlar/exam-lgs-3/rapor/genel");

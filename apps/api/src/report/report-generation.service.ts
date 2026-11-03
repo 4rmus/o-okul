@@ -13,6 +13,7 @@ import type {
   ReportPdfRenderJobResult,
   ReportPdfSnapshotRecord,
   ReportErrorBooklet,
+  ExamRecord,
   ReportScopeRank,
   ReportStudentBranchStatistics,
   ReportStudentBranchSummary,
@@ -48,6 +49,7 @@ import {
   requireTenantWideStaffContext,
 } from "../tenant/tenant-access.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { isPreferredReportSnapshot } from "./report-snapshot-preference.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
 export const reportGenerationQueueProducerToken = Symbol("reportGenerationQueueProducer");
@@ -650,7 +652,7 @@ export class ReportGenerationService implements OnApplicationShutdown {
       resolvedStudentId,
       options.scope === "all" ? undefined : resolvedExamId,
     );
-    const points: ReportStudentProgressPoint[] = [];
+    const selectedByExam = new Map<string, { snapshot: ReportSnapshotRecord; student: Record<string, unknown> }>();
     let teacherAuthorizedSnapshot = false;
 
     for (const snapshot of snapshots) {
@@ -663,17 +665,12 @@ export class ReportGenerationService implements OnApplicationShutdown {
           continue;
         }
         if (isTeacherSubjectContext(context)) teacherAuthorizedSnapshot = true;
-        // The exam date frozen in the snapshot; the generation date stays the ordering key of the points.
-        const examStartsAt = readText(snapshot.snapshotData.examStartsAt);
-        points.push({
-          snapshotId: snapshot.id,
-          ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
-          ...(examStartsAt ? { examStartsAt } : {}),
-          ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
-          ...(snapshot.termId ? { termId: snapshot.termId } : {}),
-          total: readScoreSummary(student.total),
-          branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
-        });
+        // One point per exam (L7): the broadest scope wins, then the newest; the institution dashboard headline
+        // applies the same rule (report-snapshot-preference.ts). Teacher access was checked per snapshot above.
+        const current = selectedByExam.get(snapshot.examId);
+        if (!current || isPreferredReportSnapshot(snapshot, current.snapshot)) {
+          selectedByExam.set(snapshot.examId, { snapshot, student });
+        }
       }
     }
 
@@ -681,7 +678,16 @@ export class ReportGenerationService implements OnApplicationShutdown {
       throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
 
-    points.sort((a, b) => toTime(a.generatedAt) - toTime(b.generatedAt));
+    const points: ReportStudentProgressPoint[] = [...selectedByExam.values()]
+      .map(({ snapshot, student }) => toStudentProgressPoint(snapshot, student));
+    // Points are ordered by the exam date frozen in the snapshot. Snapshots generated before the exam date was frozen
+    // (2026-07-28) take the exam's startsAt from the Exam row so one time axis orders the series; only a point whose
+    // exam cannot be read falls back to its generation time.
+    await this.fillExamStartsAtFromExams(context, points);
+    points.sort((a, b) =>
+      toTime(a.examStartsAt ?? a.generatedAt) - toTime(b.examStartsAt ?? b.generatedAt)
+      || toTime(a.generatedAt) - toTime(b.generatedAt)
+      || a.snapshotId.localeCompare(b.snapshotId));
 
     const successRateDelta = delta(points, (point) => point.total.successRate);
     const netDelta = delta(points, (point) => point.total.net);
@@ -758,6 +764,30 @@ export class ReportGenerationService implements OnApplicationShutdown {
       };
     } catch {
       return {};
+    }
+  }
+
+  private async fillExamStartsAtFromExams(context: RequestContext, points: ReportStudentProgressPoint[]): Promise<void> {
+    if (!this.examRepository || !context.tenantId) return;
+    const legacyPoints = points.filter((point) => !point.examStartsAt && point.examId);
+    if (legacyPoints.length === 0) return;
+    const examIds = [...new Set(legacyPoints.map((point) => point.examId as string))];
+
+    let exams: ExamRecord[];
+    try {
+      exams = this.examRepository.listByIds
+        ? await this.examRepository.listByIds(context.tenantId, examIds)
+        : (await Promise.all(examIds.map((examId) => this.examRepository!.findById(context.tenantId!, examId))))
+          .filter((exam): exam is ExamRecord => Boolean(exam));
+    } catch {
+      return;
+    }
+    const startsAtByExamId = new Map(
+      exams.filter((exam) => exam.tenantId === context.tenantId && exam.startsAt).map((exam) => [exam.id, exam.startsAt as string]),
+    );
+    for (const point of legacyPoints) {
+      const startsAt = startsAtByExamId.get(point.examId as string);
+      if (startsAt) point.examStartsAt = startsAt;
     }
   }
 
@@ -2075,6 +2105,23 @@ function readText(value: unknown): string {
 
 function toTime(value: string | undefined): number {
   return value ? new Date(value).getTime() : 0;
+}
+
+function toStudentProgressPoint(snapshot: ReportSnapshotRecord, student: Record<string, unknown>): ReportStudentProgressPoint {
+  // Exam title and date frozen in the snapshot; the generation time stays as context.
+  const examStartsAt = readText(snapshot.snapshotData?.examStartsAt);
+  const examTitle = readText(snapshot.snapshotData?.examTitle).trim();
+  return {
+    snapshotId: snapshot.id,
+    examId: snapshot.examId,
+    ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
+    ...(examTitle ? { examTitle } : {}),
+    ...(examStartsAt ? { examStartsAt } : {}),
+    ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
+    ...(snapshot.termId ? { termId: snapshot.termId } : {}),
+    total: readScoreSummary(student.total),
+    branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
+  };
 }
 
 function delta(
