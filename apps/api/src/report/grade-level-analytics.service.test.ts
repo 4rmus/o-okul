@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { GradeLevelAnalyticsService } from "./grade-level-analytics.service.js";
-import { createGradeLevelAnalyticsFixtures, gradeLevelAnalyticsExam as exam, gradeLevelAnalyticsSnapshot as levelSnapshot } from "./grade-level-analytics.test-support.js";
+import {
+  createGradeLevelAnalyticsFixtures,
+  gradeLevelAnalyticsExam as exam,
+  gradeLevelAnalyticsSnapshot as levelSnapshot,
+  gradeLevelAnalyticsTermBoundaryExtras,
+} from "./grade-level-analytics.test-support.js";
 import type { ReportSnapshotRecord } from "./report-generation.service.js";
 import { InMemoryReportSnapshotStore, type InMemoryGradeLevelAnalyticsExam } from "./report-snapshot-store.js";
 
@@ -119,6 +124,18 @@ describe("GradeLevelAnalyticsService (DEC-20261102-08 G3)", () => {
     expect(fallOnly.withoutLevelReport).toEqual([]);
   });
 
+  it("dönem süzgecinde sınav tarihini Türkiye takvim gününe göre değerlendirir", async () => {
+    const service = createService(gradeLevelAnalyticsTermBoundaryExtras());
+
+    const fall = await service.getGradeLevelAnalytics(adminContext, { gradeLevelId: "grade-6", termId: "term-fall" });
+    // 2026-08-31T21:30Z = 1 Eylül 00:30 (dönem içi); 2026-09-30T21:30Z = 1 Ekim 00:30 (dönem dışı).
+    expect(fall.series.flatMap((series) => series.points.map((point) => point.examId))).toEqual(["exam-boundary-start"]);
+    expect(fall.withoutLevelReport.map((exam) => exam.examId)).toEqual(["exam-boundary-no-level"]);
+
+    const allTerms = await service.getGradeLevelAnalytics(adminContext, { gradeLevelId: "grade-6" });
+    expect(allTerms.series.flatMap((series) => series.points.map((point) => point.examId))).toEqual(["exam-boundary-start", "exam-boundary-end"]);
+  });
+
   it("snapshot'ta saklanmayan Başarı %'yi yeniden hesaplamaz ve sonuçsuz seviye snapshot'ını çizmez", async () => {
     const service = createService({
       extraExams: [
@@ -147,6 +164,23 @@ describe("GradeLevelAnalyticsService (DEC-20261102-08 G3)", () => {
         questionCount: 40,
       }],
     }]);
+    // The empty READY level report is listed apart, not dropped and not plotted as 0 %.
+    expect(analytics.noParticipants).toEqual([{
+      examId: "exam-empty",
+      examTitle: "Boş Deneme",
+      examType: "SCHOOL",
+      startsAt: "2026-09-21T07:00:00.000Z",
+      snapshotId: "level-empty",
+      generatedAt: "2026-09-11T09:00:00.000Z",
+    }]);
+    expect(analytics.needsRefresh).toEqual([]);
+    expect(analytics.withoutLevelReport).toEqual([]);
+  });
+
+  it("katılımcısız seviye raporu yoksa noParticipants boş döner", async () => {
+    const analytics = await createService().getGradeLevelAnalytics(adminContext, { gradeLevelId: "grade-8" });
+
+    expect(analytics.noParticipants).toEqual([]);
   });
 
   it("kampüs kısıtlı personel 403 alır", async () => {

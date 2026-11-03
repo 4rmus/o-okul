@@ -2819,6 +2819,9 @@ export interface ReportStudentProgressPoint {
   snapshotId: string;
   courseId?: string;
   examTitle?: string;
+  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); absent for snapshots that did not store it. */
+  examStartsAt?: string;
+  /** Report generation time; points are ordered by it. */
   generatedAt?: string;
   termId?: string;
   total: ReportStudentScoreSummary;
@@ -2868,6 +2871,15 @@ export interface GradeLevelAnalyticsNeedsRefreshItem extends GradeLevelAnalytics
   staleAt?: string;
 }
 
+/**
+ * A READY level snapshot with no results (resultCount 0 or missing): its stored averages are zero, so it is listed apart
+ * and never plotted as 0 % success.
+ */
+export interface GradeLevelAnalyticsNoParticipantsItem extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  generatedAt?: string;
+}
+
 export interface GradeLevelAnalytics {
   tenantId: string;
   gradeLevelId: string;
@@ -2875,6 +2887,8 @@ export interface GradeLevelAnalytics {
   termId?: string;
   series: GradeLevelAnalyticsSeries[];
   needsRefresh: GradeLevelAnalyticsNeedsRefreshItem[];
+  /** READY level snapshots without participants; shown as "katılımcı yok", never as a point. */
+  noParticipants: GradeLevelAnalyticsNoParticipantsItem[];
   /** PUBLISHED exams of this grade level that have no level snapshot yet. */
   withoutLevelReport: GradeLevelAnalyticsExamRef[];
 }

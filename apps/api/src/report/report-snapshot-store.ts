@@ -191,8 +191,9 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
       && !exam!.deletedAt
       && exam!.status === "PUBLISHED"
       && (!filters.examType || exam!.examType === filters.examType);
+    // Same rule as the Postgres projection: the exam's Türkiye calendar day must fall inside the term window.
     const examInTerm = (exam: InMemoryGradeLevelAnalyticsExam) =>
-      Boolean(term && exam.startsAt && isDateWithin(exam.startsAt, term.startsAt, term.endsAt));
+      Boolean(term && exam.startsAt && isIstanbulDateWithin(exam.startsAt, term.startsAt, term.endsAt));
     const snapshotMatchesTerm = (snapshot: ReportSnapshotRecord, exam: InMemoryGradeLevelAnalyticsExam) =>
       !filters.termId
       || snapshot.termId === filters.termId
@@ -434,6 +435,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            '{}'::jsonb AS "inputRefs",
            jsonb_build_object(
              'generatedAt', snapshot."snapshotData"->'generatedAt',
+             'examStartsAt', snapshot."snapshotData"->'examStartsAt',
              'students', (
                SELECT jsonb_agg(student ORDER BY ordinality)
                FROM jsonb_array_elements(snapshot."snapshotData"->'students')
@@ -576,7 +578,10 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
 
   async listGradeLevelAnalytics(tenantId: string, filters: GradeLevelAnalyticsFilters): Promise<GradeLevelAnalyticsProjection> {
     // Level snapshot = gradeLevelId = L with no campus, class or course filter. The term filter accepts a snapshot
-    // generated for that term, or a term-less level snapshot of an exam held inside the term window.
+    // generated for that term, or a term-less level snapshot of an exam held inside the term window. Exam.startsAt is a
+    // timestamp without time zone holding UTC wall time (Prisma); the term window is compared on the Türkiye calendar
+    // day, so an exam at 00:30 Istanbul on the first term day belongs to the term, not to the UTC day before. The exam
+    // start is read back as timestamptz so node-pg returns the same instant whatever the process time zone is.
     const levelSnapshotPredicate = `
            snapshot."tenantId" = $1
            AND snapshot."gradeLevelId" = $2
@@ -597,7 +602,8 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
              WHERE term."tenantId" = $1
                AND term."id" = $4
                AND term."deletedAt" IS NULL
-               AND exam."startsAt"::date BETWEEN term."startsAt" AND term."endsAt"
+               AND ((exam."startsAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Istanbul')::date
+                 BETWEEN term."startsAt" AND term."endsAt"
            )`;
     const values = [
       tenantId,
@@ -613,7 +619,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            snapshot."examId",
            exam."title" AS "examTitle",
            exam."examType",
-           exam."startsAt" AS "examStartsAt",
+           exam."startsAt" AT TIME ZONE 'UTC' AS "examStartsAt",
            snapshot."status",
            snapshot."generatedAt",
            snapshot."staleAt",
@@ -646,7 +652,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            exam."id" AS "examId",
            exam."title" AS "examTitle",
            exam."examType",
-           exam."startsAt" AS "examStartsAt"
+           exam."startsAt" AT TIME ZONE 'UTC' AS "examStartsAt"
          FROM "Exam" AS exam
          WHERE ${examPredicate}
            AND exam."gradeLevelId" = $2
@@ -826,9 +832,23 @@ function compareAnalyticsRows(left: GradeLevelAnalyticsExamRow, right: GradeLeve
   return left.examId < right.examId ? -1 : left.examId > right.examId ? 1 : 0;
 }
 
-function isDateWithin(value: string, startsAt: string, endsAt: string): boolean {
-  const day = new Date(value).toISOString().slice(0, 10);
-  return day >= startsAt.slice(0, 10) && day <= endsAt.slice(0, 10);
+const istanbulDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Istanbul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Türkiye calendar day ("2026-09-01") of an ISO instant; a bare calendar day is returned as is. */
+function istanbulDateKey(value: string): string | undefined {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : istanbulDateFormatter.format(date);
+}
+
+function isIstanbulDateWithin(value: string, startsAt: string, endsAt: string): boolean {
+  const day = istanbulDateKey(value);
+  return day !== undefined && day >= startsAt.slice(0, 10) && day <= endsAt.slice(0, 10);
 }
 
 function readObject(value: unknown): Record<string, unknown> {
@@ -871,6 +891,9 @@ function toStudentProgressRecord(snapshot: ReportSnapshotRecord, studentId: stri
     snapshotData: {
       ...(typeof snapshot.snapshotData?.generatedAt === "string"
         ? { generatedAt: snapshot.snapshotData.generatedAt }
+        : {}),
+      ...(typeof snapshot.snapshotData?.examStartsAt === "string"
+        ? { examStartsAt: snapshot.snapshotData.examStartsAt }
         : {}),
       students: snapshotStudents(snapshot).filter((student) => student.studentId === studentId),
     },

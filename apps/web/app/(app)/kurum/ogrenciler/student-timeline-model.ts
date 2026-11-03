@@ -158,13 +158,15 @@ export function buildStudentTimeline(sources: StudentTimelineSources, context: S
     });
   }
 
-  // Sınav: Başarı % birincil ölçüdür; Net ve Soru bağlam olarak yanında durur.
+  // Sınav: Başarı % birincil ölçüdür; Net ve Soru bağlam olarak yanında durur. Olay, snapshot'ta saklanan sınav
+  // tarihine yerleşir; sınav tarihi saklanmamış eski raporlarda rapor tarihine "Sınav raporu hazırlandı" olarak düşer.
   for (const point of sources.examPoints) {
     const successRate = reportSuccessRate(point.total);
     const questionCount = reportQuestionCount(point.total);
     const net = point.total.net;
+    const examDated = Boolean(timelineDateKey(point.examStartsAt));
     push({
-      at: point.generatedAt,
+      at: examDated ? point.examStartsAt : point.generatedAt,
       detail: [
         `Başarı ${formatPercentNumber(successRate)}`,
         typeof net === "number" ? `Net ${formatNet(net)}` : undefined,
@@ -173,7 +175,7 @@ export function buildStudentTimeline(sources: StudentTimelineSources, context: S
       id: `exam:${point.snapshotId}`,
       kind: "exam",
       link: link("exam"),
-      title: `Sınav sonucu: ${point.examTitle ?? "Sınav"}`,
+      title: `${examDated ? "Sınav sonucu" : "Sınav raporu hazırlandı"}: ${point.examTitle ?? "Sınav"}`,
     });
   }
 

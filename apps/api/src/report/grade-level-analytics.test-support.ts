@@ -43,6 +43,32 @@ export function createGradeLevelAnalyticsFixtures(
   };
 }
 
+/**
+ * Term-boundary witnesses on grade-6 (kept apart from the grade-8/grade-7 assertions). term-fall is 2026-09-01..09-30
+ * on the Türkiye calendar: 2026-08-31T21:30Z is 2026-09-01 00:30 in Istanbul (inside the term, the UTC day is outside)
+ * and 2026-09-30T21:30Z is 2026-10-01 00:30 in Istanbul (outside the term, the UTC day is inside).
+ */
+export function gradeLevelAnalyticsTermBoundaryExtras(): {
+  extraExams: InMemoryGradeLevelAnalyticsExam[];
+  extraSnapshots: ReportSnapshotRecord[];
+} {
+  const gradeLevelId = "grade-6";
+  return {
+    extraExams: [
+      gradeLevelAnalyticsExam("exam-boundary-start", "Dönem İlk Gecesi Denemesi", { examType: "LGS", gradeLevelId, startsAt: "2026-08-31T21:30:00.000Z" }),
+      gradeLevelAnalyticsExam("exam-boundary-end", "Dönem Sonrası Gece Denemesi", { examType: "LGS", gradeLevelId, startsAt: "2026-09-30T21:30:00.000Z" }),
+      gradeLevelAnalyticsExam("exam-boundary-no-level", "Dönem İlk Gecesi Sınıf Raporlu", { examType: "LGS", gradeLevelId, startsAt: "2026-08-31T22:00:00.000Z" }),
+    ],
+    extraSnapshots: [
+      gradeLevelAnalyticsSnapshot("level-boundary-start", "exam-boundary-start", {
+        gradeLevelId,
+        examStartsAt: "2026-08-31T21:30:00.000Z",
+      }),
+      gradeLevelAnalyticsSnapshot("level-boundary-end", "exam-boundary-end", { gradeLevelId }),
+    ],
+  };
+}
+
 export function gradeLevelAnalyticsExam(
   id: string,
   title: string,
@@ -54,9 +80,9 @@ export function gradeLevelAnalyticsExam(
 export function gradeLevelAnalyticsSnapshot(
   id: string,
   examId: string,
-  options: Partial<ReportSnapshotRecord> & { averages?: Record<string, number>; resultCount?: number } = {},
+  options: Partial<ReportSnapshotRecord> & { averages?: Record<string, number>; examStartsAt?: string; resultCount?: number } = {},
 ): ReportSnapshotRecord {
-  const { averages = { net: 50, questionCount: 90, successRate: 55.56 }, resultCount = 10, ...record } = options;
+  const { averages = { net: 50, questionCount: 90, successRate: 55.56 }, examStartsAt, resultCount = 10, ...record } = options;
   return {
     id,
     tenantId: "tenant-a",
@@ -67,6 +93,7 @@ export function gradeLevelAnalyticsSnapshot(
     inputRefs: { resultKeys: [`${id}-result`] },
     snapshotData: {
       reportType: "EXAM_RESULT_SUMMARY",
+      ...(examStartsAt ? { examStartsAt } : {}),
       resultCount,
       averages,
       students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],

@@ -23,8 +23,8 @@ export interface GradeLevelAnalyticsQuery {
 /**
  * DEC-20261102-08 (G3) level analytics. Reads only level snapshots (gradeLevelId = L, no campus, class or course
  * filter) that are READY and belong to a PUBLISHED exam; a STALE level snapshot is listed as needing a refresh and is
- * never plotted. There is no fallback to unfiltered snapshots and no recomputation: Başarı %, Net and Soru are the
- * averages stored in the snapshot. Only tenant-wide staff may read it; a campus-restricted context gets 403.
+ * never plotted; a READY level snapshot without results is listed under noParticipants, never plotted as 0 %. There is
+ * no fallback to unfiltered snapshots and no recomputation: Başarı %, Net and Soru are the averages stored in the snapshot. Only tenant-wide staff may read it; a campus-restricted context gets 403.
  */
 @Injectable()
 export class GradeLevelAnalyticsService {
@@ -59,6 +59,7 @@ export function buildGradeLevelAnalytics(
 ): GradeLevelAnalytics {
   const seriesByType = new Map<string, GradeLevelAnalyticsSeries>();
   const needsRefresh: GradeLevelAnalytics["needsRefresh"] = [];
+  const noParticipants: GradeLevelAnalytics["noParticipants"] = [];
 
   for (const row of projection.snapshots) {
     const exam = toExamRef(row);
@@ -66,8 +67,12 @@ export function buildGradeLevelAnalytics(
       needsRefresh.push({ ...exam, snapshotId: row.snapshotId, ...(row.staleAt ? { staleAt: row.staleAt } : {}) });
       continue;
     }
-    // A READY level snapshot without results carries zero averages; plotting it would read as 0 % success.
-    if (!row.resultCount || row.resultCount <= 0) continue;
+    // A READY level snapshot without results carries zero averages; plotting it would read as 0 % success, so it is
+    // listed apart instead of silently dropped.
+    if (!row.resultCount || row.resultCount <= 0) {
+      noParticipants.push({ ...exam, snapshotId: row.snapshotId, ...(row.generatedAt ? { generatedAt: row.generatedAt } : {}) });
+      continue;
+    }
     const point: GradeLevelAnalyticsPoint = {
       ...exam,
       snapshotId: row.snapshotId,
@@ -90,6 +95,7 @@ export function buildGradeLevelAnalytics(
     ...(scope.termId ? { termId: scope.termId } : {}),
     series: [...seriesByType.values()].sort(compareSeries),
     needsRefresh,
+    noParticipants,
     withoutLevelReport: projection.examsWithoutLevelReport.map(toExamRef),
   };
 }
