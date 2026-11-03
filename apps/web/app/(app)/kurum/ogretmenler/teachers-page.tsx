@@ -34,6 +34,7 @@ import {
   type TeacherFormPayload,
   type TeacherFormState,
 } from "../../../../src/form-validation.js";
+import { listCsvExportOptions } from "../../../../src/list-export.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -459,6 +460,12 @@ export function TeachersPage() {
         }
         emptyText="Öğretmen kaydı yok"
         error={error || (teachersQuery.isError ? "Öğretmenler alınamadı." : undefined)}
+        exportOptions={listCsvExportOptions(auth ? {
+          accessToken: auth.accessToken,
+          fileName: "ogretmenler",
+          filters: { page: listQuery.page, q: listQuery.q.trim(), sort: listQuery.sort },
+          list: "teachers",
+        } : null)}
         getRowKey={(teacher) => teacher.id}
         hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={teachersQuery.isPending}

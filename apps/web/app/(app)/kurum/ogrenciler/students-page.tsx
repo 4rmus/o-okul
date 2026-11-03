@@ -36,6 +36,7 @@ import {
   writeCursorListQueryParams,
   type CursorListQueryState,
 } from "../../../../src/cursor-list-controls.js";
+import { listCsvExportOptions } from "../../../../src/list-export.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { istanbulDateKey } from "../../_shared/istanbul-date.js";
@@ -723,6 +724,12 @@ export function StudentsPage() {
         }
         emptyText="Öğrenci kaydı yok"
         error={error || (studentsQuery.isError ? "Öğrenciler alınamadı." : undefined)}
+        exportOptions={listCsvExportOptions(auth ? {
+          accessToken: auth.accessToken,
+          fileName: "ogrenciler",
+          filters: { cursor: Boolean(listQuery.cursor), q: listQuery.q.trim(), sort: listQuery.sort, ...filters },
+          list: "students",
+        } : null)}
         getRowKey={(student) => student.id}
         hasActiveFilters={Boolean(listQuery.q.trim()) || Object.values(filters).some(Boolean)}
         loading={studentsQuery.isPending}

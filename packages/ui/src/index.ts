@@ -7,7 +7,8 @@ export { LoadingState, type LoadingStateProps } from "./components/loading-state
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./components/empty-state.js";
 export { ActionCard, type ActionCardProps } from "./components/action-card.js";
 export { DataTable, type DataTableColumn, type DataTableProps, type DataTableSelectionOptions, type DataTableSortDirection } from "./components/data-table.js";
-export { CrudPage, type CrudPageProps } from "./components/crud-page.js";
+export { CrudPage, type CrudPageExportOptions, type CrudPageProps } from "./components/crud-page.js";
+export { readDataTableSnapshot, type DataTableSnapshot, type ReadDataTableSnapshotOptions } from "./components/data-table-export.js";
 export { FormModal, type FormModalProps } from "./components/form-modal.js";
 export { Alert, type AlertProps } from "./components/alert.js";
 export { Checkbox, type CheckboxProps } from "./components/checkbox.js";

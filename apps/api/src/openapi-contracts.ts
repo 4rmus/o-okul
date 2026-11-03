@@ -1,5 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { licensePlanCodes } from "@o-okul/shared-types";
+import { licensePlanCodes, listExportKinds, listExportMaxRowCount } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -1788,6 +1788,22 @@ const auditLogListItemRecordSchema = objectSchema({
   entityLabel: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "actionLabel", "actorLabel", "category", "entityLabel", "createdAt"]);
+
+const listExportAuditRequestSchema = objectSchema({
+  filtersSummary: stringSchema({
+    maxLength: 300,
+    description: "Active filter keys as `key` or `key=value` pairs joined with `;`; search text is never sent and the `q` value is dropped.",
+  }),
+  list: stringSchema({ enum: [...listExportKinds] }),
+  rowCount: integerSchema({ minimum: 1, maximum: listExportMaxRowCount }),
+}, ["filtersSummary", "list", "rowCount"]);
+
+const listExportAuditRecordSchema = objectSchema({
+  auditId: stringSchema(),
+  list: stringSchema({ enum: [...listExportKinds] }),
+  recordedAt: stringSchema({ format: "date-time" }),
+  rowCount: integerSchema({ minimum: 1 }),
+}, ["auditId", "list", "recordedAt", "rowCount"]);
 
 const studentAuditSummaryRecordSchema = objectSchema({
   id: stringSchema(),
@@ -4029,6 +4045,12 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/audit-logs/student-summary": {
     responseBody: arraySchema(studentAuditSummaryRecordSchema),
     listResponse: true,
+  },
+  "post /api/v1/audit/list-exports": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: listExportAuditRequestSchema,
+    responseBody: listExportAuditRecordSchema,
   },
   "post /api/v1/exams/{examId}/answer-keys": {
     idempotent: true,
