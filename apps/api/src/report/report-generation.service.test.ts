@@ -19,7 +19,7 @@ import {
   type ReportPdfRenderer,
   type ReportSnapshotRecord,
 } from "./report-generation.service.js";
-import type { ReportSnapshotStore } from "./report-snapshot-store.js";
+import { InMemoryReportSnapshotStore, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
 describe("ReportGenerationService", () => {
   it("production ortamında API içi PDF renderer'ı reddeder", () => {
@@ -1169,6 +1169,28 @@ describe("ReportGenerationService", () => {
     expect(result.successRateDelta).toBe(30);
     expect(result.netDelta).toBe(6);
     expect(result.standardScoreDelta).toBe(10);
+  });
+
+  it("gelişim noktası snapshot'ta saklanan sınav tarihini taşır; sıralama rapor üretim tarihine göre kalır", async () => {
+    const producer = new FakeProducer();
+    const datedSnapshot: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      snapshotData: { ...fakeSnapshot.snapshotData, examStartsAt: "2026-06-01T07:00:00.000Z" },
+    };
+    const store = new InMemoryReportSnapshotStore({ snapshots: [datedSnapshot, fakePreviousSnapshot] });
+    const service = new ReportGenerationService(producer, store);
+
+    const result = await service.getStudentProgress(
+      { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      "exam-a",
+      "student-a",
+    );
+
+    expect(result.points.map((point) => [point.snapshotId, point.examStartsAt, point.generatedAt])).toEqual([
+      ["snapshot-previous", undefined, "2026-06-05T09:00:00.000Z"],
+      ["snapshot-a", "2026-06-01T07:00:00.000Z", "2026-06-06T09:00:00.000Z"],
+    ]);
+    expect(result.points[0]).not.toHaveProperty("examStartsAt");
   });
 
   it("öğrenciye ait hazır snapshot yoksa gelişim raporunu boş döner", async () => {

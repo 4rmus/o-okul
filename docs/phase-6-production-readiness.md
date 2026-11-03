@@ -837,9 +837,14 @@ pnpm backup:restore:smoke
   üzerinden doğrulanır.
 - KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `nationalIdEncrypted`,
   `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
-  `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
+  `nationalIdEncrypted`, `nationalIdHash`, `phone` ve bağlı Çalışan kaydının (DEC-20261102-08) `employee.firstName`,
+  `employee.lastName`, `employee.nationalIdEncrypted`, `employee.nationalIdHash`, `employee.phone`,
+  `employee.workEmail`; veli için `firstName`, `lastName`, `phone`;
   kullanıcı hesabı için `email`, `name`; `StudentContact` için ad, ilişki, şifreli/hash iletişim,
   izin ve consent alanlarının anonimleştirme/temizleme kapsamı doğrulanır.
+  Silinmiş (soft-delete) öğretmen ve ENDED bağlı Çalışan kopyası imha edilene kadar kişisel veri taşır: `/privacy/inventory`
+  silinmiş öğretmeni de listeler, `POST /teachers/:id/purge-pii` (privacy:manage) onu da imha eder ve
+  `kvkk.teacher_pii_purged` denetimine `isTeacherDeleted=true` yazar; diğer öğretmen okumaları silinmiş kaydı göstermez.
   `whatsappConsent` bloğu bu release'te `recordCount=0`, exact
   `eventRecordCount=0`,
   `piiRelevantStoredFields=[phoneHash,purpose,canReceiveWhatsapp,version,noticeVersion,source,recordedAt,withdrawnAt]`,

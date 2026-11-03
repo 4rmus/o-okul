@@ -8,6 +8,7 @@ import type {
   GradeEntriesSaveRequest,
   GradeEntryRecord,
   GuardianSchoolGradeItem,
+  StudentPublishedGradeItem,
   TeacherAssignmentRole,
   TeacherAuthoringScope,
 } from "@o-okul/shared-types";
@@ -177,6 +178,46 @@ export class GradebookService {
         version: entry.version,
       }))
       .sort((left, right) => left.heldOn.localeCompare(right.heldOn) || left.assessmentId.localeCompare(right.assessmentId));
+  }
+
+  /**
+   * DEC-20261102-08 Student 360 timeline (staff only): the published school grade series of one student, latest
+   * published version per assessment. The student must be in the viewer's tenant and campus scope; assessments of
+   * classes outside the campus scope are dropped, and a teacher without academic:manage sees only assessments of an
+   * assigned class/course scope. Draft entries are never returned (ADR-0011: published rows are read, never rewritten).
+   */
+  async listPublishedForStaffViewer(context: RequestContext, studentId: string): Promise<StudentPublishedGradeItem[]> {
+    const tenantId = requireTenantId(context);
+    if (context.subjectType === "STUDENT" || context.subjectType === "GUARDIAN") throw new ForbiddenException("STAFF_CONTEXT_REQUIRED");
+    const student = await this.students.findById(studentId);
+    if (!student || student.tenantId !== tenantId || student.deletedAt) throw new NotFoundException("STUDENT_NOT_FOUND");
+    const studentClass = student.classId ? await this.classes.findById(student.classId) : undefined;
+    const studentCampusId = studentClass && studentClass.tenantId === tenantId && !studentClass.deletedAt ? studentClass.campusId : undefined;
+    if (!campusAllows(context, { campusId: studentCampusId })) throw new NotFoundException("STUDENT_NOT_FOUND");
+
+    const visibleClassIds = new Set(await this.visibleClassIds(context, tenantId));
+    let rows = (await this.store.listPublishedByStudent(student.id))
+      .filter(({ assessment, entry }) => assessment.tenantId === tenantId && Boolean(entry.publishedAt) && visibleClassIds.has(assessment.classId));
+    if (isTeacherSubjectContext(context) && !hasCapability(context, "academic:manage")) {
+      const assignments = await this.teacherAssignments.listByTeacher(context.subjectId);
+      const today = todayIso();
+      rows = rows.filter(({ assessment }) => hasTeacherAssignmentForScope(assignments, assignmentScope(assessment), today));
+    }
+    return rows
+      .map(({ assessment, entry }) => ({
+        assessmentId: assessment.id,
+        classId: assessment.classId,
+        courseId: assessment.courseId,
+        kind: assessment.kind,
+        title: assessment.title,
+        heldOn: assessment.heldOn,
+        score: entry.absent ? null : entry.score,
+        absent: entry.absent,
+        maxScore: assessment.maxScore,
+        version: entry.version,
+        publishedAt: entry.publishedAt as string,
+      }))
+      .sort((left, right) => right.heldOn.localeCompare(left.heldOn) || left.assessmentId.localeCompare(right.assessmentId));
   }
 
   /** DEC-20261012-01: classes the signed-in teacher may author for; staff get an empty list and use the full references. */

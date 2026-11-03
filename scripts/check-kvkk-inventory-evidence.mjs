@@ -27,7 +27,8 @@ const expectedPurgeCoverage = {
     "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
     "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt",
   ],
-  teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
+  // DEC-20261102-08: the teacher purge also anonymises the linked Employee row (employee.* fields).
+  teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "employee.firstName", "employee.lastName", "employee.nationalIdEncrypted", "employee.nationalIdHash", "employee.phone", "employee.workEmail"],
   guardian: ["firstName", "lastName", "phone"],
   user: ["email", "name"],
 };

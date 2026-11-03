@@ -1,5 +1,13 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import {
+  buildAttendanceCalendarMonth,
+  defaultCalendarMonth,
+  describeCalendarDay,
+  shiftMonth,
+} from "../app/(app)/portals/_shared/attendance-calendar-model.js";
+import { buildStudentTimeline } from "../app/(app)/kurum/ogrenciler/student-timeline-model.js";
+
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -405,6 +413,198 @@ test.describe("Öğrenci ilişki haritası", () => {
   }
 });
 
+// DEC-20261102-08: Student 360 timeline (staff only) and the monthly attendance calendar on the records tab.
+test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
+  test("model: takvim Pazartesi başlar, günün en ağır durumunu ve kayıt sayısını taşır", () => {
+    const month = buildAttendanceCalendarMonth([
+      { date: "2026-11-02", status: "PRESENT" },
+      { date: "2026-11-02", status: "LATE" },
+      { date: "2026-11-03", status: "ABSENT" },
+      { date: "2026-11-04", status: "EXCUSED" },
+      { date: "2026-11-05", status: "ABSENT", deletedAt: "2026-11-06T08:00:00.000Z" },
+      { date: "2026-10-31", status: "ABSENT" },
+    ], "2026-11");
+    expect(month.label).toBe("Kasım 2026");
+    // 1 Kasım 2026 Pazar: ilk haftada altı boş hücre, ardından 1.
+    expect(month.weeks[0]?.slice(0, 6)).toEqual([null, null, null, null, null, null]);
+    expect(month.weeks[0]?.[6]?.day).toBe(1);
+    expect(month.weeks.every((week) => week.length === 7)).toBe(true);
+    const days = month.weeks.flat().filter((day) => day !== null);
+    expect(days).toHaveLength(30);
+    const second = days.find((day) => day?.dateKey === "2026-11-02");
+    expect(second?.status).toBe("LATE");
+    expect(second && describeCalendarDay(second)).toBe("2 kayıt: 1 Var, 1 Geç");
+    expect(days.find((day) => day?.dateKey === "2026-11-05")?.status).toBeUndefined();
+    expect(month.counts).toEqual({ ABSENT: 1, EXCUSED: 1, LATE: 1, PRESENT: 1 });
+    expect(month.total).toBe(4);
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(defaultCalendarMonth([{ date: "2026-09-10" }], "2026-11-02")).toBe("2026-09");
+    expect(defaultCalendarMonth([{ date: "2026-11-01" }, { date: "2026-09-10" }], "2026-11-02")).toBe("2026-11");
+    expect(defaultCalendarMonth([], "2026-11-02")).toBe("2026-11");
+  });
+
+  test("model: zaman çizelgesi pencere dışını, Var yoklamasını, not metnini ve yetkisiz finansı göstermez", () => {
+    const sources = {
+      attendance: [
+        { classId: "class-11a", date: "2026-10-30", id: "att-absent", status: "ABSENT" as const, studentId: "student-a", tenantId: "t" },
+        { date: "2026-10-30", id: "att-present", status: "PRESENT" as const, studentId: "student-a", tenantId: "t" },
+        { date: "2026-06-01", id: "att-old", status: "LATE" as const, studentId: "student-a", tenantId: "t" },
+      ],
+      development: [{ createdAt: "2026-10-20T09:00:00.000Z", id: "dev-1", periodLabel: "1. Dönem", visibility: "INTERNAL" as const }],
+      examPoints: [
+        { examTitle: "Deneme B", generatedAt: "2026-10-25T09:00:00.000Z", snapshotId: "snap-b", total: { net: 15, questionCount: 20, successRate: 75 } },
+        // Sınav 19 Ekim 00:30 (İstanbul) yapıldı, raporu 27 Ekim'de hazırlandı: olay sınav gününe yerleşir.
+        { examStartsAt: "2026-10-18T21:30:00.000Z", examTitle: "Deneme C", generatedAt: "2026-10-27T09:00:00.000Z", snapshotId: "snap-c", total: { net: 12, questionCount: 20, successRate: 60 } },
+      ],
+      grades: [{ absent: false, assessmentId: "g-1", classId: "class-11a", courseId: "course-math", heldOn: "2026-10-28", kind: "WRITTEN" as const, maxScore: 100, publishedAt: "2026-10-29T09:00:00.000Z", score: 72.5, title: "1. Yazılı", version: 2 }],
+      homework: [],
+      materialAssignments: [],
+      paymentPlans: [{
+        createdAt: "2026-09-01T09:00:00.000Z", currency: "TRY", id: "plan-1", installments: [], studentId: "student-a", tenantId: "t", totalAmount: 100000,
+        transactions: [{ amount: 150000, createdAt: "2026-10-15T09:00:00.000Z", currency: "TRY", id: "tx-1", method: "CASH" as const, paidAt: "2026-10-15T09:00:00.000Z", planId: "plan-1", receiptNo: "R-1", tenantId: "t" }],
+      }],
+      teacherNotes: [{ body: "Gizli not metni", createdAt: "2026-10-26T09:00:00.000Z", developmentStatus: "WATCH", id: "note-1", studentId: "student-a", teacherId: "teacher-a", tenantId: "t", visibility: "INTERNAL" as const }],
+    };
+    const context = {
+      canViewFinance: false,
+      courseNameById: new Map([["course-math", "Matematik"]]),
+      fromKey: "2026-08-04",
+      links: { attendance: ({ classId }: { classId?: string }) => (classId ? `/kurum/devamsizlik?classId=${classId}` : "/kurum/devamsizlik") },
+      todayKey: "2026-11-02",
+    };
+    const events = buildStudentTimeline(sources as never, context);
+    expect(events.map((event) => event.id)).toEqual([
+      "attendance:att-absent",
+      "grade:g-1",
+      "note:note-1",
+      "exam:snap-b",
+      "development:dev-1",
+      "exam:snap-c",
+    ]);
+    expect(events[0]).toMatchObject({ link: { href: "/kurum/devamsizlik?classId=class-11a" }, status: { label: "Yok" }, title: "Yoklama: Yok" });
+    expect(events.find((event) => event.kind === "grade")?.detail).toBe("Matematik · 72,5 / 100 · 2. sürüm");
+    expect(events.find((event) => event.id === "exam:snap-b")).toMatchObject({
+      dateKey: "2026-10-25",
+      detail: "Başarı %75,0 · Net 15,00 · Soru 20",
+      // Sınav tarihi saklanmamış raporda olay rapor tarihindedir ve sınav sonucu gibi adlandırılmaz.
+      title: "Sınav raporu hazırlandı: Deneme B",
+    });
+    expect(events.find((event) => event.id === "exam:snap-c")).toMatchObject({ dateKey: "2026-10-19", title: "Sınav sonucu: Deneme C" });
+    expect(JSON.stringify(events)).not.toContain("Gizli not metni");
+
+    const withFinance = buildStudentTimeline(sources as never, { ...context, canViewFinance: true });
+    expect(withFinance.find((event) => event.kind === "finance")).toMatchObject({ detail: "1.500,00 TRY · Makbuz R-1", title: "Ödeme alındı" });
+  });
+
+  test("kayıtlar sekmesi olayları sınırlı isteklerle gösterir; genel bakış bu istekleri atmaz", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, { requestedPaths, section: "overview", timelineFixtures: true });
+    const timelinePaths = ["/grade-assessments/students/student-a/published", "/homework/students/student-a", "/development/assessments", "/attendance"];
+    expect(requestedPaths.filter((path) => timelinePaths.includes(path))).toEqual([]);
+
+    await openRecordsSection(page);
+    const timeline = page.getByRole("region", { name: "Öğrenci zaman çizelgesi" });
+    const events = timeline.getByRole("table", { name: "Zaman çizelgesi olayları" });
+    await expect(events).toContainText("Yoklama: Yok");
+    await expect(events).toContainText("Yazılı: 1. Yazılı");
+    await expect(events).toContainText("Ödev teslim edildi: Kesirler");
+    await expect(events).toContainText("Gelişim değerlendirmesi: 1. Dönem");
+    await expect(events).toContainText("Ödeme alındı");
+    await expect(events).not.toContainText("Mentör gizli notu");
+    await expect(events.getByRole("link", { name: "Yoklama" }).first()).toHaveAttribute("href", "/kurum/devamsizlik?classId=class-11a");
+    await expect(timeline.getByRole("alert")).toHaveCount(0);
+
+    // Olay başına istek atılmaz: her kaynak bir kez, ödev teslimleri öğrenci başına tek istekle gelir.
+    for (const path of ["/grade-assessments/students/student-a/published", "/homework/students/student-a", "/development/assessments"]) {
+      expect(requestedPaths.filter((requested) => requested === path)).toHaveLength(1);
+    }
+    expect(requestedPaths.some((path) => /^\/homework\/[^/]+\/submissions$/.test(path))).toBe(false);
+
+    await timeline.getByLabel("Olay türü").selectOption("grade");
+    await expect(events.getByRole("row")).toHaveCount(2);
+    await expect(events).toContainText("Yazılı: 1. Yazılı");
+
+    const calendar = page.getByRole("region", { name: "Yoklama takvimi" });
+    await expect(calendar.getByRole("list", { name: "Takvim açıklaması" })).toContainText("Var");
+    await expect(calendar.getByRole("list", { name: "Takvim açıklaması" })).toContainText("İzinli");
+    await expect(calendar.getByRole("table", { name: /Yoklama takvimi/ })).toContainText("Yok");
+    await expect(calendar.getByRole("table", { name: "Ayın yoklama kayıtları" })).toContainText("Yok");
+    await expect(calendar.getByRole("button", { name: "Sonraki ay" })).toBeDisabled();
+    const attendanceRequestsBefore = requestedPaths.filter((path) => path === "/attendance").length;
+    await calendar.getByRole("button", { name: "Önceki ay" }).click();
+    await expect.poll(() => requestedPaths.filter((path) => path === "/attendance").length).toBe(attendanceRequestsBefore + 1);
+    await expect(calendar.getByRole("button", { name: "Sonraki ay" })).toBeEnabled();
+    await expectNoHorizontalOverflow(page, "student-timeline-desktop");
+    await expectNoUnlabeledControls(page, "student-timeline-desktop");
+  });
+
+  test("finans yetkisi olmayan rol finans olayı görmez; dar ekranda taşma olmaz", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 320, height: 800 }, { requestedPaths, roles: ["ASSISTANT_ADMIN"], timelineFixtures: true });
+    const events = page.getByRole("region", { name: "Öğrenci zaman çizelgesi" }).getByRole("table", { name: "Zaman çizelgesi olayları" });
+    await expect(events).toContainText("Yoklama: Yok");
+    await expect(events).not.toContainText("Ödeme alındı");
+    await expect(page.getByRole("region", { name: "Öğrenci zaman çizelgesi" }).getByLabel("Olay türü").locator("option", { hasText: "Finans" })).toHaveCount(0);
+    expect(requestedPaths).not.toContain("/payment-plans");
+    await expect(page.getByRole("region", { name: "Yoklama takvimi" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "student-timeline-320");
+  });
+});
+
+function istanbulDayKey(offsetDays = 0) {
+  const today = new Intl.DateTimeFormat("en-CA", { day: "2-digit", month: "2-digit", timeZone: "Europe/Istanbul", year: "numeric" }).format(new Date());
+  const date = new Date(`${today}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function mockStudentTimelineResponse(pathName: string, url: URL): { data: unknown } | undefined {
+  const today = istanbulDayKey();
+  if (pathName === "/attendance") {
+    const records = [
+      { classId: "class-11a", date: today, id: "att-today-absent", status: "ABSENT", studentId: "student-a", tenantId: "tenant-flow" },
+      { classId: "class-11a", date: today, id: "att-today-present", status: "PRESENT", studentId: "student-a", tenantId: "tenant-flow" },
+      { classId: "class-11a", date: istanbulDayKey(-40), id: "att-old-late", status: "LATE", studentId: "student-a", tenantId: "tenant-flow" },
+    ];
+    const from = url.searchParams.get("dateFrom") ?? "0000-00-00";
+    const to = url.searchParams.get("dateTo") ?? "9999-99-99";
+    return { data: records.filter((record) => record.date >= from && record.date <= to) };
+  }
+  if (pathName === "/grade-assessments/students/student-a/published") {
+    return {
+      data: [{
+        absent: false, assessmentId: "grade-1", classId: "class-11a", courseId: "course-math", heldOn: istanbulDayKey(-3), kind: "WRITTEN",
+        maxScore: 100, publishedAt: `${istanbulDayKey(-2)}T09:00:00.000Z`, score: 80, title: "1. Yazılı", version: 1,
+      }],
+    };
+  }
+  if (pathName === "/homework/students/student-a") {
+    return {
+      data: [{
+        classId: "class-11a", id: "homework-1", title: "Kesirler",
+        submission: { homeworkId: "homework-1", status: "SUBMITTED", studentId: "student-a", submittedAt: `${istanbulDayKey(-1)}T09:00:00.000Z` },
+      }],
+    };
+  }
+  if (pathName === "/development/assessments") {
+    return {
+      data: [{
+        createdAt: `${istanbulDayKey(-5)}T09:00:00.000Z`, id: "dev-1", mentorNote: "Mentör gizli notu", periodLabel: "1. Dönem", scores: [],
+        studentId: "student-a", teacherId: "teacher-a", tenantId: "tenant-flow", visibility: "INTERNAL",
+      }],
+    };
+  }
+  if (pathName === "/payment-plans") {
+    return {
+      data: [{
+        createdAt: `${istanbulDayKey(-30)}T09:00:00.000Z`, currency: "TRY", id: "plan-1", installments: [], studentId: "student-a", tenantId: "tenant-flow", totalAmount: 150000,
+        transactions: [{ amount: 150000, createdAt: `${istanbulDayKey(-4)}T09:00:00.000Z`, currency: "TRY", id: "tx-1", method: "CASH", paidAt: `${istanbulDayKey(-4)}T09:00:00.000Z`, planId: "plan-1", receiptNo: "R-1", tenantId: "tenant-flow" }],
+      }],
+    };
+  }
+  return undefined;
+}
+
 interface GuardianLinkMock {
   /** KV-3e: the first N link writes answer 409 GUARDIAN_LINK_CONCURRENT_UPDATE. */
   concurrentConflicts?: number;
@@ -434,6 +634,7 @@ async function openStudentDetail(
     requestedPaths?: string[];
     roles?: string[];
     section?: "overview" | "records";
+    timelineFixtures?: boolean;
   } = {},
 ) {
   await page.setViewportSize(viewport);
@@ -464,6 +665,7 @@ async function installStudentApiMocks(
     guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
     roles?: string[];
+    timelineFixtures?: boolean;
   } = {},
 ) {
   await page.route("**/api/v1/**", async (route) => {
@@ -538,9 +740,13 @@ async function installStudentApiMocks(
 function mockApiResponse(
   pathName: string,
   url: URL,
-  options: { auditLogRequests?: URL[]; examFixtures?: boolean; guardianLink?: { guardianId?: string }; roles?: string[] },
+  options: { auditLogRequests?: URL[]; examFixtures?: boolean; guardianLink?: { guardianId?: string }; roles?: string[]; timelineFixtures?: boolean },
 ): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
+  if (options.timelineFixtures) {
+    const timelineResponse = mockStudentTimelineResponse(pathName, url);
+    if (timelineResponse) return timelineResponse;
+  }
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/students/student-a/overview") {

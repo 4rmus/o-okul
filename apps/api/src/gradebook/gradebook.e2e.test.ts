@@ -112,6 +112,36 @@ describe("Gradebook API", () => {
       .set("Idempotency-Key", "ak7-tenant-b").expect(404);
   });
 
+  it("DEC-20261102-08: Öğrenci 360 yayınlanmış notları personele okur; portal ve başka tenant reddedilir", async () => {
+    const created = await request(server)
+      .post("/grade-assessments")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ classId: "class-a", courseId: "course-math", termId: "term-2026-spring", kind: "PROJECT", title: "Zaman çizelgesi projesi", heldOn: "2026-04-02" })
+      .expect(201);
+    const id = (created.body as { id: string }).id;
+    await request(server).put(`/grade-assessments/${id}/entries`).set("Authorization", `Bearer ${admin}`)
+      .send({ entries: [{ studentId: "student-a", score: 91, absent: false }] }).expect(200);
+
+    const draftOnly = await request(server).get("/grade-assessments/students/student-a/published").set("Authorization", `Bearer ${admin}`).expect(200);
+    expect(JSON.stringify(draftOnly.body)).not.toContain(id);
+
+    await request(server).post(`/grade-assessments/${id}/publish`).set("Authorization", `Bearer ${admin}`)
+      .set("Idempotency-Key", "timeline-grade-publish-a").expect(201);
+    for (const token of [admin, teacher]) {
+      await request(server).get("/grade-assessments/students/student-a/published").set("Authorization", `Bearer ${token}`).expect(200)
+        .expect(({ body }) => expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({ assessmentId: id, classId: "class-a", score: 91, version: 1, publishedAt: expect.any(String) }),
+        ])));
+    }
+
+    for (const email of ["student-a@example.test", "guardian-a@example.test"]) {
+      const token = await login(email);
+      await request(server).get("/grade-assessments/students/student-a/published").set("Authorization", `Bearer ${token}`).expect(403);
+    }
+    await request(server).get("/grade-assessments/students/student-a/published").set("Authorization", `Bearer ${tenantB}`).expect(404);
+    await request(server).get("/grade-assessments/students/student-a/published").expect(401);
+  });
+
   it("değerlendirme oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
     const body = { classId: "class-a", courseId: "course-math", termId: "term-2026-spring", kind: "WRITTEN", title: "Tekil yazılı", heldOn: "2026-03-20" };
     const send = (payload: object) => request(server)

@@ -1,7 +1,13 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
-import type { AcademicTermRecord, AcademicYearRecord } from "@o-okul/shared-types";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import type {
+  AcademicCalendarActivateRequest,
+  AcademicCalendarActivateResult,
+  AcademicTermRecord,
+  AcademicYearRecord,
+} from "@o-okul/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { zodBody } from "../http/zod-validation.js";
+import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { SchoolService } from "./school.service.js";
@@ -15,6 +21,11 @@ import {
   type AcademicYearCreateBody,
   type AcademicYearUpdateBody,
 } from "./school-validation.js";
+
+const academicCalendarActivateBodySchema = z.object({
+  academicYearId: requiredTrimmedString,
+  termId: requiredTrimmedString,
+}).strict() satisfies z.ZodType<AcademicCalendarActivateRequest>;
 
 @Controller()
 export class AcademicCalendarController {
@@ -54,6 +65,22 @@ export class AcademicCalendarController {
     await this.school.deleteAcademicYear(getRequestContext(), id);
   }
 
+  // DEC-20261102-08: last step of the term-transition wizard; one transaction, explicit tenant predicates.
+  @Post("academic-calendar/activate")
+  @RequireCapability("academic:manage")
+  async activate(
+    @Body(zodBody(academicCalendarActivateBodySchema)) body: AcademicCalendarActivateRequest,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<AcademicCalendarActivateResult> {
+    const result = await this.school.activateAcademicCalendar(getRequestContext(), body, idempotencyKey);
+    return {
+      academicYear: toAcademicYearResponse(result.academicYear),
+      term: toAcademicTermResponse(result.term),
+      deactivatedAcademicYearIds: result.deactivatedAcademicYearIds,
+      deactivatedTermIds: result.deactivatedTermIds,
+    };
+  }
+
   @Get("academic-terms")
   @RequireCapability("academic:read-catalog")
   async listTerms(@Query() query: ListQuery): Promise<AcademicTermRecord[]> {
@@ -87,6 +114,21 @@ export class AcademicCalendarController {
   async deleteTerm(@Param("id") id: string): Promise<void> {
     await this.school.deleteAcademicTerm(getRequestContext(), id);
   }
+}
+
+function toAcademicYearResponse(record: AcademicYearRecord): AcademicYearRecord {
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    name: record.name,
+    startsAt: record.startsAt,
+    endsAt: record.endsAt,
+    isActive: record.isActive,
+  };
+}
+
+function toAcademicTermResponse(record: AcademicTermRecord): AcademicTermRecord {
+  return { ...toAcademicYearResponse(record), academicYearId: record.academicYearId };
 }
 
 const academicYearListFields = [

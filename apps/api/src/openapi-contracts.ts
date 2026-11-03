@@ -1,5 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { licensePlanCodes } from "@o-okul/shared-types";
+import { licensePlanCodes, listExportKinds, listExportMaxRowCount } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -1188,6 +1188,19 @@ const academicTermRecordSchema = objectSchema({
   isActive: { type: "boolean" },
 }, ["id", "tenantId", "academicYearId", "name", "startsAt", "endsAt", "isActive"]);
 
+// DEC-20261102-08: term-transition wizard activation.
+const academicCalendarActivateRequestSchema = objectSchema({
+  academicYearId: stringSchema({ minLength: 1 }),
+  termId: stringSchema({ minLength: 1 }),
+}, ["academicYearId", "termId"]);
+
+const academicCalendarActivateResultSchema = objectSchema({
+  academicYear: academicYearRecordSchema,
+  term: academicTermRecordSchema,
+  deactivatedAcademicYearIds: arraySchema(stringSchema()),
+  deactivatedTermIds: arraySchema(stringSchema()),
+}, ["academicYear", "term", "deactivatedAcademicYearIds", "deactivatedTermIds"]);
+
 const academicTermCreateRequestSchema = objectSchema({
   academicYearId: stringSchema(),
   endsAt: stringSchema({ format: "date" }),
@@ -1775,6 +1788,22 @@ const auditLogListItemRecordSchema = objectSchema({
   entityLabel: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "actionLabel", "actorLabel", "category", "entityLabel", "createdAt"]);
+
+const listExportAuditRequestSchema = objectSchema({
+  filtersSummary: stringSchema({
+    maxLength: 300,
+    description: "Active filter keys as `key` or `key=value` pairs joined with `;`; search text is never sent and the `q` value is dropped.",
+  }),
+  list: stringSchema({ enum: [...listExportKinds] }),
+  rowCount: integerSchema({ minimum: 1, maximum: listExportMaxRowCount }),
+}, ["filtersSummary", "list", "rowCount"]);
+
+const listExportAuditRecordSchema = objectSchema({
+  auditId: stringSchema(),
+  list: stringSchema({ enum: [...listExportKinds] }),
+  recordedAt: stringSchema({ format: "date-time" }),
+  rowCount: integerSchema({ minimum: 1 }),
+}, ["auditId", "list", "recordedAt", "rowCount"]);
 
 const studentAuditSummaryRecordSchema = objectSchema({
   id: stringSchema(),
@@ -2791,6 +2820,7 @@ const reportStudentProgressPointSchema = objectSchema({
   snapshotId: stringSchema(),
   courseId: stringSchema(),
   examTitle: stringSchema(),
+  examStartsAt: stringSchema({ format: "date-time" }),
   generatedAt: stringSchema({ format: "date-time" }),
   termId: stringSchema(),
   total: reportScoreSummarySchema,
@@ -2806,6 +2836,46 @@ const reportStudentProgressSchema = objectSchema({
   netDelta: numberSchema(),
   standardScoreDelta: numberSchema(),
 }, ["tenantId", "examId", "studentId", "points"]);
+
+// DEC-20261102-08 (G3): level analytics read from level snapshots only; Başarı % is primary, Net/Soru context.
+const gradeLevelAnalyticsExamRefProperties = {
+  examId: stringSchema(),
+  examTitle: stringSchema(),
+  examType: stringSchema(),
+  startsAt: stringSchema({ format: "date-time" }),
+};
+
+const gradeLevelAnalyticsPointSchema = objectSchema({
+  ...gradeLevelAnalyticsExamRefProperties,
+  snapshotId: stringSchema(),
+  generatedAt: stringSchema({ format: "date-time" }),
+  participantCount: integerSchema({ minimum: 0 }),
+  successRate: numberSchema(),
+  net: numberSchema(),
+  questionCount: numberSchema(),
+}, ["examId", "examTitle", "snapshotId", "participantCount"]);
+
+const gradeLevelAnalyticsSchema = objectSchema({
+  tenantId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  examType: stringSchema(),
+  termId: stringSchema(),
+  series: arraySchema(objectSchema({
+    examType: stringSchema(),
+    points: arraySchema(gradeLevelAnalyticsPointSchema),
+  }, ["points"])),
+  needsRefresh: arraySchema(objectSchema({
+    ...gradeLevelAnalyticsExamRefProperties,
+    snapshotId: stringSchema(),
+    staleAt: stringSchema({ format: "date-time" }),
+  }, ["examId", "examTitle", "snapshotId"])),
+  noParticipants: arraySchema(objectSchema({
+    ...gradeLevelAnalyticsExamRefProperties,
+    snapshotId: stringSchema(),
+    generatedAt: stringSchema({ format: "date-time" }),
+  }, ["examId", "examTitle", "snapshotId"])),
+  withoutLevelReport: arraySchema(objectSchema(gradeLevelAnalyticsExamRefProperties, ["examId", "examTitle"])),
+}, ["tenantId", "gradeLevelId", "series", "needsRefresh", "noParticipants", "withoutLevelReport"]);
 
 const reportStudentSnapshotSchema = objectSchema({
   tenantId: stringSchema(),
@@ -2917,16 +2987,18 @@ const studentEnrollmentActionRequestSchema = objectSchema({
   termId: stringSchema(),
 });
 
+// DEC-20261102-08: bulk renewal names its year and term together (they must belong together) or neither, and then
+// uses the active year and its active term. At most 500 students per request (studentBulkMaxStudentCount).
 const studentBulkEnrollmentRequestSchema = objectSchema({
   academicYearId: stringSchema(),
   classId: stringSchema(),
   gradeLevelId: stringSchema(),
   classIdBySourceClassId: looseObjectSchema(),
   startsAt: stringSchema({ format: "date" }),
-  studentIds: arraySchema(stringSchema(), { minItems: 1 }),
+  studentIds: arraySchema(stringSchema(), { minItems: 1, maxItems: 500 }),
   termId: stringSchema(),
   useAutomaticClassMapping: { type: "boolean" },
-});
+}, ["studentIds"]);
 
 const studentEnrollmentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -3027,6 +3099,59 @@ const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
 }, ["updatedCount", "enrollments"]);
+
+const studentBulkRenewConflictCodeSchema = {
+  type: "string",
+  enum: [
+    "STUDENT_NOT_ACTIVE", "CLASS_NOT_FOUND", "GRADE_LEVEL_NOT_FOUND", "STUDENT_GRADE_LEVEL_REQUIRED",
+    "STUDENT_CLASS_GRADE_LEVEL_MISMATCH", "STUDENT_CAMPUS_SCOPE_FORBIDDEN", "FORBIDDEN_TENANT",
+  ],
+};
+
+const studentBulkRenewDryRunResultSchema = objectSchema({
+  dryRun: { type: "boolean", enum: [true] },
+  academicYearId: stringSchema(),
+  termId: stringSchema(),
+  termStartsAt: stringSchema({ format: "date" }),
+  termStarted: { type: "boolean" },
+  canActivateCalendar: { type: "boolean" },
+  items: arraySchema(objectSchema({
+    studentId: stringSchema(),
+    status: studentStatusSchema,
+    sourceClassId: stringSchema(),
+    sourceGradeLevelId: stringSchema(),
+    currentTermId: stringSchema(),
+    targetClassId: stringSchema(),
+    targetGradeLevelId: stringSchema(),
+    conflict: studentBulkRenewConflictCodeSchema,
+    addsToQuota: { type: "boolean" },
+  }, ["studentId", "status", "addsToQuota"])),
+  conflictStudentIds: arraySchema(stringSchema()),
+  quota: objectSchema({
+    limit: integerSchema({ minimum: 0 }),
+    current: integerSchema({ minimum: 0 }),
+    incoming: integerSchema({ minimum: 0 }),
+    wouldExceed: { type: "boolean" },
+  }, ["limit", "current", "incoming", "wouldExceed"]),
+}, ["dryRun", "academicYearId", "termId", "termStartsAt", "termStarted", "canActivateCalendar", "items", "conflictStudentIds", "quota"]);
+
+const studentBulkStatusRequestSchema = objectSchema({
+  confirmIrreversible: { type: "boolean", enum: [true] },
+  status: { type: "string", enum: ["GRADUATED", "TRANSFERRED"] },
+  studentIds: arraySchema(stringSchema({ minLength: 1 }), { minItems: 1, maxItems: 1000 }),
+}, ["confirmIrreversible", "status", "studentIds"]);
+
+const studentBulkStatusResultSchema = objectSchema({
+  updatedCount: integerSchema({ minimum: 0 }),
+  unchangedCount: integerSchema({ minimum: 0 }),
+  results: arraySchema(objectSchema({
+    studentId: stringSchema(),
+    outcome: { type: "string", enum: ["UPDATED", "UNCHANGED"] },
+    previousStatus: studentStatusSchema,
+    status: studentStatusSchema,
+    portalAccessSuspended: { type: "boolean" },
+  }, ["studentId", "outcome", "previousStatus", "status", "portalAccessSuspended"])),
+}, ["updatedCount", "unchangedCount", "results"]);
 
 const studentImportRequestSchema = objectSchema({
   fileBase64: stringSchema({ minLength: 1 }),
@@ -3341,6 +3466,19 @@ const kv4SchoolGradesSchema = arraySchema(objectSchema({
   maxScore: { type: "number" },
   version: integerSchema({ minimum: 1 }),
 }, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"]));
+const studentPublishedGradeItemSchema = objectSchema({
+  assessmentId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  kind: gradeAssessmentKindSchema,
+  title: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
+  absent: { type: "boolean" },
+  maxScore: { type: "number" },
+  version: integerSchema({ minimum: 1 }),
+  publishedAt: stringSchema({ format: "date-time" }),
+}, ["assessmentId", "classId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version", "publishedAt"]);
 const guardianStudentOverviewSchema = objectSchema({
   student: objectSchema({
     id: stringSchema(),
@@ -3440,6 +3578,9 @@ const operationContracts: Record<string, OperationContract> = {
       courseId: stringSchema({ minLength: 1 }),
       termId: stringSchema({ minLength: 1 }),
     }, ["classId"])),
+  },
+  "get /api/v1/grade-assessments/students/{studentId}/published": {
+    responseBody: arraySchema(studentPublishedGradeItemSchema),
   },
   "get /api/v1/grade-assessments/{id}": {
     responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, entries: arraySchema(gradeEntryRecordSchema) }, ["assessment", "entries"]),
@@ -3929,6 +4070,12 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(studentAuditSummaryRecordSchema),
     listResponse: true,
   },
+  "post /api/v1/audit/list-exports": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: listExportAuditRequestSchema,
+    responseBody: listExportAuditRecordSchema,
+  },
   "post /api/v1/exams/{examId}/answer-keys": {
     idempotent: true,
     requestBody: objectSchema({
@@ -4092,6 +4239,14 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/exams/{examId}/reports/snapshots/{snapshotId}/students/{studentId}/error-booklet": {
     responseBody: reportErrorBookletSchema,
+  },
+  "get /api/v1/reports/grade-level-analytics": {
+    responseBody: gradeLevelAnalyticsSchema,
+    queryParameters: [
+      { name: "gradeLevelId", required: true, schema: stringSchema({ minLength: 1, maxLength: 128 }) },
+      { name: "examType", schema: stringSchema({ maxLength: 32 }) },
+      { name: "termId", schema: stringSchema({ maxLength: 128 }) },
+    ],
   },
   ...portalReportOperationContracts,
   "post /api/v1/students": {
@@ -4344,6 +4499,11 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "delete /api/v1/academic-years/{id}": {
     noContent: true,
+  },
+  "post /api/v1/academic-calendar/activate": {
+    idempotent: true,
+    requestBody: academicCalendarActivateRequestSchema,
+    responseBody: academicCalendarActivateResultSchema,
   },
   "get /api/v1/academic-terms": {
     responseBody: arraySchema(academicTermRecordSchema),
@@ -4764,6 +4924,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/homework/{id}": {
     responseBody: homeworkRecordSchema,
   },
+  "get /api/v1/homework/students/{studentId}": {
+    responseBody: arraySchema(studentHomeworkRecordSchema),
+  },
   "post /api/v1/homework": {
     requestBody: homeworkCreateRequestSchema,
     responseBody: homeworkRecordSchema,
@@ -4959,6 +5122,16 @@ const operationContracts: Record<string, OperationContract> = {
     idempotent: true,
     requestBody: studentBulkEnrollmentRequestSchema,
     responseBody: studentBulkEnrollmentResultSchema,
+  },
+  "post /api/v1/students/enrollments/bulk-renew/dry-run": {
+    requestBody: studentBulkEnrollmentRequestSchema,
+    responseBody: studentBulkRenewDryRunResultSchema,
+  },
+  "post /api/v1/students/bulk-status": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentBulkStatusRequestSchema,
+    responseBody: studentBulkStatusResultSchema,
   },
   "post /api/v1/students/{id}/enrollments/renew": {
     idempotent: true,

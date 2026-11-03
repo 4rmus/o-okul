@@ -1,6 +1,13 @@
 export type TenantId = string;
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
-export { developmentMentorNoteMaxLength, licensePlanCodes, trialLicenseLimits } from "./domain.js";
+export {
+  developmentMentorNoteMaxLength,
+  licensePlanCodes,
+  listExportKinds,
+  listExportMaxRowCount,
+  studentBulkMaxStudentCount,
+  trialLicenseLimits,
+} from "./domain.js";
 export type { LicensePlanCode, LicenseState } from "./domain.js";
 export {
   assertProductEvent,
@@ -41,6 +48,8 @@ export {
   tenantRoles,
 } from "./role-capabilities.js";
 export type {
+  AcademicCalendarActivateRequest,
+  AcademicCalendarActivateResult,
   AcademicTermRecord,
   AcademicTermCreateRequest,
   AcademicTermUpdateRequest,
@@ -140,6 +149,12 @@ export type {
   EmployeeCreateRequest,
   EmployeeInvitationRole,
   EmployeeStaffRole,
+  GradeLevelAnalytics,
+  GradeLevelAnalyticsExamRef,
+  GradeLevelAnalyticsNeedsRefreshItem,
+  GradeLevelAnalyticsNoParticipantsItem,
+  GradeLevelAnalyticsPoint,
+  GradeLevelAnalyticsSeries,
   GradeLevelRecord,
   GradeLevelCourseRecord,
   GradeLevelCreateRequest,
@@ -199,6 +214,9 @@ export type {
   IdentityInvitationSubjectType,
   LearningOutcomeRecord,
   LearningOutcomeCreateRequest,
+  ListExportAuditRecord,
+  ListExportAuditRequest,
+  ListExportKind,
   LearningOutcomeUpdateRequest,
   LoginRequest,
   TenantLoginContextResponse,
@@ -314,6 +332,13 @@ export type {
   StudentCreateRequest,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult,
+  StudentBulkRenewConflictCode,
+  StudentBulkRenewDryRunItem,
+  StudentBulkRenewDryRunResult,
+  StudentBulkStatusItemResult,
+  StudentBulkStatusRequest,
+  StudentBulkStatusResult,
+  StudentBulkStatusTarget,
   StudentEnrollmentRecord,
   StudentHomeworkRecord,
   StudentEnrollmentActionRequest,
@@ -349,6 +374,7 @@ export type {
   GuardianExamSeriesPoint,
   GuardianSchoolGradeItem,
   GuardianStudentOverview,
+  StudentPublishedGradeItem,
   StudentSelfOverview,
   StudentContactUpdateRequest,
   StudentRecord,

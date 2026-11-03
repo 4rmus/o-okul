@@ -4058,9 +4058,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const workflowDialog = await openCommandPalette(page);
   await workflowDialog.getByLabel("Komut ara").fill("dönem");
   await expect(workflowDialog.getByRole("option", { name: /Yeni dönem açılışı/ })).toHaveCount(0);
-  await workflowDialog.getByRole("option", { name: /Öğrenci dönem geçişi/ }).click();
-  await expect(page).toHaveURL(/\/kurum\/ogrenciler$/);
-  await expect(heading(page, { name: "Öğrenciler" })).toBeVisible();
+  await workflowDialog.getByRole("option", { name: /Dönem geçişi.*İş akışı/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/donem-gecisi$/);
+  await expect(heading(page, { name: "Dönem Geçişi" })).toBeVisible();
   const examCloseDialog = await openCommandPalette(page);
   await examCloseDialog.getByLabel("Komut ara").fill("sınav sonrası");
   await examCloseDialog.getByRole("option", { name: /Sınav sonrası kapanış/ }).click();

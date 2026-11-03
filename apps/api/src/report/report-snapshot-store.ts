@@ -11,9 +11,75 @@ export interface ReportSnapshotStore {
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
   markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
   purgeStudentIdentity?(tenantId: string, studentId: string): Promise<number>;
+  listGradeLevelAnalytics?(tenantId: string, filters: GradeLevelAnalyticsFilters): Promise<GradeLevelAnalyticsProjection>;
 }
 
 export const reportSnapshotStoreToken = Symbol("ReportSnapshotStore");
+
+export const gradeLevelAnalyticsReportType = "EXAM_RESULT_SUMMARY";
+
+export interface GradeLevelAnalyticsFilters {
+  gradeLevelId: string;
+  examType?: string;
+  termId?: string;
+}
+
+/**
+ * DEC-20261102-08 (G3) projection row: one level snapshot per exam (READY preferred over STALE, then the newest), read
+ * without the student array. Only `averages` and `resultCount` leave the snapshot JSON.
+ */
+export interface GradeLevelAnalyticsSnapshotRow {
+  snapshotId: string;
+  examId: string;
+  examTitle: string;
+  examType?: string;
+  examStartsAt?: string;
+  status: "READY" | "STALE";
+  generatedAt?: string;
+  staleAt?: string;
+  resultCount?: number;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+}
+
+export interface GradeLevelAnalyticsExamRow {
+  examId: string;
+  examTitle: string;
+  examType?: string;
+  examStartsAt?: string;
+}
+
+export interface GradeLevelAnalyticsProjection {
+  snapshots: GradeLevelAnalyticsSnapshotRow[];
+  examsWithoutLevelReport: GradeLevelAnalyticsExamRow[];
+}
+
+/** In-memory twin inputs: the exam and term columns the Postgres projection joins. */
+export interface InMemoryGradeLevelAnalyticsExam {
+  id: string;
+  tenantId: string;
+  title: string;
+  status: string;
+  gradeLevelId?: string;
+  examType?: string;
+  startsAt?: string;
+  deletedAt?: string;
+}
+
+export interface InMemoryGradeLevelAnalyticsTerm {
+  id: string;
+  tenantId: string;
+  startsAt: string;
+  endsAt: string;
+  deletedAt?: string;
+}
+
+export interface InMemoryReportSnapshotStoreOptions {
+  snapshots?: ReportSnapshotRecord[];
+  exams?: InMemoryGradeLevelAnalyticsExam[];
+  terms?: InMemoryGradeLevelAnalyticsTerm[];
+}
 
 const demoSnapshots: ReportSnapshotRecord[] = [
   {
@@ -105,7 +171,91 @@ const demoSnapshots: ReportSnapshotRecord[] = [
 ];
 
 export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
-  private readonly snapshots = demoSnapshots.map((record) => ({ ...record }));
+  private readonly snapshots: ReportSnapshotRecord[];
+  private readonly exams: InMemoryGradeLevelAnalyticsExam[];
+  private readonly terms: InMemoryGradeLevelAnalyticsTerm[];
+
+  constructor(options: InMemoryReportSnapshotStoreOptions = {}) {
+    this.snapshots = (options.snapshots ?? demoSnapshots).map((record) => ({ ...record }));
+    this.exams = (options.exams ?? []).map((exam) => ({ ...exam }));
+    this.terms = (options.terms ?? []).map((term) => ({ ...term }));
+  }
+
+  async listGradeLevelAnalytics(tenantId: string, filters: GradeLevelAnalyticsFilters): Promise<GradeLevelAnalyticsProjection> {
+    const term = filters.termId
+      ? this.terms.find((candidate) => candidate.tenantId === tenantId && candidate.id === filters.termId && !candidate.deletedAt)
+      : undefined;
+    const examMatches = (exam: InMemoryGradeLevelAnalyticsExam | undefined): exam is InMemoryGradeLevelAnalyticsExam =>
+      Boolean(exam)
+      && exam!.tenantId === tenantId
+      && !exam!.deletedAt
+      && exam!.status === "PUBLISHED"
+      && (!filters.examType || exam!.examType === filters.examType);
+    // Same rule as the Postgres projection: the exam's Türkiye calendar day must fall inside the term window.
+    const examInTerm = (exam: InMemoryGradeLevelAnalyticsExam) =>
+      Boolean(term && exam.startsAt && isIstanbulDateWithin(exam.startsAt, term.startsAt, term.endsAt));
+    const snapshotMatchesTerm = (snapshot: ReportSnapshotRecord, exam: InMemoryGradeLevelAnalyticsExam) =>
+      !filters.termId
+      || snapshot.termId === filters.termId
+      || (!snapshot.termId && examInTerm(exam));
+    const isLevelSnapshot = (snapshot: ReportSnapshotRecord) =>
+      snapshot.tenantId === tenantId
+      && snapshot.gradeLevelId === filters.gradeLevelId
+      && !snapshot.campusId
+      && !snapshot.classId
+      && !snapshot.courseId
+      && snapshot.reportType === gradeLevelAnalyticsReportType
+      && !snapshot.deletedAt
+      && (snapshot.status === "READY" || snapshot.status === "STALE");
+
+    const selected = new Map<string, { snapshot: ReportSnapshotRecord; exam: InMemoryGradeLevelAnalyticsExam }>();
+    for (const snapshot of this.snapshots) {
+      if (!isLevelSnapshot(snapshot)) continue;
+      const exam = this.exams.find((candidate) => candidate.tenantId === tenantId && candidate.id === snapshot.examId);
+      if (!examMatches(exam) || !snapshotMatchesTerm(snapshot, exam)) continue;
+      const current = selected.get(snapshot.examId);
+      if (!current || compareLevelSnapshotPreference(snapshot, current.snapshot) < 0) {
+        selected.set(snapshot.examId, { snapshot, exam });
+      }
+    }
+
+    const snapshots = [...selected.values()].map(({ snapshot, exam }) => {
+      const averages = readObject(snapshot.snapshotData?.averages);
+      return {
+        snapshotId: snapshot.id,
+        examId: exam.id,
+        examTitle: exam.title,
+        ...(exam.examType ? { examType: exam.examType } : {}),
+        ...(exam.startsAt ? { examStartsAt: exam.startsAt } : {}),
+        status: snapshot.status as "READY" | "STALE",
+        ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
+        ...(snapshot.staleAt ? { staleAt: snapshot.staleAt } : {}),
+        ...optionalNumberField("resultCount", snapshot.snapshotData?.resultCount),
+        ...optionalNumberField("successRate", averages.successRate),
+        ...optionalNumberField("net", averages.net),
+        ...optionalNumberField("questionCount", averages.questionCount),
+      } satisfies GradeLevelAnalyticsSnapshotRow;
+    }).sort(compareAnalyticsRows);
+
+    const examsWithoutLevelReport = this.exams
+      .filter((exam) =>
+        examMatches(exam)
+        && exam.gradeLevelId === filters.gradeLevelId
+        && (!filters.termId || examInTerm(exam))
+        && !this.snapshots.some((snapshot) =>
+          isLevelSnapshot(snapshot)
+          && snapshot.examId === exam.id
+          && (!filters.termId || !snapshot.termId || snapshot.termId === filters.termId)))
+      .map((exam) => ({
+        examId: exam.id,
+        examTitle: exam.title,
+        ...(exam.examType ? { examType: exam.examType } : {}),
+        ...(exam.startsAt ? { examStartsAt: exam.startsAt } : {}),
+      } satisfies GradeLevelAnalyticsExamRow))
+      .sort(compareAnalyticsRows);
+
+    return { snapshots, examsWithoutLevelReport };
+  }
 
   async listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]> {
     return this.snapshots.filter(
@@ -285,6 +435,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            '{}'::jsonb AS "inputRefs",
            jsonb_build_object(
              'generatedAt', snapshot."snapshotData"->'generatedAt',
+             'examStartsAt', snapshot."snapshotData"->'examStartsAt',
              'students', (
                SELECT jsonb_agg(student ORDER BY ordinality)
                FROM jsonb_array_elements(snapshot."snapshotData"->'students')
@@ -425,6 +576,104 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
     });
   }
 
+  async listGradeLevelAnalytics(tenantId: string, filters: GradeLevelAnalyticsFilters): Promise<GradeLevelAnalyticsProjection> {
+    // Level snapshot = gradeLevelId = L with no campus, class or course filter. The term filter accepts a snapshot
+    // generated for that term, or a term-less level snapshot of an exam held inside the term window. Exam.startsAt is a
+    // timestamp without time zone holding UTC wall time (Prisma); the term window is compared on the Türkiye calendar
+    // day, so an exam at 00:30 Istanbul on the first term day belongs to the term, not to the UTC day before. The exam
+    // start is read back as timestamptz so node-pg returns the same instant whatever the process time zone is.
+    const levelSnapshotPredicate = `
+           snapshot."tenantId" = $1
+           AND snapshot."gradeLevelId" = $2
+           AND snapshot."campusId" IS NULL
+           AND snapshot."classId" IS NULL
+           AND snapshot."courseId" IS NULL
+           AND snapshot."reportType" = $5
+           AND snapshot."deletedAt" IS NULL
+           AND snapshot."status" IN ('READY', 'STALE')`;
+    const examPredicate = `
+           exam."tenantId" = $1
+           AND exam."deletedAt" IS NULL
+           AND exam."status" = 'PUBLISHED'
+           AND ($3::text IS NULL OR exam."examType" = $3)`;
+    const examInTerm = `EXISTS (
+             SELECT 1
+             FROM "AcademicTerm" AS term
+             WHERE term."tenantId" = $1
+               AND term."id" = $4
+               AND term."deletedAt" IS NULL
+               AND ((exam."startsAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Istanbul')::date
+                 BETWEEN term."startsAt" AND term."endsAt"
+           )`;
+    const values = [
+      tenantId,
+      filters.gradeLevelId,
+      filters.examType ?? null,
+      filters.termId ?? null,
+      gradeLevelAnalyticsReportType,
+    ];
+    return withTenantQuery(this.pool, async (client) => {
+      const snapshots = await client.query<GradeLevelAnalyticsSnapshotDbRow>(
+        `SELECT DISTINCT ON (snapshot."examId")
+           snapshot."id" AS "snapshotId",
+           snapshot."examId",
+           exam."title" AS "examTitle",
+           exam."examType",
+           exam."startsAt" AT TIME ZONE 'UTC' AS "examStartsAt",
+           snapshot."status",
+           snapshot."generatedAt",
+           snapshot."staleAt",
+           snapshot."snapshotData"->'resultCount' AS "resultCount",
+           snapshot."snapshotData"->'averages'->'successRate' AS "successRate",
+           snapshot."snapshotData"->'averages'->'net' AS "net",
+           snapshot."snapshotData"->'averages'->'questionCount' AS "questionCount"
+         FROM "ReportSnapshot" AS snapshot
+         JOIN "Exam" AS exam
+           ON exam."tenantId" = snapshot."tenantId"
+          AND exam."id" = snapshot."examId"
+         WHERE ${levelSnapshotPredicate}
+           AND ${examPredicate}
+           AND (
+             $4::text IS NULL
+             OR snapshot."termId" = $4
+             OR (snapshot."termId" IS NULL AND ${examInTerm})
+           )
+         ORDER BY
+           snapshot."examId",
+           (snapshot."status" = 'READY') DESC,
+           (snapshot."termId" IS NULL) DESC,
+           snapshot."generatedAt" DESC NULLS LAST,
+           snapshot."updatedAt" DESC,
+           snapshot."id" ASC`,
+        values,
+      );
+      const examsWithoutLevelReport = await client.query<GradeLevelAnalyticsExamDbRow>(
+        `SELECT
+           exam."id" AS "examId",
+           exam."title" AS "examTitle",
+           exam."examType",
+           exam."startsAt" AT TIME ZONE 'UTC' AS "examStartsAt"
+         FROM "Exam" AS exam
+         WHERE ${examPredicate}
+           AND exam."gradeLevelId" = $2
+           AND ($4::text IS NULL OR ${examInTerm})
+           AND NOT EXISTS (
+             SELECT 1
+             FROM "ReportSnapshot" AS snapshot
+             WHERE ${levelSnapshotPredicate}
+               AND snapshot."examId" = exam."id"
+               AND ($4::text IS NULL OR snapshot."termId" IS NULL OR snapshot."termId" = $4)
+           )
+         ORDER BY exam."startsAt" ASC NULLS LAST, exam."id" ASC`,
+        values,
+      );
+      return {
+        snapshots: snapshots.rows.map(toGradeLevelAnalyticsSnapshotRow).sort(compareAnalyticsRows),
+        examsWithoutLevelReport: examsWithoutLevelReport.rows.map(toGradeLevelAnalyticsExamRow).sort(compareAnalyticsRows),
+      };
+    });
+  }
+
   async purgeStudentIdentity(tenantId: string, studentId: string): Promise<number> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query(
@@ -509,6 +758,107 @@ function toReportSnapshotRecord(row: ReportSnapshotRow): ReportSnapshotRecord {
   };
 }
 
+interface GradeLevelAnalyticsExamDbRow {
+  examId: string;
+  examTitle: string;
+  examType: string | null;
+  examStartsAt: Date | string | null;
+}
+
+interface GradeLevelAnalyticsSnapshotDbRow extends GradeLevelAnalyticsExamDbRow {
+  snapshotId: string;
+  status: string;
+  generatedAt: Date | string | null;
+  staleAt: Date | string | null;
+  resultCount: unknown;
+  successRate: unknown;
+  net: unknown;
+  questionCount: unknown;
+}
+
+function toGradeLevelAnalyticsExamRow(row: GradeLevelAnalyticsExamDbRow): GradeLevelAnalyticsExamRow {
+  const examStartsAt = toOptionalIsoString(row.examStartsAt);
+  return {
+    examId: row.examId,
+    examTitle: row.examTitle,
+    ...(row.examType ? { examType: row.examType } : {}),
+    ...(examStartsAt ? { examStartsAt } : {}),
+  };
+}
+
+function toGradeLevelAnalyticsSnapshotRow(row: GradeLevelAnalyticsSnapshotDbRow): GradeLevelAnalyticsSnapshotRow {
+  if (row.status !== "READY" && row.status !== "STALE") {
+    throw new Error("REPORT_SNAPSHOT_STATUS_INVALID");
+  }
+  const generatedAt = toOptionalIsoString(row.generatedAt);
+  const staleAt = toOptionalIsoString(row.staleAt);
+  return {
+    ...toGradeLevelAnalyticsExamRow(row),
+    snapshotId: row.snapshotId,
+    status: row.status,
+    ...(generatedAt ? { generatedAt } : {}),
+    ...(staleAt ? { staleAt } : {}),
+    ...optionalNumberField("resultCount", row.resultCount),
+    ...optionalNumberField("successRate", row.successRate),
+    ...optionalNumberField("net", row.net),
+    ...optionalNumberField("questionCount", row.questionCount),
+  };
+}
+
+/** READY before STALE, a term-less level snapshot before a term-filtered one, then the newest generation. */
+function compareLevelSnapshotPreference(left: ReportSnapshotRecord, right: ReportSnapshotRecord): number {
+  return Number(right.status === "READY") - Number(left.status === "READY")
+    || Number(!right.termId) - Number(!left.termId)
+    || compareOptionalTimeDesc(left.generatedAt, right.generatedAt)
+    || compareOptionalTimeDesc(left.updatedAt, right.updatedAt)
+    || left.id.localeCompare(right.id);
+}
+
+function compareOptionalTimeDesc(left: string | undefined, right: string | undefined): number {
+  if (left === right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return Date.parse(right) - Date.parse(left);
+}
+
+/** Chronological by exam date (undated last), then exam id, so both store twins return the same order. */
+function compareAnalyticsRows(left: GradeLevelAnalyticsExamRow, right: GradeLevelAnalyticsExamRow): number {
+  if (left.examStartsAt !== right.examStartsAt) {
+    if (!left.examStartsAt) return 1;
+    if (!right.examStartsAt) return -1;
+    const delta = Date.parse(left.examStartsAt) - Date.parse(right.examStartsAt);
+    if (delta !== 0) return delta;
+  }
+  return left.examId < right.examId ? -1 : left.examId > right.examId ? 1 : 0;
+}
+
+const istanbulDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Istanbul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Türkiye calendar day ("2026-09-01") of an ISO instant; a bare calendar day is returned as is. */
+function istanbulDateKey(value: string): string | undefined {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : istanbulDateFormatter.format(date);
+}
+
+function isIstanbulDateWithin(value: string, startsAt: string, endsAt: string): boolean {
+  const day = istanbulDateKey(value);
+  return day !== undefined && day >= startsAt.slice(0, 10) && day <= endsAt.slice(0, 10);
+}
+
+function readObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function optionalNumberField<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, number>> {
+  return typeof value === "number" && Number.isFinite(value) ? { [key]: value } as Record<TKey, number> : {};
+}
+
 function toReportIndexRecord(snapshot: ReportSnapshotRecord): ReportSnapshotRecord {
   const students = Array.isArray(snapshot.snapshotData?.students)
     ? snapshot.snapshotData.students.flatMap((value) => {
@@ -541,6 +891,9 @@ function toStudentProgressRecord(snapshot: ReportSnapshotRecord, studentId: stri
     snapshotData: {
       ...(typeof snapshot.snapshotData?.generatedAt === "string"
         ? { generatedAt: snapshot.snapshotData.generatedAt }
+        : {}),
+      ...(typeof snapshot.snapshotData?.examStartsAt === "string"
+        ? { examStartsAt: snapshot.snapshotData.examStartsAt }
         : {}),
       students: snapshotStudents(snapshot).filter((student) => student.studentId === studentId),
     },

@@ -271,7 +271,13 @@ describe("Student profile + TC API", () => {
     await request(server)
       .post("/students/enrollments/bulk-renew")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ studentIds: ["student-a", "student-b"], classId: "class-a", startsAt: "2026-09-01" })
+      .send({
+        studentIds: ["student-a", "student-b"],
+        classId: "class-a",
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        startsAt: "2026-09-01",
+      })
       .expect(403);
 
     await request(server)

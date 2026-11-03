@@ -562,6 +562,8 @@ async function applyBackfill(queryable, owners) {
       AND employee."tenantId" = teacher."tenantId" AND employee."deletedAt" IS NULL
       AND ((teacher."userId" IS NOT NULL AND employee."userId" = teacher."userId")
         OR (teacher."nationalIdHash" IS NOT NULL AND employee."nationalIdHash" = teacher."nationalIdHash"))`);
+  // DEC-20261102-08: PostgresTeacherStore.create also matches by userId or national ID hash and inserts with the same
+  // 'employee-' || md5(tenantId:teacherId) id, so teachers created by the app are already linked and skipped here.
   await queryable.query(`
     INSERT INTO "Employee" (
       "id", "tenantId", "firstName", "lastName", "nationalIdEncrypted", "nationalIdHash",

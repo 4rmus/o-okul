@@ -4,6 +4,8 @@ import { ExamPersistenceModule } from "../exam/exam-persistence.module.js";
 import { createBullTenantQueueProducer } from "../queue/bullmq-producer.js";
 import { SchoolModule } from "../school/school.module.js";
 import { TenantPersistenceModule } from "../tenant/tenant-persistence.module.js";
+import { GradeLevelAnalyticsController } from "./grade-level-analytics.controller.js";
+import { GradeLevelAnalyticsService } from "./grade-level-analytics.service.js";
 import { ReportGenerationController } from "./report-generation.controller.js";
 import {
   createReportGenerationJobStatusReader,
@@ -17,9 +19,10 @@ import { createReportSnapshotStore, reportSnapshotStoreToken } from "./report-sn
 
 @Module({
   imports: [AuditLogModule, ExamPersistenceModule, SchoolModule, TenantPersistenceModule],
-  controllers: [ReportGenerationController],
+  controllers: [ReportGenerationController, GradeLevelAnalyticsController],
   providers: [
     ReportGenerationService,
+    GradeLevelAnalyticsService,
     {
       provide: reportSnapshotStoreToken,
       useFactory: createReportSnapshotStore,

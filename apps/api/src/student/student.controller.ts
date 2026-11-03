@@ -4,6 +4,7 @@ import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
 import { optionalQueryEnum } from "../listing/cursor-query-schema.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
+import { ReadOnlyOperation } from "../http/read-only-operation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
@@ -13,6 +14,7 @@ import {
   StudentImportService,
 } from "./student-import.service.js";
 import { StudentGuardianInvitationService } from "./student-guardian-invitation.service.js";
+import { studentBulkMaxStudentCount } from "@o-okul/shared-types";
 import {
   StudentService,
   type StudentBulkEnrollmentInput,
@@ -27,6 +29,9 @@ import type {
   GuardianStudentRecord,
   PublicStudentProfileRecord,
   PublicStudentRecord,
+  StudentBulkRenewDryRunResult,
+  StudentBulkStatusRequest,
+  StudentBulkStatusResult,
   StudentEnrollmentRecord,
   StudentExportResult,
   StudentGuardianInvitationBulkRequest,
@@ -118,11 +123,18 @@ const studentEnrollmentActionBodySchema = z.object({
   startsAt: optionalStudentEnrollmentStartsAtSchema,
   termId: optionalTrimmedString,
 }).strict();
+// One bulk renewal (and its preview) names at most studentBulkMaxStudentCount students; the wizard sends batches.
 const studentBulkEnrollmentBodySchema = studentEnrollmentActionBodySchema.extend({
   classIdBySourceClassId: z.record(z.string(), z.string()).optional(),
-  studentIds: z.array(requiredTrimmedString).optional(),
+  studentIds: z.array(requiredTrimmedString).max(studentBulkMaxStudentCount).optional(),
   useAutomaticClassMapping: z.boolean().optional(),
 }).strict();
+// DEC-20261102-08: year-end exits only; the explicit flag records that the caller confirmed an irreversible change.
+const studentBulkStatusBodySchema = z.object({
+  confirmIrreversible: z.literal(true),
+  status: z.enum(["GRADUATED", "TRANSFERRED"]),
+  studentIds: z.array(requiredTrimmedString).min(1).max(1000),
+}).strict() satisfies z.ZodType<StudentBulkStatusRequest>;
 const studentGuardianInvitationBulkBodySchema = z.object({
   studentIds: z.array(requiredTrimmedString).min(1).max(500),
 }).strict() satisfies z.ZodType<StudentGuardianInvitationBulkRequest>;
@@ -238,6 +250,24 @@ export class StudentController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<StudentBulkEnrollmentResult> {
     return this.students.bulkRenewEnrollments(getRequestContext(), body, idempotencyKey);
+  }
+
+  @Post("enrollments/bulk-renew/dry-run")
+  @ReadOnlyOperation()
+  @RequireCapability("student:manage")
+  dryRunBulkRenewEnrollments(
+    @Body(zodBody(studentBulkEnrollmentBodySchema)) body: StudentBulkEnrollmentInput,
+  ): Promise<StudentBulkRenewDryRunResult> {
+    return this.students.dryRunBulkRenewEnrollments(getRequestContext(), body);
+  }
+
+  @Post("bulk-status")
+  @RequireCapability("student:manage")
+  bulkUpdateStatus(
+    @Body(zodBody(studentBulkStatusBodySchema)) body: StudentBulkStatusRequest,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentBulkStatusResult> {
+    return this.students.bulkUpdateStatus(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("guardian-invitations")

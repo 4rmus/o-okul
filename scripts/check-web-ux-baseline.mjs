@@ -93,6 +93,10 @@ const files = {
   "apps/web/app/(app)/_shared/report-analysis.ts": readFileSync("apps/web/app/(app)/_shared/report-analysis.ts", "utf8"),
   "apps/web/app/(app)/portals/guardian-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/guardian-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/activity-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/activity-panels.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/attendance-calendar.tsx": readFileSync("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts": readFileSync("apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", "utf8"),
   "apps/web/app/(app)/portals/_shared/guardian-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/guardian-panels.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/announcements-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/announcements-panel.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/development-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/development-panel.tsx", "utf8"),
@@ -280,7 +284,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts e2e-next/term-transition-wizard-next.spec.ts e2e-next/list-export-next.spec.ts e2e-next/level-analytics-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -428,6 +432,25 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
 // DEC-20260930-03 (G8): bağlantı duvarının CSS pin'leri emekli; eşdeğer kanıt yukarıdaki requireNoTokens,
 // kurum dashboard golden'ı (route-family-dashboard-*) ve aşağıdaki ölü CSS yasağı.
 requireNoTokens("apps/web/app/globals.css", [".next-dashboard-compact-links", ".next-institution-growth-side"]);
+// DEC-20260930-03 + DEC-20261102-08 (W10 CSS konsolidasyonu): hiçbir bileşenin üretmediği sınıfların CSS pin'leri
+// emekli. Eşdeğer kanıt: aşağıdaki ölü seçici yasağı, kaynakta sınıfın yokluğunu tutan requireNoTokens blokları
+// (kurum-dashboard, student-detail-page) ve değişmeyen ui-visual-qa / route-family golden'ları.
+// Eşleme tablosu: docs/css-consolidation-2026-11.md.
+requireNoTokens("apps/web/app/globals.css", [
+  ".next-role-grid",
+  ".next-role-fieldset",
+  ".next-student-decision-grid",
+  ".next-student-decision-card",
+  ".next-onboarding-check",
+  ".next-optical-answer-key-grid",
+  ".next-optical-answer-key-panel",
+  ".next-dashboard-overview-grid",
+  ".next-dashboard-overview-card",
+  ".next-invitation-context",
+  ".next-checkbox-row",
+  ".next-demo-account",
+  ".next-portal-today-list",
+]);
 
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "ActionCard,",
@@ -1816,7 +1839,7 @@ requireTokens("apps/web/src/route-manifest.js", [
   'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" })',
   'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" })',
   'navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" })',
-  'commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage")',
+  'commandAction("/kurum/donem-gecisi", "Dönem geçişi", "İş akışı", "setup:manage")',
 ]);
 
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
@@ -3688,15 +3711,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-exam-selected-meta",
   ".next-support-ticket-meta",
   ".next-material-selected-meta",
-  ".next-role-grid",
-  ".next-role-grid--compact",
-  ".next-role-grid .uh-checkbox",
-  ".next-role-grid .uh-checkbox:has(.uh-checkbox__input:checked)",
-  ".next-role-fieldset__hint",
-  ".next-student-decision-grid",
-  ".next-student-decision-card.uh-action-card",
-  ".next-student-decision-card .uh-action-card__value",
-  ".next-student-decision-card .uh-action-card__detail",
   'data-tone="success"',
   'data-tone="warning"',
   'data-tone="info"',
@@ -3733,7 +3747,6 @@ requireTokens("apps/web/app/globals.css", [
   '.next-onboarding-upload-status[data-state="ready"]',
   '.next-onboarding-upload-status[data-state="error"]',
   ".next-onboarding-class-counts .uh-field",
-  ".next-onboarding-check .uh-checkbox__input",
   "font-size: 30px",
   ".next-evidence-trust .uh-panel__header",
   ".next-evidence-trust__description",
@@ -4684,6 +4697,55 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/activity-panels.tsx", [
   "?? note.studentId",
 ]);
 
+// DEC-20261102-08: monthly attendance calendar (Student 360 + student/guardian portals) and the staff-only Student 360
+// timeline. The calendar only reads attendance the surface already loads; a status is never shown by colour alone and the
+// grid has a table equivalent. The timeline reads a fixed set of bounded requests, never one per event, and never shows
+// teacher-note or mentor-note text.
+requireTokens("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", [
+  'title = "Yoklama takvimi"',
+  'aria-label="Ay seçimi"',
+  'aria-label="Takvim açıklaması"',
+  "attendanceStatusMarks[day.status]",
+  'className="uh-visually-hidden"',
+  'aria-current={isToday ? "date" : undefined}',
+  'caption="Ayın yoklama kayıtları"',
+  "export function PortalAttendanceCalendar",
+]);
+requireNoTokens("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", ["apiRequest", "useQuery", "rgb(", "oklch("]);
+requireTokens("apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts", [
+  'ABSENT: "Yok"',
+  'EXCUSED: "İzinli"',
+  'LATE: "Geç"',
+  'PRESENT: "Var"',
+  "const statusSeverity",
+  "% 7",
+]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", [
+  'aria-label="Öğrenci zaman çizelgesi"',
+  'title="Zaman çizelgesi"',
+  "/grade-assessments/students/${encodedStudentId}/published",
+  "/homework/students/${encodedStudentId}",
+  "`${apiBaseUrl}/development/assessments`",
+  'hasCapabilityForRoles(roles, "attendance:read-assigned")',
+  'hasCapabilityForRoles(roles, "academic:read")',
+  'hasCapabilityForRoles(roles, "homework:read-assigned")',
+  "paymentPlans: canViewFinance ? paymentPlans : []",
+  "canAccessHref(roles, href, persona)",
+  "showRecordTable",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", [".map(async", "Promise.all(", "note.body", "mentorNote"]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", [
+  "`Başarı ${formatPercentNumber(successRate)}`",
+  "`Net ${formatNet(net)}`",
+  "`Soru ${questionCount}`",
+  "if (context.canViewFinance)",
+  'record.status === "PRESENT"',
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", ["note.body", "mentorNote", "apiRequest"]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", ["<StudentTimelinePanel", "<StudentAttendanceCalendar"]);
+requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", ["<PortalAttendanceCalendar records={data.attendance} />"]);
+requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", ['{view === "student" ? <PortalAttendanceCalendar records={data?.attendance ?? []} /> : null}']);
+
 requireTokens("apps/web/app/(app)/portals/_shared/development-panel.tsx", [
   "Panel,",
   'aria-label="Gelişim trendi"',
@@ -4999,11 +5061,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-optical-format-grid",
   ".next-optical-format-panel .uh-panel__body",
   ".next-optical-format-details",
-  ".next-optical-answer-key-grid",
-  ".next-optical-answer-key-panel .uh-panel__body",
-  ".next-optical-answer-key-panel label",
-  ".next-optical-answer-key-panel select",
-  ".next-optical-answer-key-panel p",
   ".next-optical-upload-grid",
   ".next-optical-upload-panel .uh-panel__body",
   ".next-optical-upload-panel label",
@@ -5027,10 +5084,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-system-summary-card",
   ".next-system-summary-card .uh-metric-card__label",
   ".next-system-summary-card .uh-metric-card__description",
-  ".next-dashboard-overview-grid",
-  ".next-dashboard-overview-card",
-  ".next-dashboard-overview-card .uh-metric-card__label",
-  ".next-dashboard-overview-card .uh-metric-card__description",
   ".next-dashboard-onboarding .uh-panel__header",
   ".next-dashboard-onboarding .uh-panel__body:empty",
   ".next-attention-panel .uh-panel__body",
@@ -5551,8 +5604,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 98) {
-    failures.push(`${path} route manifest must contain exactly 98 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 100) {
+    failures.push(`${path} route manifest must contain exactly 100 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5562,8 +5615,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 98) {
-    failures.push(`${path} must give all 98 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 100) {
+    failures.push(`${path} must give all 100 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

@@ -6,6 +6,7 @@ import type {
   GradeAssessmentRecord,
   GradeEntriesSaveRequest,
   GradeEntryRecord,
+  StudentPublishedGradeItem,
   TeacherAuthoringScope,
 } from "@o-okul/shared-types";
 import { z } from "zod";
@@ -63,6 +64,13 @@ export class GradebookController {
   @RequireCapability("academic:read")
   teacherScopes(): Promise<TeacherAuthoringScope[]> {
     return this.gradebook.listTeacherAuthoringScopes(getRequestContext());
+  }
+
+  /** DEC-20261102-08 Student 360 timeline: published grades of one student; the service enforces campus and teacher scope. */
+  @Get("students/:studentId/published")
+  @RequireCapability("academic:read")
+  listPublishedForStudent(@Param("studentId") studentId: string): Promise<StudentPublishedGradeItem[]> {
+    return this.gradebook.listPublishedForStaffViewer(getRequestContext(), studentId);
   }
 
   @Get(":id")

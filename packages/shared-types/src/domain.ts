@@ -733,6 +733,19 @@ export interface AcademicYearUpdateRequest {
   isActive?: boolean;
 }
 
+/** DEC-20261102-08: activates one academic year and one of its terms together; every other one is deactivated. */
+export interface AcademicCalendarActivateRequest {
+  academicYearId: string;
+  termId: string;
+}
+
+export interface AcademicCalendarActivateResult {
+  academicYear: AcademicYearRecord;
+  term: AcademicTermRecord;
+  deactivatedAcademicYearIds: string[];
+  deactivatedTermIds: string[];
+}
+
 export interface AcademicTermRecord {
   id: string;
   tenantId: string;
@@ -1119,7 +1132,14 @@ export interface StudentEnrollmentActionRequest {
   startsAt?: string;
 }
 
+/**
+ * Upper bound of `studentIds` in one bulk renewal and its preview; a caller with more students sends several
+ * requests. Same bound as the bulk guardian invitation.
+ */
+export const studentBulkMaxStudentCount = 500;
+
 export interface StudentBulkEnrollmentRequest extends StudentEnrollmentActionRequest {
+  /** 1 to `studentBulkMaxStudentCount` students. */
   studentIds?: string[];
   classIdBySourceClassId?: Record<string, string>;
   useAutomaticClassMapping?: boolean;
@@ -1128,6 +1148,78 @@ export interface StudentBulkEnrollmentRequest extends StudentEnrollmentActionReq
 export interface StudentBulkEnrollmentResult {
   updatedCount: number;
   enrollments: StudentEnrollmentRecord[];
+}
+
+/** Why a bulk renewal would refuse a student; `STUDENT_NOT_ACTIVE` turns the whole batch into a 409. */
+export type StudentBulkRenewConflictCode =
+  | "STUDENT_NOT_ACTIVE"
+  | "CLASS_NOT_FOUND"
+  | "GRADE_LEVEL_NOT_FOUND"
+  | "STUDENT_GRADE_LEVEL_REQUIRED"
+  | "STUDENT_CLASS_GRADE_LEVEL_MISMATCH"
+  | "STUDENT_CAMPUS_SCOPE_FORBIDDEN"
+  | "FORBIDDEN_TENANT";
+
+export interface StudentBulkRenewDryRunItem {
+  studentId: string;
+  status: StudentStatus;
+  sourceClassId?: string;
+  sourceGradeLevelId?: string;
+  /** Term of the student's open enrollment; equal to the target term once the student has been renewed into it. */
+  currentTermId?: string;
+  targetClassId?: string;
+  targetGradeLevelId?: string;
+  conflict?: StudentBulkRenewConflictCode;
+  /** True when the renewal would add this student to the licensed active-student count. */
+  addsToQuota: boolean;
+}
+
+/** DEC-20261102-08: preview of POST /students/enrollments/bulk-renew; writes nothing. */
+export interface StudentBulkRenewDryRunResult {
+  dryRun: true;
+  academicYearId: string;
+  termId: string;
+  termStartsAt: string;
+  /** False while the target term starts after today; the wizard applies only a started term. */
+  termStarted: boolean;
+  /**
+   * Whether the caller may run POST /academic-calendar/activate (academic:manage and a tenant-wide scope). The wizard
+   * refuses to start a transition it could not finish, so campus-restricted staff never leave one half applied.
+   */
+  canActivateCalendar: boolean;
+  items: StudentBulkRenewDryRunItem[];
+  conflictStudentIds: string[];
+  quota: {
+    limit: number;
+    current: number;
+    incoming: number;
+    wouldExceed: boolean;
+  };
+}
+
+/** Year-end exits: GRADUATED (mezun) or TRANSFERRED (ayrılan/nakil). */
+export type StudentBulkStatusTarget = "GRADUATED" | "TRANSFERRED";
+
+export interface StudentBulkStatusRequest {
+  /** 1 to 1000 students. */
+  studentIds: string[];
+  status: StudentBulkStatusTarget;
+  /** Must be true: the change suspends portal access and is not undone by the wizard. */
+  confirmIrreversible: true;
+}
+
+export interface StudentBulkStatusItemResult {
+  studentId: string;
+  outcome: "UPDATED" | "UNCHANGED";
+  previousStatus: StudentStatus;
+  status: StudentStatus;
+  portalAccessSuspended: boolean;
+}
+
+export interface StudentBulkStatusResult {
+  updatedCount: number;
+  unchangedCount: number;
+  results: StudentBulkStatusItemResult[];
 }
 
 export interface StudentImportRequest {
@@ -2342,6 +2434,32 @@ export interface StudentAuditSummaryRecord {
   createdAt: string;
 }
 
+/**
+ * Lists whose screen offers a masked CSV export (DEC-20261102-08). The export is built in the browser from the
+ * cells the list already shows; the API only records who exported which list and how many rows, never row content.
+ */
+export const listExportKinds = ["students", "teachers", "classes", "attendance"] as const;
+export type ListExportKind = (typeof listExportKinds)[number];
+/** Upper bound for one export: a list screen shows at most one page of rows. */
+export const listExportMaxRowCount = 1000;
+
+export interface ListExportAuditRequest {
+  list: ListExportKind;
+  rowCount: number;
+  /**
+   * Active filter keys of the list screen, `key` or `key=value` pairs joined with `;` (for example
+   * `q;classId=class-a;sort=-date;page=2`). Search text is never sent: the `q` key carries no value.
+   */
+  filtersSummary: string;
+}
+
+export interface ListExportAuditRecord {
+  auditId: string;
+  list: ListExportKind;
+  recordedAt: string;
+  rowCount: number;
+}
+
 export type ExamScoreType = "LGS" | "TYT" | "SAY" | "EA" | "SOZ";
 export type ExamScoreStatus = "CALCULATED" | "NOT_ELIGIBLE" | "MISSING_TYT";
 
@@ -2714,6 +2832,9 @@ export interface ReportStudentProgressPoint {
   snapshotId: string;
   courseId?: string;
   examTitle?: string;
+  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); absent for snapshots that did not store it. */
+  examStartsAt?: string;
+  /** Report generation time; points are ordered by it. */
   generatedAt?: string;
   termId?: string;
   total: ReportStudentScoreSummary;
@@ -2728,6 +2849,61 @@ export interface ReportStudentProgress {
   successRateDelta?: number;
   netDelta?: number;
   standardScoreDelta?: number;
+}
+
+/**
+ * DEC-20261102-08 (G3): grade-level analytics. Built only from level snapshots (gradeLevelId = L, no campus, class or
+ * course filter) that are READY, not deleted and belong to a PUBLISHED exam. Values are read as stored in the snapshot;
+ * nothing is recomputed. Başarı % (successRate) is the cross-exam metric; Net and Soru are context.
+ */
+export interface GradeLevelAnalyticsExamRef {
+  examId: string;
+  examTitle: string;
+  examType?: ExamType | string;
+  startsAt?: string;
+}
+
+export interface GradeLevelAnalyticsPoint extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  generatedAt?: string;
+  participantCount: number;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+}
+
+export interface GradeLevelAnalyticsSeries {
+  /** One Başarı % line per exam type; undefined groups exams without a type. */
+  examType?: ExamType | string;
+  points: GradeLevelAnalyticsPoint[];
+}
+
+/** A level snapshot marked STALE: shown as "rapor yenilenmeli", never as a point. */
+export interface GradeLevelAnalyticsNeedsRefreshItem extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  staleAt?: string;
+}
+
+/**
+ * A READY level snapshot with no results (resultCount 0 or missing): its stored averages are zero, so it is listed apart
+ * and never plotted as 0 % success.
+ */
+export interface GradeLevelAnalyticsNoParticipantsItem extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  generatedAt?: string;
+}
+
+export interface GradeLevelAnalytics {
+  tenantId: string;
+  gradeLevelId: string;
+  examType?: string;
+  termId?: string;
+  series: GradeLevelAnalyticsSeries[];
+  needsRefresh: GradeLevelAnalyticsNeedsRefreshItem[];
+  /** READY level snapshots without participants; shown as "katılımcı yok", never as a point. */
+  noParticipants: GradeLevelAnalyticsNoParticipantsItem[];
+  /** PUBLISHED exams of this grade level that have no level snapshot yet. */
+  withoutLevelReport: GradeLevelAnalyticsExamRef[];
 }
 
 export interface InstitutionDashboardClassSummary {
@@ -3464,6 +3640,26 @@ export interface GuardianSchoolGradeItem {
   absent: boolean;
   maxScore: number;
   version: number;
+}
+
+/**
+ * DEC-20261102-08 staff read (`GET /grade-assessments/students/:studentId/published`, Student 360 timeline): the latest
+ * published version per assessment, newest first. Each grade stays on its own scale (0..maxScore) and is a separate
+ * series from Başarı %; draft (unpublished) entries are never returned.
+ */
+export interface StudentPublishedGradeItem {
+  assessmentId: string;
+  classId: string;
+  courseId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  /** Score on the assessment's own scale (0..maxScore); null when absent. */
+  score: number | null;
+  absent: boolean;
+  maxScore: number;
+  version: number;
+  publishedAt: string;
 }
 
 /** One optical exam point. successRate is Başarı % on a 0-100 scale; net/questionCount are context. */
