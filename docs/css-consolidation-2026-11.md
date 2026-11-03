@@ -68,9 +68,10 @@ Kept on purpose:
   `next-report-bar-*` and `next-report-grid` have no source reference either, but the report/karne region is moved
   verbatim only (DEC-20261102-08). They now live in `20-application-06-report.css` and
   `20-application-08-report-charts.css`.
-- `uh-context-bar*` (`30-primitives.css`): `packages/ui/src/components/context-bar.tsx` still renders these classes;
-  the component has no app consumer since wave-2b, but removing it belongs to a component change, not to this
-  pixel-identical CSS gate.
+- `uh-context-bar*` (`30-primitives.css`): no longer kept. This pixel-identical CSS gate left them in place because
+  `packages/ui/src/components/context-bar.tsx` still rendered them; the `ContextBar` primitive and its
+  `uh-context-bar*` CSS rules were removed later on `feat/ui-ux-takip-1` (see the DEC-20261102-02 open-question
+  note in `docs/DECISIONS.md`).
 - `next-work-context`: still used by `kurum/raporlar/reports-page.tsx`.
 - Template modifier families listed above.
 
