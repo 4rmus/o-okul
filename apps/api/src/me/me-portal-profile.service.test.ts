@@ -1,7 +1,8 @@
 import "reflect-metadata";
-import type { PublicStudentProfileRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
+import type { AcademicTermRecord, PublicStudentProfileRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
+import type { AcademicCalendarStore } from "../school/academic-calendar-store.js";
 import type { TeacherAssignmentStore } from "../school/teacher-assignment-store.js";
 import type { TeacherStore } from "../school/teacher-store.js";
 import type { StudentService } from "../student/student.service.js";
@@ -30,7 +31,7 @@ const teachers: TeacherRecord[] = [
   { id: "teacher-other-tenant", tenantId: "tenant-b", firstName: "Başka", lastName: "Kurum" },
 ];
 
-function createService(profile: PublicStudentProfileRecord, assignments: TeacherAssignmentRecord[]) {
+function createService(profile: PublicStudentProfileRecord, assignments: TeacherAssignmentRecord[], terms: AcademicTermRecord[] = []) {
   const students = {
     findProfileForViewer: async (_context: RequestContext, id: string) => {
       if (id !== profile.id) throw new Error("STUDENT_NOT_FOUND");
@@ -40,7 +41,8 @@ function createService(profile: PublicStudentProfileRecord, assignments: Teacher
   } as unknown as StudentService;
   const assignmentStore = { list: async () => assignments } as unknown as TeacherAssignmentStore;
   const teacherStore = { findById: async (id: string) => teachers.find((teacher) => teacher.id === id) } as unknown as TeacherStore;
-  return new MePortalProfileService(students, assignmentStore, teacherStore);
+  const calendar = { listTerms: async () => terms } as unknown as AcademicCalendarStore;
+  return new MePortalProfileService(students, assignmentStore, teacherStore, calendar);
 }
 
 describe("MePortalProfileService (UAT U20)", () => {
@@ -84,6 +86,29 @@ describe("MePortalProfileService (UAT U20)", () => {
     ]);
 
     expect((await service.getGuardianStudentProfile(guardianContext, "student-a")).responsibleTeacherName).toBeUndefined();
+  });
+
+  it("birden çok aktif sınıf öğretmeni atamasında etkin dönemi, sonra en yeni başlangıcı seçer; sıra belirleyicidir", async () => {
+    const older = { id: "a-old", tenantId: "tenant-a", teacherId: "teacher-class", classId: "class-a", role: "CLASS_TEACHER" as const, startsAt: "2025-09-01" };
+    const newer = { id: "a-new", tenantId: "tenant-a", teacherId: "teacher-responsible", classId: "class-a", role: "CLASS_TEACHER" as const, startsAt: "2026-09-01" };
+    const undated = { id: "a-0", tenantId: "tenant-a", teacherId: "teacher-class", classId: "class-a", role: "CLASS_TEACHER" as const };
+    // Without an active term: the most recent start wins whatever the listing order; an undated one is the oldest.
+    expect(pickResponsibleAssignment([older, undated, newer], baseProfile)?.id).toBe("a-new");
+    expect(pickResponsibleAssignment([newer, undated, older], baseProfile)?.id).toBe("a-new");
+    expect(pickResponsibleAssignment([undated, older], baseProfile)?.id).toBe("a-old");
+    // An assignment bound to the active term beats a later start.
+    const activeTerm = { ...older, id: "a-term", termId: "term-active", startsAt: "2024-09-01" };
+    expect(pickResponsibleAssignment([newer, activeTerm], baseProfile, new Set(["term-active"]))?.id).toBe("a-term");
+    // Same start: the id decides, independent of order.
+    const twin = { ...newer, id: "a-new-2", teacherId: "teacher-class" };
+    expect(pickResponsibleAssignment([twin, newer], baseProfile)?.id).toBe("a-new");
+    expect(pickResponsibleAssignment([newer, twin], baseProfile)?.id).toBe("a-new");
+
+    // The service reads the active term from the calendar of the same tenant.
+    const service = createService(baseProfile, [newer, activeTerm], [
+      { id: "term-active", tenantId: "tenant-a", academicYearId: "year", name: "1. Dönem", startsAt: "2026-09-01", endsAt: "2027-01-31", isActive: true },
+    ]);
+    expect((await service.getGuardianStudentProfile(guardianContext, "student-a")).responsibleTeacherName).toBe("Sınıf Öğretmeni");
   });
 
   it("öğrenciye özel atama sınıf öğretmeni seçiminde sayılmaz", () => {

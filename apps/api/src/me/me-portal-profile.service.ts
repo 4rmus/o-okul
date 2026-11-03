@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { PublicStudentProfileRecord, TeacherAssignmentRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
 import { isAssignmentActive } from "../school/teacher-scope.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
@@ -20,6 +21,7 @@ export class MePortalProfileService {
     private readonly students: StudentService,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
     @Inject(teacherStoreToken) private readonly teachers: TeacherStore,
+    @Inject(academicCalendarStoreToken) private readonly calendar: AcademicCalendarStore,
   ) {}
 
   async getCurrentStudentProfile(context: RequestContext): Promise<PublicStudentProfileRecord> {
@@ -36,7 +38,11 @@ export class MePortalProfileService {
   ): Promise<PublicStudentProfileRecord> {
     if (profile.responsibleTeacherName) return profile;
     const assignments = filterTenantResources(context, await this.teacherAssignments.list()).filter(isAssignmentActive);
-    const assignment = pickResponsibleAssignment(assignments, profile);
+    // The active term only breaks a tie, so the calendar is read only when several assignments compete.
+    const activeTermIds = responsibleCandidates(assignments, profile).length > 1
+      ? new Set(filterTenantResources(context, await this.calendar.listTerms()).filter((term) => term.isActive).map((term) => term.id))
+      : undefined;
+    const assignment = pickResponsibleAssignment(assignments, profile, activeTermIds);
     if (!assignment) return profile;
     const teacher = await this.teachers.findById(assignment.teacherId);
     if (!teacher || teacher.tenantId !== profile.tenantId || (teacher as { deletedAt?: string }).deletedAt) return profile;
@@ -44,14 +50,42 @@ export class MePortalProfileService {
   }
 }
 
+type ProfileStudent = { id: string; classId?: string; tenantId: string };
+
+/** The group the name comes from: the student's RESPONSIBLE_TEACHER assignments, else the class's CLASS_TEACHER ones. */
+export function responsibleCandidates(
+  assignments: readonly TeacherAssignmentRecord[],
+  student: ProfileStudent,
+): TeacherAssignmentRecord[] {
+  const sameTenant = assignments.filter((assignment) => assignment.tenantId === student.tenantId);
+  const responsible = sameTenant.filter((assignment) => assignment.role === "RESPONSIBLE_TEACHER" && assignment.studentId === student.id);
+  if (responsible.length > 0) return responsible;
+  return student.classId
+    ? sameTenant.filter((assignment) => assignment.role === "CLASS_TEACHER" && assignment.classId === student.classId && !assignment.studentId)
+    : [];
+}
+
+/**
+ * Deterministic among several active candidates: the one bound to an active term first, then the most recent start
+ * (an assignment without a start date counts as the oldest), then the most recent creation, then the id.
+ */
 export function pickResponsibleAssignment(
   assignments: readonly TeacherAssignmentRecord[],
-  student: { id: string; classId?: string; tenantId: string },
+  student: ProfileStudent,
+  activeTermIds: ReadonlySet<string> = new Set(),
 ): TeacherAssignmentRecord | undefined {
-  const sameTenant = assignments.filter((assignment) => assignment.tenantId === student.tenantId);
-  return sameTenant.find((assignment) => assignment.role === "RESPONSIBLE_TEACHER" && assignment.studentId === student.id)
-    ?? (student.classId
-      ? sameTenant.find((assignment) =>
-          assignment.role === "CLASS_TEACHER" && assignment.classId === student.classId && !assignment.studentId)
-      : undefined);
+  const inActiveTerm = (assignment: TeacherAssignmentRecord) => (assignment.termId && activeTermIds.has(assignment.termId) ? 1 : 0);
+  return [...responsibleCandidates(assignments, student)].sort((left, right) =>
+    inActiveTerm(right) - inActiveTerm(left)
+    || compareDesc(left.startsAt, right.startsAt)
+    || compareDesc(left.createdAt, right.createdAt)
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
+}
+
+/** Later ISO date first; a missing value sorts last. */
+function compareDesc(left: string | undefined, right: string | undefined): number {
+  if (left === right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left < right ? 1 : -1;
 }

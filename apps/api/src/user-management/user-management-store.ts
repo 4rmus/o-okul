@@ -1451,8 +1451,18 @@ function matchesEmployeeSearch(employee: EmployeeAccessRecord, query: string): b
   ].join(" ")).includes(query);
 }
 
-function employeeCursorContext(tenantId: string, query: EmployeeAccessListQuery): string {
-  return listCursorContext("employees", tenantId, { q: normalizeSearchTerm(query.q), sort: query.sort });
+/**
+ * `collation` versions the sort key: cursors issued before the name keyset moved to "tr-x-icu" (UAT U12) carry a key
+ * from the old ordering and could skip rows, so they now fail as EMPLOYEE_CURSOR_INVALID and the screen restarts.
+ */
+export const employeeCursorCollation = "tr-x-icu";
+
+export function employeeCursorContext(tenantId: string, query: Pick<EmployeeAccessListQuery, "q" | "sort">): string {
+  return listCursorContext("employees", tenantId, {
+    collation: employeeCursorCollation,
+    q: normalizeSearchTerm(query.q),
+    sort: query.sort,
+  });
 }
 
 interface MembershipRoleRow {

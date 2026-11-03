@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryUserManagementStore, PostgresUserManagementStore, turkishSortKey } from "./user-management-store.js";
+import { encodeListCursor, listCursorContext, normalizeSearchTerm } from "../listing/cursor-pagination.js";
+import { employeeCursorContext, InMemoryUserManagementStore, PostgresUserManagementStore, turkishSortKey } from "./user-management-store.js";
 
 describe("PostgresUserManagementStore", () => {
   it("çalışan erişim projeksiyonunu tenant RLS ile okur", async () => {
@@ -725,6 +726,19 @@ describe("InMemoryUserManagementStore çalışan cursor dayanıklılığı ve T�
 
     const legacy = Buffer.from(JSON.stringify({ v: 1, context: "x", sort: "lastName", id: "employee-admin-a" }), "utf8").toString("base64url");
     await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: legacy })).rejects.toThrow("EMPLOYEE_CURSOR_INVALID");
+  });
+
+  it("Türkçe sıralamadan önceki bağlamla üretilmiş cursor reddedilir (sıralama anahtarı sürümü)", async () => {
+    const store = new InMemoryUserManagementStore();
+    // The pre-"tr-x-icu" context had no collation part; such a cursor decodes cleanly but carries an old-order key.
+    const oldContext = listCursorContext("employees", "tenant-a", { q: normalizeSearchTerm(undefined), sort: "lastName" });
+    expect(oldContext).not.toBe(employeeCursorContext("tenant-a", { sort: "lastName" }));
+    const oldCursor = encodeListCursor(oldContext, { id: "employee-admin-a", key: "admin" });
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: oldCursor })).rejects.toThrow("EMPLOYEE_CURSOR_INVALID");
+
+    // A cursor from the current context still pages.
+    const current = encodeListCursor(employeeCursorContext("tenant-a", { sort: "lastName" }), { id: "employee-admin-a", key: turkishSortKey("admin") });
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: current })).resolves.toMatchObject({ records: expect.any(Array) });
   });
 
   it("soyad ve ad sıralaması Türkçe alfabeyi izler (UAT U12)", async () => {
