@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { hasCapabilityForRoles, type AcademicTermRecord, type AcademicYearRecord } from "@o-okul/shared-types";
-import { Alert, Button, EmptyState, Panel, StatusBadge, Stepper, type StepperStep } from "@o-okul/ui";
+import { Alert, Button, EmptyState, Panel, StatusBadge, Stepper, useConfirmDialog, type StepperStep } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import {
   activateAcademicCalendar,
@@ -62,6 +62,7 @@ export function TermTransitionWizard() {
   const today = useMemo(() => istanbulToday(), []);
   const [runResults, setRunResults] = useState<Partial<Record<RunStepKey, RunStepResult>>>({});
   const [isApplying, setIsApplying] = useState(false);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   const yearsQuery = useQuery({
     queryKey: ["term-transition-years", tenantKey],
@@ -184,16 +185,41 @@ export function TermTransitionWizard() {
     renewBodies.length > 0 && previewQuery.isError ? "Ön izleme alınamadı (5. adım)." : "",
   ].filter(Boolean);
 
+  // U14: the transition is done when this run finished every step, or when the server shows nothing left to apply
+  // (every mapped student is in the target term, no exits wait and the target term is the active one).
+  const runSucceeded = (["renew", "status", "activate"] as const).every((key) => runResults[key]?.status === "done");
+  const nothingLeft = Boolean(plan && plan.candidates.length === 0 && calendarActive);
+  // Students still wait, but every class stays out of the transition: there is nothing to apply yet.
+  const nothingSelected = Boolean(plan && !nothingLeft && plan.renew.length === 0 && exitCount === 0 && calendarActive);
+  const transitionDone = !isApplying && (runSucceeded || nothingLeft);
+
+  // U9: steps that cannot open yet (no year and term chosen) are pending, not blocked; "blocked" is kept for real errors.
   const steps: StepperStep[] = wizardSteps.map((step, index) => {
     const number = (index + 1) as WizardStepNumber;
-    const blocked = number > 1 && !calendarReady;
+    const locked = number > 1 && !calendarReady;
+    const done = number < state.step || (number === 6 && transitionDone);
     return {
-      href: blocked ? undefined : stepHref(number),
+      href: locked ? undefined : stepHref(number),
       key: step.key,
       label: step.label,
-      status: number === state.step ? "current" : blocked ? "blocked" : number < state.step ? "complete" : "upcoming",
+      status: done ? "complete" : number === state.step ? "current" : "upcoming",
     };
   });
+
+  // DEC-20261103-01 (U13): the irreversible run starts only after an explicit confirmation that names the counts and
+  // the target year and term; cancelling sends nothing. The graduation confirmation of step 3 stays as it is.
+  async function requestApply() {
+    if (!plan || !year || !term || isApplying || applyBlockers.length > 0 || nothingSelected) return;
+    const accepted = await confirm({
+      cancelLabel: "Vazgeçin",
+      confirmLabel: "Onaylayın ve uygulayın",
+      confirmVariant: "danger",
+      description: `Hedef: ${year.name} ${term.name}`,
+      message: transitionSummary(plan, `${year.name} ${term.name}`, calendarActive),
+      title: "Dönem geçişini onaylayın",
+    });
+    if (accepted) await apply();
+  }
 
   async function apply() {
     if (!plan || !year || !term || isApplying || applyBlockers.length > 0) return;
@@ -298,6 +324,8 @@ export function TermTransitionWizard() {
           onChange={(classTargets) => navigate({ classTargets, confirmation: "" })}
           plan={plan}
           state={state}
+          targetIsActive={calendarActive}
+          targetName={year && term ? `${year.name} ${term.name}` : ""}
         />
       ) : null}
       {calendarReady && state.step === 3 ? (
@@ -337,19 +365,19 @@ export function TermTransitionWizard() {
             <RunStepItem
               fallback={plan ? (plan.renew.length > 0 ? `${plan.renew.length} öğrencinin kaydı yenilenecek.` : `Yenilenecek öğrenci yok. Bu dönemde ${plan.alreadyInTerm.length} öğrenci var.`) : "Hazırlanıyor."}
               label="1. Kayıt yenileme"
-              pendingDone={Boolean(plan && plan.renew.length === 0)}
+              nothingToDo={Boolean(plan && plan.renew.length === 0)}
               result={runResults.renew}
             />
             <RunStepItem
               fallback={plan ? (exitCount > 0 ? `${plan.graduate.length} mezun, ${plan.leave.length} ayrılan öğrenci işaretlenecek.` : "Bekleyen mezun veya ayrılan öğrenci yok.") : "Hazırlanıyor."}
               label="2. Mezun ve ayrılanlar"
-              pendingDone={Boolean(plan && exitCount === 0)}
+              nothingToDo={Boolean(plan && exitCount === 0)}
               result={runResults.status}
             />
             <RunStepItem
               fallback={calendarActive ? `${year.name} ${term.name} etkin dönem.` : `${year.name} ${term.name} etkin dönem yapılacak; diğer yıl ve dönemler etkinliğini yitirir.`}
               label="3. Yıl ve dönem etkinleştirme"
-              pendingDone={calendarActive}
+              nothingToDo={calendarActive}
               result={runResults.activate}
             />
           </ol>
@@ -360,18 +388,28 @@ export function TermTransitionWizard() {
               </ul>
             </Alert>
           ) : null}
-          {plan && plan.renew.length === 0 && exitCount === 0 && calendarActive && !isApplying ? (
-            <Alert tone="success">Dönem geçişi tamamlandı.</Alert>
+          {nothingSelected && !transitionDone ? (
+            <Alert tone="info">Uygulanacak değişiklik yok. Sınıf eşleştirme adımında (2. adım) en az bir sınıfın yeni dönemdeki yerini seçin.</Alert>
           ) : null}
-          <div className="next-onboarding-actions">
-            <Button
-              disabled={!plan || isApplying || isRefreshing || applyBlockers.length > 0 || (plan.renew.length === 0 && exitCount === 0 && calendarActive)}
-              onClick={() => void apply()}
-              type="button"
-            >
-              {isApplying ? "Uygulanıyor…" : Object.values(runResults).some((result) => result?.status === "error") ? "Yeniden deneyin" : "Geçişi uygulayın"}
-            </Button>
-          </div>
+          {transitionDone ? (
+            <>
+              <Alert tone="success">Dönem geçişi tamamlandı.</Alert>
+              <div className="next-onboarding-actions">
+                <Link className="uh-button uh-button--secondary" href="/kurum">Kurum özetine gidin</Link>
+                <Link className="uh-button" href="/kurum/ogrenciler">Öğrencileri açın</Link>
+              </div>
+            </>
+          ) : (
+            <div className="next-onboarding-actions">
+              <Button
+                disabled={!plan || isApplying || isRefreshing || applyBlockers.length > 0 || nothingSelected}
+                onClick={() => void requestApply()}
+                type="button"
+              >
+                {isApplying ? "Uygulanıyor…" : Object.values(runResults).some((result) => result?.status === "error") ? "Yeniden deneyin" : "Geçişi uygulayın"}
+              </Button>
+            </div>
+          )}
         </Panel>
       ) : null}
       <div className="next-onboarding-actions">
@@ -386,16 +424,30 @@ export function TermTransitionWizard() {
           </Button>
         ) : null}
       </div>
+      {confirmationDialog}
     </div>
   );
 }
 
-function RunStepItem({ fallback, label, pendingDone, result }: { fallback: string; label: string; pendingDone: boolean; result?: RunStepResult }) {
-  const status = result?.status ?? (pendingDone ? "done" : "pending");
+/** Confirmation text of the apply step: counts of the run and the target year and term (DEC-20261103-01). */
+function transitionSummary(plan: TransitionPlan, targetName: string, calendarActive: boolean): string {
+  const parts = [
+    `${plan.renew.length} öğrencinin kaydı ${targetName} için yenilenecek.`,
+    `${plan.graduate.length} öğrenci mezun, ${plan.leave.length} öğrenci ayrılan olarak işaretlenecek.`,
+    calendarActive ? `${targetName} zaten etkin dönem.` : `${targetName} etkin dönem olacak; diğer yıl ve dönemler etkinliğini yitirir.`,
+    "Bu işlem sihirbazla geri alınamaz.",
+  ];
+  return parts.join(" ");
+}
+
+function RunStepItem({ fallback, label, nothingToDo, result }: { fallback: string; label: string; nothingToDo: boolean; result?: RunStepResult }) {
+  // U14: a step with nothing to do before the run reads "Gerek yok", not "Tamamlandı".
+  const status = result?.status ?? (nothingToDo ? "skipped" : "pending");
   const badge = {
     done: { label: "Tamamlandı", tone: "success" as const },
     error: { label: "Tamamlanamadı", tone: "danger" as const },
     pending: { label: "Bekliyor", tone: "neutral" as const },
+    skipped: { label: "Gerek yok", tone: "neutral" as const },
     running: { label: "Sürüyor", tone: "info" as const },
   }[status];
   return (
