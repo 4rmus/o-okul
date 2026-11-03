@@ -236,7 +236,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const portalSummary = page.getByRole("region", { exact: true, name: "Portal özeti" });
       await expectPortalSummaryMetrics(
         portalSummary,
-        ["Devamsızlık", "Öğretmen notu", "Ödev", "Başarı", "Net", "Soru", "Ödeme planı", "Bekleyen ödeme"],
+        ["Devamsızlık", "Öğretmen notu", "Açık ödev", "Başarı", "Net", "Soru", "Ödeme planı", "Bekleyen ödeme"],
         rawPiiValues,
       );
       // 30 yoklama kaydının hepsi "Var": devamsızlık 0'dır, kayıt sayısı devamsızlık gibi gösterilmez.
@@ -270,7 +270,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
         guardianActions.getByRole("link", { name: /Ödeme durumunu gör: Ödeme izni kapalı.*Finans.*Kapalı.*Finans görünürlüğü kapalı/ }),
       ).toHaveAttribute("href", "/veli/odemeler");
       await expect(guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toHaveAttribute("href", "/veli/raporlar");
-      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 1 atama/ })).toHaveAttribute("href", "/veli/odevler");
+      // DEC-20261103-01: açık iş = teslim edilmemiş sınıf ödevi (1) + materyal ataması (1); teslim edilen sayılmaz.
+      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 2 açık ödev/ })).toHaveAttribute("href", "/veli/odevler");
       await expect(guardianActions.getByRole("link", { name: /Destek talebini takip et: Kapalı/ })).toHaveAttribute("href", "/veli/destek");
       await expect(guardianActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/veli/bildirimler");
       await expect(guardianActions).toContainText("Finans görünürlüğü kapalı");
@@ -312,10 +313,15 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toContainText("Bora Yilmaz");
       await expect(page.getByRole("region", { name: "Veli günlük aksiyonları" })).toContainText("Bora Yilmaz");
       await expect(guardianDailyScope).toContainText("Bora Yilmaz");
-      await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).toContainText("Bora tekrar");
-      await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).not.toContainText("Ada tekrar");
+      const guardianHomeworkTable = page.getByRole("table", { name: "Sınıf ödevleri ve materyal atamaları" });
+      await expect(guardianHomeworkTable).toContainText("Bora tekrar");
+      await expect(guardianHomeworkTable).toContainText("Bora sınıf ödevi");
+      await expect(guardianHomeworkTable).not.toContainText("Ada tekrar");
+      await expect(guardianHomeworkTable).not.toContainText("Ada sınıf ödevi");
       expect(requestedPaths).toContain("/me/guardian/students/student-a/homework/material-assignments");
       expect(requestedPaths).toContain("/me/guardian/students/student-b/homework/material-assignments");
+      expect(requestedPaths).toContain("/me/guardian/students/student-a/homework");
+      expect(requestedPaths).toContain("/me/guardian/students/student-b/homework");
       expect(requestedPaths.filter((path) => path === "/me/guardian/homework/material-assignments")).toEqual([]);
       await expectNoHorizontalOverflow(page, `guardian-portal-${viewport.width}`);
       await expectNoUnlabeledControls(page, `guardian-portal-${viewport.width}`);
@@ -503,6 +509,16 @@ async function expectStudentProfileAndHistoryPanels(page: Page) {
   await expect(historyTable.locator("thead th")).toHaveText(["Sınıf", "Organizasyon", "Dönem", "Başlangıç", "Durum", "Neden"]);
   await expect(history).toContainText("Sınıf bilgisi yok");
   await expect(history).toContainText("Dönem bilgisi yok");
+  // UAT U15/U20: yeni kayıt "Aktif / Kayıt yenileme", kapanan eski kayıt "Kapandı" ve "İlk kayıt" yazar.
+  // "Neden" isteğe bağlı sütundur; dar ekranda ayrı detay satırına iner, bu yüzden tablo düzeyinde aranır.
+  const mainRows = historyTable.locator("tbody tr:not([data-mobile-detail])");
+  await expect(mainRows.filter({ hasText: "8-A" })).toContainText("Aktif");
+  const closedRow = mainRows.filter({ hasText: "Sınıf bilgisi yok" });
+  await expect(closedRow).toContainText("Kapandı");
+  await expect(closedRow).not.toContainText("Aktif");
+  await expect(historyTable).toContainText("Kayıt yenileme");
+  await expect(historyTable).toContainText("İlk kayıt");
+  await expect(history).not.toContainText("Neden bilgisi yok");
 
   for (const value of ["class-8a", "class-missing", "term-2026", "term-missing"]) {
     await expect(history).not.toContainText(value);
@@ -531,11 +547,17 @@ async function expectGuardianRelationshipSummary(page: Page) {
 async function expectHomeworkAssignmentsPanel(page: Page) {
   const homework = page.getByRole("region", { exact: true, name: "Ödevler" });
   await expect(homework.getByRole("heading", { name: "Ödevler" })).toBeVisible();
-  const table = homework.getByRole("table", { name: "Ödev ve materyal atamaları" });
+  const table = homework.getByRole("table", { name: "Sınıf ödevleri ve materyal atamaları" });
   await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
-  await expect(table.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
-  for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b"]) {
+  for (const header of ["Ödev", "Bağlam", "Son tarih", "Durum"]) {
+    await expect(table.getByRole("columnheader", { name: header, exact: true })).toBeVisible();
+  }
+  // DEC-20261103-01: sınıf ödevi öğrencinin teslim durumuyla salt okunur görünür; teslim düğmesi yoktur.
+  await expect(table).toContainText("Ada sınıf ödevi");
+  await expect(table).toContainText("Sınıf ödevi");
+  await expect(table).toContainText("Teslim edilmedi");
+  await expect(homework.getByRole("button", { name: "Teslim ettim" })).toHaveCount(0);
+  for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b", "homework-open", "teacher-math", "checkedBy"]) {
     await expect(homework).not.toContainText(value);
   }
 }
@@ -778,6 +800,7 @@ function guardianApiResponse(
     if (pathName === `/me/guardian/students/${studentId}/announcements`) return createAnnouncements();
     if (pathName === `/me/guardian/students/${studentId}/support-tickets`) return createSupportTickets();
     if (pathName === `/me/guardian/students/${studentId}/homework/material-assignments`) return createHomeworkAssignments(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/homework`) return createGuardianClassHomework(studentId);
     if (pathName === `/me/guardian/students/${studentId}/attendance`) return createAttendance(studentId);
     if (pathName === `/me/guardian/students/${studentId}/attendance/summary`) return createAttendanceSummary(studentId);
     if (pathName === `/me/guardian/students/${studentId}/teacher-notes`) return createTeacherNotes(studentId);
@@ -952,6 +975,28 @@ function createStudentClassHomework() {
   ];
 }
 
+/** DEC-20261103-01 veli sınıf ödevi: bir açık, bir teslim edilmiş; kontrol notu veya puan alanı yoktur. */
+function createGuardianClassHomework(studentId: "student-a" | "student-b") {
+  const name = studentId === "student-a" ? "Ada" : "Bora";
+  return [
+    {
+      classId: "class-8a",
+      description: "Sayfa 40-42",
+      dueAt: "2026-06-22T12:00:00.000Z",
+      id: "homework-open",
+      submission: { homeworkId: "homework-open", status: "NOT_SUBMITTED", studentId },
+      title: `${name} sınıf ödevi`,
+    },
+    {
+      classId: "class-8a",
+      dueAt: "2026-06-12T12:00:00.000Z",
+      id: "homework-done",
+      submission: { checkedAt: "2026-06-13T12:00:00.000Z", homeworkId: "homework-done", status: "CHECKED", studentId, submittedAt: "2026-06-11T12:00:00.000Z" },
+      title: `${name} kontrol edilmiş ödev`,
+    },
+  ];
+}
+
 function createStudentSelfOverview() {
   return {
     attendance: { absent: 0, excused: 0, late: 0, present: 30, total: 30 },
@@ -983,8 +1028,9 @@ function createDevelopmentAssessments(studentId: string) {
 
 function createEnrollments(studentId: string) {
   return [
-    { classId: "class-8a", className: "8-A", id: `enrollment-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" },
-    { classId: "class-missing", id: `enrollment-missing-${studentId}`, startsAt: "2026-01-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-missing" },
+    { classId: "class-8a", className: "8-A", id: `enrollment-${studentId}`, reason: "RENEWED", startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" },
+    // UAT U15: yenilemede kapanan eski kayıt API'de ACTIVE kalır; bitiş tarihi kapandığını söyler.
+    { classId: "class-missing", endsAt: "2026-09-01T00:00:00.000Z", id: `enrollment-missing-${studentId}`, reason: "CREATED", startsAt: "2026-01-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-missing" },
   ];
 }
 

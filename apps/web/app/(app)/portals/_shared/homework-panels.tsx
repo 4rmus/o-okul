@@ -80,14 +80,14 @@ export function StudentClassHomeworkPanel({
   ];
 
   return (
-    <Panel aria-label="Sınıf ödevleri" description="Sınıfına verilen ödevler ve teslim durumun." title="Sınıf Ödevleri">
+    <Panel aria-label="Sınıf ödevleri" description="Sınıfınıza verilen ödevler ve teslim durumunuz." title="Sınıf Ödevleri">
       {error ? <p className="next-form-error" role="alert">{error}</p> : null}
       <DataTable
         caption="Sınıf ödevleri ve teslim durumu"
         columns={columns}
-        description="Sınıfına verilen ödevler ve teslim durumun."
+        description="Sınıfınıza verilen ödevler ve teslim durumunuz."
         density="compact"
-        emptyText="Sınıfına verilmiş ödev yok."
+        emptyText="Sınıfınıza verilmiş ödev yok."
         getRowKey={(record) => record.id}
         rows={homework}
       />
@@ -127,7 +127,10 @@ export function TeacherHomeworkSubmissionsPanel({
     refetchOnWindowFocus: false,
   });
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
-  const rows = query.data ?? [];
+  // UAT U19: teslim listesi öğrenci adına göre Türkçe sıralanır; adı bilinmeyen satırlar sona düşer.
+  const rows = sortSubmissionsByStudentName(query.data ?? [], studentNameById);
+  const selectedHomework = homework.find((record) => record.id === homeworkId);
+  const overdue = isHomeworkOverdue(selectedHomework);
   const submittedIds = rows.filter((row) => row.status === "SUBMITTED").map((row) => row.studentId);
 
   async function check(studentIds: string[]) {
@@ -153,7 +156,7 @@ export function TeacherHomeworkSubmissionsPanel({
       render: (row) => studentNameById.get(row.studentId) ?? "Bilinmeyen öğrenci",
       sticky: "left",
     },
-    { header: "Durum", key: "status", priority: "primary", render: (row) => submissionStatusLabels[row.status] },
+    { header: "Durum", key: "status", priority: "primary", render: (row) => formatSubmissionStatus(row.status, overdue) },
     { header: "Teslim", key: "submittedAt", priority: "secondary", render: (row) => (row.submittedAt ? formatDateTime(row.submittedAt) : "-") },
     {
       header: "İşlem",
@@ -207,6 +210,150 @@ export function TeacherHomeworkSubmissionsPanel({
       />
     </Panel>
   );
+}
+
+/**
+ * DEC-20261103-01 veli görünümü: bağlı öğrencinin sınıf ödevleri (öğrencinin teslim durumuyla) ve materyal atamaları
+ * tek salt okunur tabloda. Öğretmenin kontrol notu veya puanı API'den gelmez; burada da yazılmaz. Açık işler
+ * (teslim edilmemiş sınıf ödevi + materyal ataması) teslim tarihine göre önce, teslim edilenler sonra gelir.
+ */
+export function GuardianHomeworkPanel({
+  classHomework,
+  classHomeworkFailed = false,
+  courseNames,
+  limit,
+  materialAssignments,
+  materialAssignmentsFailed = false,
+  moreHref,
+  now = new Date(),
+  onRetry,
+  termNames,
+}: {
+  classHomework: readonly StudentHomeworkRecord[];
+  classHomeworkFailed?: boolean;
+  courseNames: ReadonlyMap<string, string>;
+  /** Portal özetinde yalnız ilk N kayıt; tamamı moreHref ile Ödevler sayfasında. */
+  limit?: number;
+  materialAssignments: readonly HomeworkMaterialAssignmentRecord[];
+  materialAssignmentsFailed?: boolean;
+  moreHref?: string;
+  now?: Date;
+  onRetry?: () => void;
+  termNames: ReadonlyMap<string, string>;
+}) {
+  const rows = buildGuardianHomeworkRows({ classHomework, courseNames, materialAssignments, now, termNames });
+  const visibleRows = limit ? rows.slice(0, limit) : rows;
+  const hiddenCount = rows.length - visibleRows.length;
+  const failedSources = [classHomeworkFailed ? "sınıf ödevleri" : "", materialAssignmentsFailed ? "materyal atamaları" : ""].filter(Boolean);
+  const columns: Array<DataTableColumn<GuardianHomeworkRow>> = [
+    { header: "Ödev", key: "title", priority: "primary", render: (row) => row.title, sticky: "left" },
+    { header: "Bağlam", key: "context", priority: "primary", render: (row) => row.context },
+    { header: "Açıklama", key: "description", priority: "optional", render: (row) => row.description },
+    { header: "Son tarih", key: "dueAt", priority: "secondary", render: (row) => (row.dueAt ? formatDateTime(row.dueAt) : "-") },
+    { header: "Durum", key: "status", priority: "primary", render: (row) => row.statusLabel },
+  ];
+
+  return (
+    <Panel
+      actions={moreHref && hiddenCount > 0 ? <Link href={moreHref}>Tümünü aç ({rows.length})</Link> : undefined}
+      aria-label="Ödevler"
+      description={hiddenCount > 0
+        ? `İlk ${visibleRows.length} kayıt; ${hiddenCount} kayıt daha Ödevler sayfasında.`
+        : "Sınıf ödevleri öğrencinin teslim durumuyla, materyal atamaları ders ve dönem bağlamıyla; salt okunur."}
+      title="Ödevler"
+    >
+      {failedSources.length > 0 ? (
+        <div role="alert">
+          <p className="next-form-error">{`${capitalizeTr(failedSources.join(" ve "))} şu an alınamadı; liste eksik olabilir.`}</p>
+          {onRetry ? <Button onClick={onRetry} variant="secondary">Tekrar dene</Button> : null}
+        </div>
+      ) : null}
+      <DataTable
+        caption="Sınıf ödevleri ve materyal atamaları"
+        columns={columns}
+        description="Sınıf ödevleri öğrencinin teslim durumuyla, materyal atamaları ders ve dönem bağlamıyla."
+        emptyText="Ödev veya materyal ataması yok."
+        getRowKey={(row) => row.key}
+        rows={visibleRows}
+      />
+    </Panel>
+  );
+}
+
+export interface GuardianHomeworkRow {
+  key: string;
+  kind: "class" | "material";
+  title: string;
+  context: string;
+  description: string;
+  dueAt?: string;
+  open: boolean;
+  statusLabel: string;
+}
+
+/** Açık iş sayısı (portal özeti "Ödev N açık"): teslim edilmemiş sınıf ödevi + materyal ataması. */
+export function countOpenGuardianHomework(
+  classHomework: readonly StudentHomeworkRecord[],
+  materialAssignments: readonly HomeworkMaterialAssignmentRecord[],
+) {
+  return classHomework.filter((record) => record.submission.status === "NOT_SUBMITTED").length + materialAssignments.length;
+}
+
+export function buildGuardianHomeworkRows({
+  classHomework,
+  courseNames,
+  materialAssignments,
+  now = new Date(),
+  termNames,
+}: {
+  classHomework: readonly StudentHomeworkRecord[];
+  courseNames: ReadonlyMap<string, string>;
+  materialAssignments: readonly HomeworkMaterialAssignmentRecord[];
+  now?: Date;
+  termNames: ReadonlyMap<string, string>;
+}): GuardianHomeworkRow[] {
+  const rows: GuardianHomeworkRow[] = [
+    ...classHomework.map((record): GuardianHomeworkRow => ({
+      context: "Sınıf ödevi",
+      description: [record.sourceMaterialTitle, record.description].filter(Boolean).join(" · ") || "-",
+      ...(record.dueAt ? { dueAt: record.dueAt } : {}),
+      key: `class-${record.id}`,
+      kind: "class",
+      open: record.submission.status === "NOT_SUBMITTED",
+      statusLabel: formatSubmissionStatus(record.submission.status, isHomeworkOverdue(record, now)),
+      title: record.title,
+    })),
+    ...materialAssignments.map((assignment): GuardianHomeworkRow => ({
+      context: formatMaterialContext(assignment, courseNames, termNames),
+      description: assignment.note ?? "-",
+      ...(assignment.dueAt ? { dueAt: assignment.dueAt } : {}),
+      key: `material-${assignment.id}`,
+      kind: "material",
+      open: true,
+      statusLabel: "Atandı",
+      title: assignment.materialTitle ?? "Bilinmeyen materyal",
+    })),
+  ];
+  return rows.sort((left, right) => Number(right.open) - Number(left.open) || compareOptionalDue(left.dueAt, right.dueAt));
+}
+
+function formatMaterialContext(
+  assignment: Pick<HomeworkMaterialAssignmentRecord, "courseId" | "termId">,
+  courseNames: ReadonlyMap<string, string>,
+  termNames: ReadonlyMap<string, string>,
+) {
+  const context = formatAssignmentContext(assignment, courseNames, termNames);
+  return context === "-" ? "Materyal ataması" : context;
+}
+
+function compareOptionalDue(left: string | undefined, right: string | undefined) {
+  if (left && right) return left.localeCompare(right);
+  if (left) return -1;
+  return right ? 1 : 0;
+}
+
+function capitalizeTr(value: string) {
+  return value.charAt(0).toLocaleUpperCase("tr-TR") + value.slice(1);
 }
 
 export function HomeworkAssignmentsPanel({
@@ -330,7 +477,8 @@ export function TeacherHomeworkPanel({
       header: "Durum",
       key: "status",
       priority: "primary",
-      render: (record) => (record.checkedAt ? "Kontrol edildi" : "Bekliyor"),
+      // UAT U19: teslim tarihi geçmiş ve kontrol edilmemiş ödev "Bekliyor" değil "Süresi geçti" görünür.
+      render: (record) => formatTeacherHomeworkStatus(record),
     },
     {
       header: "İşlem",
@@ -458,6 +606,37 @@ function formatAssignmentContext(
 export function resolveSubmissionHomeworkId(homework: HomeworkRecord[], requestedId: string) {
   if (requestedId && homework.some((record) => record.id === requestedId)) return requestedId;
   return homework.find((record) => !record.checkedAt)?.id ?? homework[0]?.id ?? "";
+}
+
+/** Teslim tarihi geçmiş mi; tarihsiz ödev hiçbir zaman süresi geçmiş sayılmaz. */
+export function isHomeworkOverdue(record: Pick<HomeworkRecord, "dueAt"> | undefined, now: Date = new Date()) {
+  if (!record?.dueAt) return false;
+  const due = new Date(record.dueAt).getTime();
+  return Number.isFinite(due) && due < now.getTime();
+}
+
+export function formatTeacherHomeworkStatus(record: Pick<HomeworkRecord, "checkedAt" | "dueAt">, now: Date = new Date()) {
+  if (record.checkedAt) return "Kontrol edildi";
+  return isHomeworkOverdue(record, now) ? "Süresi geçti" : "Bekliyor";
+}
+
+/** Öğrenci teslim durumu; süresi geçmiş ödevde teslim edilmeyen satır bunu açıkça söyler. */
+export function formatSubmissionStatus(status: HomeworkSubmissionStatus, overdue: boolean) {
+  return status === "NOT_SUBMITTED" && overdue ? "Teslim edilmedi · süresi geçti" : submissionStatusLabels[status];
+}
+
+export function sortSubmissionsByStudentName(
+  rows: readonly HomeworkSubmissionRecord[],
+  studentNameById: ReadonlyMap<string, string>,
+): HomeworkSubmissionRecord[] {
+  return [...rows].sort((left, right) => {
+    const leftName = studentNameById.get(left.studentId);
+    const rightName = studentNameById.get(right.studentId);
+    if (leftName && rightName) return leftName.localeCompare(rightName, "tr") || left.studentId.localeCompare(right.studentId);
+    if (leftName) return -1;
+    if (rightName) return 1;
+    return left.studentId.localeCompare(right.studentId);
+  });
 }
 
 function formatHomeworkOption(record: HomeworkRecord, classNames: ReadonlyMap<string, string>) {

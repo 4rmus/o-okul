@@ -1540,12 +1540,12 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "expectNoUnlabeledControls",
   'getByRole("region", { exact: true, name: "Ödevler" })',
   'getByRole("heading", { name: "Ödevler" })',
-  'getByRole("table", { name: "Ödev ve materyal atamaları" })',
+  'getByRole("table", { name: "Sınıf ödevleri ve materyal atamaları" })',
   'getByRole("region", { exact: true, name: "Öğretmen notları" })',
   'getByRole("table", { name: "Öğretmen notları" })',
   'getByRole("region", { exact: true, name: "Devamsızlık" })',
   'getByRole("table", { name: "Devamsızlık kayıtları" })',
-  'for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b"])',
+  'for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b", "homework-open", "teacher-math", "checkedBy"])',
   'getByRole("region", { exact: true, name: "Profil" })',
   'profileInfo).toHaveClass(/uh-info-grid/)',
   'profileInfo.locator(".uh-info-item")).toHaveCount(8)',
@@ -4609,7 +4609,9 @@ requireTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
   "Öğretmen bilgisi yok",
   "Bilinmeyen veli",
   "Dönem bilgisi yok",
-  "Neden bilgisi yok",
+  // UAT U15/U20: kayıt türü etiketi (yenileme vb.) ve kapanmış kayıt durumu.
+  "RENEWED: \"Kayıt yenileme\"",
+  "\"Kapandı\"",
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
