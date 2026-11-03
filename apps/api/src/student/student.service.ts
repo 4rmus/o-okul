@@ -1325,18 +1325,28 @@ export class StudentService {
     return { academicContext, items };
   }
 
-  /** Bulk renewal names its year and term explicitly; they must exist for the tenant and belong together. */
+  /**
+   * Bulk renewal names its year and term together; they must exist for the tenant and belong together. A request that
+   * names neither uses the active year and its active term as one pair; naming only one of them is rejected, so an
+   * explicit year is never paired with another year's active term.
+   */
   private async resolveBulkRenewalAcademicContext(
     context: RequestContext,
     input: StudentBulkEnrollmentInput,
   ): Promise<{ academicYearId: string; termId: string; termStartsAt: string }> {
-    const academicYearId = optionalText(input.academicYearId);
-    const termId = optionalText(input.termId);
+    const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
+    const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
+    let academicYearId = optionalText(input.academicYearId);
+    let termId = optionalText(input.termId);
+    if (!academicYearId && !termId) {
+      const activeYear = years.find((year) => year.isActive);
+      const activeTerm = activeYear ? terms.find((term) => term.isActive && term.academicYearId === activeYear.id) : undefined;
+      academicYearId = activeYear?.id;
+      termId = activeTerm?.id;
+    }
     if (!academicYearId || !termId) {
       throw new BadRequestException("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
     }
-    const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
-    const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
     if (!years.some((year) => year.id === academicYearId)) {
       throw new BadRequestException("STUDENT_ENROLLMENT_ACADEMIC_YEAR_INVALID");
     }

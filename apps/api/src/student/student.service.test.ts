@@ -322,11 +322,20 @@ describe("StudentService", () => {
       });
   });
 
-  it("DEC-20261102-08: toplu yenileme yıl ve dönemi açıkça ister ve birbirine ait olmalarını denetler", async () => {
+  it("DEC-20261102-08: toplu yenileme yıl ve dönemi birlikte ister; ikisi de yoksa aktif çifti kullanır", async () => {
     const setup = createService();
-    await expect(setup.service.bulkRenewEnrollments(adminContext, { studentIds: ["student-a"], classId: "class-a" }))
-      .rejects.toThrow("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
+    const implicit = await setup.service.dryRunBulkRenewEnrollments(adminContext, { studentIds: ["student-a"], classId: "class-a" });
+    const active = await setup.service.dryRunBulkRenewEnrollments(adminContext, {
+      studentIds: ["student-a"],
+      classId: "class-a",
+      academicYearId: implicit.academicYearId,
+      termId: implicit.termId,
+    });
+    expect([implicit.academicYearId, implicit.termId]).toEqual([active.academicYearId, active.termId]);
+    expect(implicit.academicYearId).toBeTruthy();
     await expect(setup.service.dryRunBulkRenewEnrollments(adminContext, { studentIds: ["student-a"], academicYearId: "academic-year-2026" }))
+      .rejects.toThrow("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
+    await expect(setup.service.dryRunBulkRenewEnrollments(adminContext, { studentIds: ["student-a"], termId: "term-2026-spring" }))
       .rejects.toThrow("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
     await expect(setup.service.bulkRenewEnrollments(adminContext, {
       studentIds: ["student-a"],
