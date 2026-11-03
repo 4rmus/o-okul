@@ -15,7 +15,7 @@ import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRoles, hasInstitutionAccess, hasSubjectPortalAccess, hasSystemAccess } from "./_shared/access.js";
 import { buildInstitutionRailGroups, institutionNavGroups, rolePortalNavGroups, systemNavGroups } from "./_shared/navigation.js";
 import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpener } from "./_shell/command-palette.js";
-import { confirmInAppNavigation } from "./_shell/navigation-guard.js";
+import { confirmInAppNavigation, hasInAppNavigationGuard, rearmInAppNavigationGuard } from "./_shell/navigation-guard.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
 import { ThemeToggle } from "./_shell/theme-toggle.js";
@@ -149,6 +149,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isMobileNavOpen) return undefined;
+    // A drawer link on a page with unsaved work opens the page's dialog instead of navigating. This window capture
+    // listener runs before the guard's document listener, so the drawer closes before that dialog appears.
+    function handleDrawerLinkClick(event: MouseEvent) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!hasInAppNavigationGuard() || !(event.target instanceof Element)) return;
+      const anchor = event.target.closest("a[href]");
+      if (!anchor || !sidebarRef.current?.contains(anchor)) return;
+      setIsMobileNavOpen(false);
+      mobileNavTriggerRef.current?.focus();
+    }
+    window.addEventListener("click", handleDrawerLinkClick, true);
+    return () => window.removeEventListener("click", handleDrawerLinkClick, true);
+  }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) return undefined;
 
     window.setTimeout(() => mobileNavCloseRef.current?.focus(), 0);
 
@@ -187,15 +203,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
-    // Unsaved work on the page (grade entry) asks first; cancel keeps the session and the page as they are.
-    if (!(await confirmInAppNavigation())) return;
+    // Unsaved work on the page (grade entry) asks first; cancel keeps the session and the page as they are. The
+    // redirect below replaces the guard's history entry, so no forward entry leads back into the page.
+    closeMobileNavBeforePageDialog();
+    if (!(await confirmInAppNavigation({ replace: true }))) return;
     const confirmed = await logout();
     router.replace(loginPathAfterLogout(loginPathFor(pathname), !confirmed));
   }
 
   async function handlePersonaSwitch(target: ActivePersona) {
     if (isPersonaSwitching) return;
-    if (!(await confirmInAppNavigation())) return;
+    closeMobileNavBeforePageDialog();
+    // A persona the page does not allow is redirected with a history replace; one that keeps the page gets the guard
+    // back once the page is found still on its address.
+    if (!(await confirmInAppNavigation({ replace: true }))) return;
     setIsPersonaSwitching(true);
     setPersonaSwitchError("");
     try {
@@ -203,6 +224,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       closeMobileNav();
     } catch {
       setPersonaSwitchError("Çalışma alanı değiştirilemedi. Tekrar deneyin.");
+      // Nothing changed: the unsaved work is still on the page and back must ask again.
+      rearmInAppNavigationGuard();
     } finally {
       setIsPersonaSwitching(false);
     }
@@ -261,6 +284,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   function closeMobileNav() {
     setIsMobileNavOpen(false);
     window.setTimeout(() => mobileNavTriggerRef.current?.focus(), 0);
+  }
+
+  /**
+   * The page's unsaved-work dialog renders inside main, which the open drawer covers and hides from assistive
+   * technology, so the drawer closes first. Focus moves to the menu button now, not on a timer, so the dialog takes
+   * focus after it and hands it back there.
+   */
+  function closeMobileNavBeforePageDialog() {
+    if (!isMobileNavOpen || !hasInAppNavigationGuard()) return;
+    setIsMobileNavOpen(false);
+    mobileNavTriggerRef.current?.focus();
   }
 
   function isGroupActive(group: NavigationGroup) {
