@@ -15,6 +15,7 @@ import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRoles, hasInstitutionAccess, hasSubjectPortalAccess, hasSystemAccess } from "./_shared/access.js";
 import { buildInstitutionRailGroups, institutionNavGroups, rolePortalNavGroups, systemNavGroups } from "./_shared/navigation.js";
 import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpener } from "./_shell/command-palette.js";
+import { confirmInAppNavigation } from "./_shell/navigation-guard.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
 import { ThemeToggle } from "./_shell/theme-toggle.js";
@@ -186,12 +187,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
+    // Unsaved work on the page (grade entry) asks first; cancel keeps the session and the page as they are.
+    if (!(await confirmInAppNavigation())) return;
     const confirmed = await logout();
     router.replace(loginPathAfterLogout(loginPathFor(pathname), !confirmed));
   }
 
   async function handlePersonaSwitch(target: ActivePersona) {
     if (isPersonaSwitching) return;
+    if (!(await confirmInAppNavigation())) return;
     setIsPersonaSwitching(true);
     setPersonaSwitchError("");
     try {
