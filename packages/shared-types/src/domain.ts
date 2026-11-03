@@ -3273,6 +3273,11 @@ export interface ExamParticipantRecord {
   participantNo?: string;
   bookletType?: string;
   status: ExamParticipantStatus | string;
+  /**
+   * True when a live (not deleted) ExamResult row exists for this participant. The raw import never moves `status`
+   * off REGISTERED, so a result is the attendance evidence; clients show "Katıldı" for it without inferring further.
+   */
+  hasResult?: boolean;
   createdAt: string;
   updatedAt: string;
 }

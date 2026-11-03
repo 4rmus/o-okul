@@ -48,6 +48,7 @@ import {
   requireTenantWideStaffContext,
 } from "../tenant/tenant-access.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { isPreferredReportSnapshot } from "./report-snapshot-preference.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
 export const reportGenerationQueueProducerToken = Symbol("reportGenerationQueueProducer");
@@ -663,8 +664,10 @@ export class ReportGenerationService implements OnApplicationShutdown {
           continue;
         }
         if (isTeacherSubjectContext(context)) teacherAuthorizedSnapshot = true;
+        // One point per exam (L7): the broadest scope wins, then the newest; the institution dashboard headline
+        // applies the same rule (report-snapshot-preference.ts). Teacher access was checked per snapshot above.
         const current = selectedByExam.get(snapshot.examId);
-        if (!current || isPreferredProgressSnapshot(snapshot, current.snapshot)) {
+        if (!current || isPreferredReportSnapshot(snapshot, current.snapshot)) {
           selectedByExam.set(snapshot.examId, { snapshot, student });
         }
       }
@@ -2074,27 +2077,6 @@ function readText(value: unknown): string {
 
 function toTime(value: string | undefined): number {
   return value ? new Date(value).getTime() : 0;
-}
-
-const progressSnapshotScopeFilters = ["campusId", "gradeLevelId", "classId", "courseId", "termId"] as const;
-
-function progressSnapshotScopeWidth(snapshot: ReportSnapshotRecord): number {
-  return progressSnapshotScopeFilters.filter((key) => Boolean(snapshot[key])).length;
-}
-
-/**
- * Student progress keeps exactly one point per exam (L7). Among the READY snapshots of one exam that the caller may
- * read (teacher access is checked per snapshot before this runs), the broadest scope wins: the fewest of campus,
- * grade level, class, course and term filters, so a tenant-wide snapshot beats a level or class one. Within the same
- * width the most recently generated snapshot wins; the snapshot id breaks a remaining tie deterministically.
- * Read-side selection only: snapshot generation and shape are untouched.
- */
-function isPreferredProgressSnapshot(candidate: ReportSnapshotRecord, current: ReportSnapshotRecord): boolean {
-  const widthDiff = progressSnapshotScopeWidth(candidate) - progressSnapshotScopeWidth(current);
-  if (widthDiff !== 0) return widthDiff < 0;
-  const timeDiff = toTime(candidate.generatedAt ?? candidate.createdAt) - toTime(current.generatedAt ?? current.createdAt);
-  if (timeDiff !== 0 && !Number.isNaN(timeDiff)) return timeDiff > 0;
-  return candidate.id.localeCompare(current.id) > 0;
 }
 
 function toStudentProgressPoint(snapshot: ReportSnapshotRecord, student: Record<string, unknown>): ReportStudentProgressPoint {

@@ -2314,6 +2314,7 @@ const examParticipantRecordSchema = objectSchema({
   participantNo: stringSchema(),
   bookletType: stringSchema(),
   status: { type: "string", enum: ["REGISTERED", "ATTENDED", "ABSENT"] },
+  hasResult: { type: "boolean" },
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "examId", "studentId", "status", "createdAt", "updatedAt"]);

@@ -129,9 +129,9 @@ export function ExamsPage() {
   const draftExamCount = rows.filter((exam) => exam.status === "DRAFT").length;
   const answerKeyReadyCount = rows.filter((exam) => exam.answerKeySummary?.status && exam.answerKeySummary.status !== "MISSING").length;
   const selectedParticipantClassCount = countParticipantClasses(participants, studentById);
-  const selectedAttendedCount = participants.filter((participant) => participant.status === "ATTENDED").length;
-  const selectedAbsentCount = participants.filter((participant) => participant.status === "ABSENT").length;
-  const selectedRegisteredCount = participants.filter((participant) => participant.status === "REGISTERED").length;
+  const selectedAttendedCount = participants.filter((participant) => participantAttendance(participant) === "ATTENDED").length;
+  const selectedAbsentCount = participants.filter((participant) => participantAttendance(participant) === "ABSENT").length;
+  const selectedRegisteredCount = participants.filter((participant) => participantAttendance(participant) === "REGISTERED").length;
   const selectedBookletSummary = formatBookletSummary(participants);
   const examSummaryItems: OperationSummaryItem[] = [
     {
@@ -312,7 +312,9 @@ export function ExamsPage() {
       key: "status",
       priority: "secondary",
       render: (participant) => (
-        <StatusBadge tone={participantStatusTone(participant.status)}>{participantStatusLabel(participant.status)}</StatusBadge>
+        <StatusBadge tone={participantStatusTone(participantAttendance(participant))}>
+          {participantStatusLabel(participantAttendance(participant))}
+        </StatusBadge>
       ),
     },
   ];
@@ -848,6 +850,13 @@ function studentName(student: StudentRecord | undefined) {
 function classLabel(classId: string | undefined, classById: Map<string, ClassRecord>) {
   if (!classId) return "Sınıf kapsamı doğrulanmadı";
   return classById.get(classId)?.name ?? "Sınıf kapsamı doğrulanmadı";
+}
+
+// The API's attendance rule (exam workspace summary and institution dashboard): the raw import writes a result and
+// leaves the status REGISTERED, so `hasResult` means the student attended; ABSENT holds only without a result.
+function participantAttendance(participant: ExamParticipantRecord): string {
+  if (participant.hasResult) return "ATTENDED";
+  return participant.status;
 }
 
 function participantStatusLabel(status: string) {
