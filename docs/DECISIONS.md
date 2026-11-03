@@ -1555,8 +1555,8 @@ Durum: Onaylı (ürün sahibi, 2026-11-03: UAT bulgularını tek dalda düzeltme
 Karar: Staging UAT raporundaki 20 bulgu tek dalda düzeltilir. İki madde ürün davranışını değiştirir:
 - Ödev görünümü: Öğrenci 360'taki "Açık ödev" kartı ve Ödevler paneli, öğrencinin sınıfına verilen ödevleri
   de gösterir (bugün yalnız materyal atamalarını sayıyor). Veli portalı bağlı öğrencinin sınıf ödevlerini salt
-  okunur gösterir: başlık, açıklama, ders, teslim tarihi ve öğrencinin teslim durumu (teslim edildi, kontrol
-  edildi, teslim edilmedi). Öğretmenin kontrol notu ve puanı veliye gösterilmez. Yeni veli izni yoktur; veli
+  okunur gösterir: başlık, açıklama, kaynak materyal adı, teslim tarihi ve öğrencinin teslim durumu (teslim
+  edildi, kontrol edildi, teslim edilmedi); ödev kaydında ders alanı olmadığı için ders gösterilmez. Öğretmenin kontrol notu ve puanı veliye gösterilmez. Yeni veli izni yoktur; veli
   bağlantısı ve mevcut öğrenci kapsamı yeterlidir. Kampüs ve tenant kapsamı mevcut öğrenci okumasıyla aynıdır.
 - Dönem geçişi uygulaması, kayıt yenileme sayısını ve hedef yıl/dönemi gösteren açık bir onay penceresi ister;
   mezuniyet onayı aynen kalır.
