@@ -30,14 +30,14 @@ export function TeacherHomeworkCreatePanel({ accessToken, onCreated }: { accessT
   // Panel sessizce kaybolmaz: sınıflar alınamadıysa ya da atanmış sınıf yoksa nedeni söylenir.
   if (optionsQuery.isError || classes.length === 0) {
     return (
-      <Panel aria-label="Ödev oluştur" description="Sınıf veya branş öğretmeni olarak atandığın sınıfa ödev ver." title="Ödev oluştur">
+      <Panel aria-label="Ödev oluştur" description="Sınıf veya branş öğretmeni olarak atandığınız sınıfa ödev verin." title="Ödev oluştur">
         {optionsQuery.isError ? (
           <div className="next-form-actions">
-            <p className="next-form-error" role="alert">Ödev verebileceğin sınıflar alınamadı.</p>
+            <p className="next-form-error" role="alert">Ödev verebileceğiniz sınıflar alınamadı.</p>
             <Button size="sm" variant="secondary" onClick={() => void optionsQuery.refetch()}>Tekrar dene</Button>
           </div>
         ) : (
-          <p className="next-status-note">Ödev verebileceğin atanmış bir sınıf yok. Sınıf veya branş öğretmeni ataması için kurum yöneticinle görüş.</p>
+          <p className="next-status-note">Ödev verebileceğiniz atanmış bir sınıf yok. Sınıf veya branş öğretmeni ataması için kurum yöneticinizle görüşün.</p>
         )}
       </Panel>
     );
@@ -67,14 +67,14 @@ export function TeacherHomeworkCreatePanel({ accessToken, onCreated }: { accessT
       setMessage({ tone: "status", text: `“${record.title}” ödevi oluşturuldu.` });
       onCreated();
     } catch {
-      setMessage({ tone: "alert", text: "Ödev oluşturulamadı. Atandığın sınıfı seçip tekrar deneyin." });
+      setMessage({ tone: "alert", text: "Ödev oluşturulamadı. Atandığınız sınıfı seçip tekrar deneyin." });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Panel aria-label="Ödev oluştur" description="Sınıf veya branş öğretmeni olarak atandığın sınıfa ödev ver." title="Ödev oluştur">
+    <Panel aria-label="Ödev oluştur" description="Sınıf veya branş öğretmeni olarak atandığınız sınıfa ödev verin." title="Ödev oluştur">
       <form className="next-form" onSubmit={(event) => void submit(event)}>
         <Field label="Sınıf">
           <Select value={form.classId} onChange={(event) => setForm({ ...form, classId: event.target.value })}>
