@@ -2818,6 +2818,7 @@ const reportSnapshotPdfExportResultSchema = objectSchema({
 
 const reportStudentProgressPointSchema = objectSchema({
   snapshotId: stringSchema(),
+  examId: stringSchema(),
   courseId: stringSchema(),
   examTitle: stringSchema(),
   examStartsAt: stringSchema({ format: "date-time" }),
@@ -3447,6 +3448,9 @@ const gradeAssessmentRecordSchema = objectSchema({
 }, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);
 const kv4ExamSeriesSchema = arraySchema(objectSchema({
   snapshotId: stringSchema(),
+  examId: stringSchema(),
+  examTitle: stringSchema(),
+  examStartsAt: stringSchema({ format: "date-time" }),
   generatedAt: stringSchema({ format: "date-time" }),
   successRate: { type: "number", description: "Başarı % on a 0-100 scale." },
   net: { type: "number" },

@@ -650,7 +650,7 @@ export class ReportGenerationService implements OnApplicationShutdown {
       resolvedStudentId,
       options.scope === "all" ? undefined : resolvedExamId,
     );
-    const points: ReportStudentProgressPoint[] = [];
+    const selectedByExam = new Map<string, { snapshot: ReportSnapshotRecord; student: Record<string, unknown> }>();
     let teacherAuthorizedSnapshot = false;
 
     for (const snapshot of snapshots) {
@@ -663,17 +663,10 @@ export class ReportGenerationService implements OnApplicationShutdown {
           continue;
         }
         if (isTeacherSubjectContext(context)) teacherAuthorizedSnapshot = true;
-        // The exam date frozen in the snapshot; the generation date stays the ordering key of the points.
-        const examStartsAt = readText(snapshot.snapshotData.examStartsAt);
-        points.push({
-          snapshotId: snapshot.id,
-          ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
-          ...(examStartsAt ? { examStartsAt } : {}),
-          ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
-          ...(snapshot.termId ? { termId: snapshot.termId } : {}),
-          total: readScoreSummary(student.total),
-          branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
-        });
+        const current = selectedByExam.get(snapshot.examId);
+        if (!current || isPreferredProgressSnapshot(snapshot, current.snapshot)) {
+          selectedByExam.set(snapshot.examId, { snapshot, student });
+        }
       }
     }
 
@@ -681,7 +674,13 @@ export class ReportGenerationService implements OnApplicationShutdown {
       throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
 
-    points.sort((a, b) => toTime(a.generatedAt) - toTime(b.generatedAt));
+    const points: ReportStudentProgressPoint[] = [...selectedByExam.values()]
+      .map(({ snapshot, student }) => toStudentProgressPoint(snapshot, student));
+    // Points are ordered by the exam date frozen in the snapshot; snapshots without it fall back to generation time.
+    points.sort((a, b) =>
+      toTime(a.examStartsAt ?? a.generatedAt) - toTime(b.examStartsAt ?? b.generatedAt)
+      || toTime(a.generatedAt) - toTime(b.generatedAt)
+      || a.snapshotId.localeCompare(b.snapshotId));
 
     const successRateDelta = delta(points, (point) => point.total.successRate);
     const netDelta = delta(points, (point) => point.total.net);
@@ -2075,6 +2074,44 @@ function readText(value: unknown): string {
 
 function toTime(value: string | undefined): number {
   return value ? new Date(value).getTime() : 0;
+}
+
+const progressSnapshotScopeFilters = ["campusId", "gradeLevelId", "classId", "courseId", "termId"] as const;
+
+function progressSnapshotScopeWidth(snapshot: ReportSnapshotRecord): number {
+  return progressSnapshotScopeFilters.filter((key) => Boolean(snapshot[key])).length;
+}
+
+/**
+ * Student progress keeps exactly one point per exam (L7). Among the READY snapshots of one exam that the caller may
+ * read (teacher access is checked per snapshot before this runs), the broadest scope wins: the fewest of campus,
+ * grade level, class, course and term filters, so a tenant-wide snapshot beats a level or class one. Within the same
+ * width the most recently generated snapshot wins; the snapshot id breaks a remaining tie deterministically.
+ * Read-side selection only: snapshot generation and shape are untouched.
+ */
+function isPreferredProgressSnapshot(candidate: ReportSnapshotRecord, current: ReportSnapshotRecord): boolean {
+  const widthDiff = progressSnapshotScopeWidth(candidate) - progressSnapshotScopeWidth(current);
+  if (widthDiff !== 0) return widthDiff < 0;
+  const timeDiff = toTime(candidate.generatedAt ?? candidate.createdAt) - toTime(current.generatedAt ?? current.createdAt);
+  if (timeDiff !== 0 && !Number.isNaN(timeDiff)) return timeDiff > 0;
+  return candidate.id.localeCompare(current.id) > 0;
+}
+
+function toStudentProgressPoint(snapshot: ReportSnapshotRecord, student: Record<string, unknown>): ReportStudentProgressPoint {
+  // Exam title and date frozen in the snapshot; the generation time stays as context.
+  const examStartsAt = readText(snapshot.snapshotData?.examStartsAt);
+  const examTitle = readText(snapshot.snapshotData?.examTitle).trim();
+  return {
+    snapshotId: snapshot.id,
+    examId: snapshot.examId,
+    ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
+    ...(examTitle ? { examTitle } : {}),
+    ...(examStartsAt ? { examStartsAt } : {}),
+    ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
+    ...(snapshot.termId ? { termId: snapshot.termId } : {}),
+    total: readScoreSummary(student.total),
+    branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
+  };
 }
 
 function delta(

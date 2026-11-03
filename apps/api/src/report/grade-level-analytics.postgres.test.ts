@@ -152,13 +152,15 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
     expect(fall.withoutLevelReport.map((item: { examId: string }) => item.examId)).toEqual(["exam-boundary-no-level"]);
   });
 
-  it("carries the snapshot's frozen exam date into the student progress projection", async () => {
+  it("carries the snapshot's frozen exam date and title into the student progress projection", async () => {
     const store = new PostgresReportSnapshotStore(app);
     const records = await runWithRequestContext(context(tenantA), () =>
       store.listReadyByStudent(tenantA, "student-a", scoped(tenantA, "exam-boundary-start")));
+    // The fixture snapshot stored no exam title; the projection carries the key as JSON null (readText ignores it).
     expect(records.map((record) => record.snapshotData)).toEqual([{
       generatedAt: null,
       examStartsAt: "2026-08-31T21:30:00.000Z",
+      examTitle: null,
       students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],
     }]);
   });

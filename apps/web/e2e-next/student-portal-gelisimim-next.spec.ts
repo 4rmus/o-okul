@@ -46,6 +46,11 @@ test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
     await expect(examTable).toContainText("%72,5");
     await expect(examTable).toContainText("%81,7");
     await expect(examTable).toContainText("24,5 / 30");
+    // L8: the row is dated by the exam (5 May), not by the report generation (20 May), and carries the exam title.
+    await expect(examTable).toContainText("05.05.2026");
+    await expect(examTable).toContainText("LGS Deneme 1");
+    await expect(examTable).not.toContainText("20.05.2026");
+    await expect(examTable).toContainText("17.06.2026");
     const gradeTable = gelisimim.getByRole("table", { name: "Okul notları: puan / tam puan" });
     await expect(gradeTable).toContainText("42 / 50");
     await expect(gradeTable).toContainText("Girmedi");
@@ -171,7 +176,8 @@ function studentApiResponse(pathName: string): unknown {
     return {
       attendance: { absent: 1, excused: 0, late: 0, present: 19, total: 20 },
       examSeries: [
-        { generatedAt: "2026-05-20T10:00:00.000Z", net: 20, questionCount: 30, snapshotId: "snapshot-1", successRate: 72.5 },
+        { examId: "exam-1", examStartsAt: "2026-05-05T07:00:00.000Z", examTitle: "LGS Deneme 1", generatedAt: "2026-05-20T10:00:00.000Z", net: 20, questionCount: 30, snapshotId: "snapshot-1", successRate: 72.5 },
+        // A legacy report that did not store the exam date falls back to the generation date and has no title.
         { generatedAt: "2026-06-17T10:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-2", successRate: 81.7 },
       ],
       homework: { materialAssignmentCount: 4, openClassHomeworkCount: 2 },

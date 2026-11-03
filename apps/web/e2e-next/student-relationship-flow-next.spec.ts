@@ -129,6 +129,11 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toContainText("Son sınav: Deneme B");
     // Genel bakış yalnız gelişim grafiğini yükler; rapor sürümleri Sınav detaylarında istenir.
     await expect.poll(() => requestedPaths.includes("/exams/exam-b/reports/students/student-a/progress")).toBe(true);
+    // L8: the exam history labels each point with the exam title and the exam date, not the report generation date.
+    const examHistory = page.getByRole("table", { name: "Öğrenci sınav geçmişi" });
+    await expect(examHistory).toContainText("Deneme A (05.10.2026)");
+    await expect(examHistory).toContainText("Deneme B (15.10.2026)");
+    await expect(examHistory).not.toContainText("03.11.2026");
     expect(requestedPaths.some((path) => path.endsWith("/snapshots"))).toBe(false);
     expect(requestedPaths.some((path) => path.includes("/reports/snapshots/"))).toBe(false);
 
@@ -885,7 +890,18 @@ function mockStudentExamResponse(pathName: string): { data: unknown } | undefine
     return { data: { examId: "exam-b", items: [], snapshotId: "snapshot-b2", studentId: "student-a", tenantId: "tenant-flow" } };
   }
   if (pathName === "/exams/exam-b/reports/students/student-a/progress") {
-    return { data: { examId: "exam-b", points: [], studentId: "student-a", tenantId: "tenant-flow" } };
+    // L7/L8: one point per exam, ordered by the frozen exam date; both reports were generated on the same later day.
+    return {
+      data: {
+        examId: "exam-b",
+        points: [
+          { examId: "exam-a", examStartsAt: "2026-10-05T07:00:00.000Z", examTitle: "Deneme A", generatedAt: "2026-11-03T09:00:00.000Z", snapshotId: "snapshot-a1", total: { net: 12, questionCount: 20, successRate: 60 } },
+          { examId: "exam-b", examStartsAt: "2026-10-15T07:00:00.000Z", examTitle: "Deneme B", generatedAt: "2026-11-03T09:05:00.000Z", snapshotId: "snapshot-b2", total: { net: 15, questionCount: 20, successRate: 75 } },
+        ],
+        studentId: "student-a",
+        tenantId: "tenant-flow",
+      },
+    };
   }
   return undefined;
 }

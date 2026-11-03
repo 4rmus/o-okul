@@ -509,6 +509,8 @@ export function PracticeScoreBar({
 export interface ProgressLineChartPoint {
   snapshotId?: string;
   examTitle?: string;
+  /** Exam date frozen in the snapshot; preferred over generatedAt for the point's date label. */
+  examStartsAt?: string;
   generatedAt?: string;
   total: {
     blank?: number;
@@ -537,10 +539,11 @@ export function ProgressLineChart({
   ...props
 }: ProgressLineChartProps) {
   const colors = useChartColors();
-  // Ölçüm etiketi sınav adıdır; ad yoksa rapor tarihi, o da yoksa sıra numarası kullanılır.
+  // Ölçüm etiketi sınav adıdır; ad yoksa sınav tarihi (saklanmamışsa rapor tarihi), o da yoksa sıra numarası kullanılır.
   const rows = points.map((point, index) => {
     const examTitle = point.examTitle?.trim() || undefined;
-    const dateLabel = point.generatedAt ? formatChartDate(point.generatedAt) : undefined;
+    const pointDate = point.examStartsAt || point.generatedAt;
+    const dateLabel = pointDate ? formatChartDate(pointDate) : undefined;
     return {
       dateLabel: examTitle ? dateLabel : undefined,
       id: point.snapshotId ?? point.generatedAt ?? String(index),

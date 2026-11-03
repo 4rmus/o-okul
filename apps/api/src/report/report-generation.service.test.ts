@@ -1059,7 +1059,7 @@ describe("ReportGenerationService", () => {
     });
   });
 
-  it("hazır snapshot geçmişinden öğrenci gelişim raporu döner", async () => {
+  it("tek sınav kapsamında aynı sınavın snapshotlarından tek gelişim noktası döner", async () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore();
     const service = new ReportGenerationService(producer, store);
@@ -1076,40 +1076,15 @@ describe("ReportGenerationService", () => {
     );
 
     expect(store.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a", examId: "exam-a" }]);
+    // snapshot-a and snapshot-previous have the same scope width; the more recently generated one is kept.
     expect(result).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
       studentId: "student-a",
       points: [
         {
-          snapshotId: "snapshot-previous",
-          courseId: "course-turkish",
-          generatedAt: "2026-06-05T09:00:00.000Z",
-          termId: "term-2026-spring",
-          total: {
-            correct: 15,
-            wrong: 4,
-            blank: 1,
-            net: 14,
-            questionCount: 20,
-            rawScore: 70,
-            standardScore: 80,
-            successRate: 70,
-          },
-          branches: [
-            {
-              branch: "Matematik",
-              correct: 15,
-              wrong: 4,
-              blank: 1,
-              net: 14,
-              questionCount: 20,
-              successRate: 70,
-            },
-          ],
-        },
-        {
           snapshotId: "snapshot-a",
+          examId: "exam-a",
           courseId: "course-math",
           generatedAt: "2026-06-06T09:00:00.000Z",
           termId: "term-2026-spring",
@@ -1137,9 +1112,9 @@ describe("ReportGenerationService", () => {
           ],
         },
       ],
-      successRateDelta: 17.5,
-      netDelta: 3.5,
-      standardScoreDelta: 7.5,
+      successRateDelta: 0,
+      netDelta: 0,
+      standardScoreDelta: 0,
     });
   });
 
@@ -1164,33 +1139,157 @@ describe("ReportGenerationService", () => {
     expect(store.tenantInputs).toEqual([]);
     expect(store.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     expect(result.examId).toBe("exam-a");
-    expect(result.points.map((point) => point.snapshotId)).toEqual(["snapshot-previous", "snapshot-a", "snapshot-other-exam"]);
-    expect(result.points.map((point) => point.total.net)).toEqual([14, 17.5, 20]);
-    expect(result.successRateDelta).toBe(30);
-    expect(result.netDelta).toBe(6);
-    expect(result.standardScoreDelta).toBe(10);
+    expect(result.points.map((point) => [point.examId, point.snapshotId])).toEqual([
+      ["exam-a", "snapshot-a"],
+      ["exam-b", "snapshot-other-exam"],
+    ]);
+    expect(result.points.map((point) => point.total.net)).toEqual([17.5, 20]);
+    expect(result.successRateDelta).toBe(12.5);
+    expect(result.netDelta).toBe(2.5);
+    expect(result.standardScoreDelta).toBe(2.5);
   });
 
-  it("gelişim noktası snapshot'ta saklanan sınav tarihini taşır; sıralama rapor üretim tarihine göre kalır", async () => {
+  it("gelişim noktaları snapshot'ta saklanan sınav tarihine göre sıralanır; sınav tarihi yoksa rapor tarihine düşer", async () => {
     const producer = new FakeProducer();
-    const datedSnapshot: ReportSnapshotRecord = {
-      ...fakeSnapshot,
-      snapshotData: { ...fakeSnapshot.snapshotData, examStartsAt: "2026-06-01T07:00:00.000Z" },
+    // exam-b is generated first but held later; exam-a is generated later but held earlier; exam-c stored no exam date.
+    const examBSnapshot: ReportSnapshotRecord = {
+      ...fakeOtherExamSnapshot,
+      generatedAt: "2026-06-02T09:00:00.000Z",
+      snapshotData: { ...fakeOtherExamSnapshot.snapshotData, examStartsAt: "2026-05-20T07:00:00.000Z", examTitle: "Deneme 2" },
     };
-    const store = new InMemoryReportSnapshotStore({ snapshots: [datedSnapshot, fakePreviousSnapshot] });
+    const examASnapshot: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      snapshotData: { ...fakeSnapshot.snapshotData, examStartsAt: "2026-05-10T07:00:00.000Z", examTitle: " Deneme 1 " },
+    };
+    const examCSnapshot: ReportSnapshotRecord = {
+      ...fakePreviousSnapshot,
+      id: "snapshot-exam-c",
+      examId: "exam-c",
+      generatedAt: "2026-05-15T09:00:00.000Z",
+    };
+    const store = new InMemoryReportSnapshotStore({ snapshots: [examASnapshot, examBSnapshot, examCSnapshot] });
     const service = new ReportGenerationService(producer, store);
 
     const result = await service.getStudentProgress(
       { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
       "exam-a",
       "student-a",
+      { scope: "all" },
     );
 
-    expect(result.points.map((point) => [point.snapshotId, point.examStartsAt, point.generatedAt])).toEqual([
-      ["snapshot-previous", undefined, "2026-06-05T09:00:00.000Z"],
-      ["snapshot-a", "2026-06-01T07:00:00.000Z", "2026-06-06T09:00:00.000Z"],
+    expect(result.points.map((point) => [point.examId, point.examTitle, point.examStartsAt, point.generatedAt])).toEqual([
+      ["exam-a", "Deneme 1", "2026-05-10T07:00:00.000Z", "2026-06-06T09:00:00.000Z"],
+      ["exam-c", undefined, undefined, "2026-05-15T09:00:00.000Z"],
+      ["exam-b", "Deneme 2", "2026-05-20T07:00:00.000Z", "2026-06-02T09:00:00.000Z"],
     ]);
-    expect(result.points[0]).not.toHaveProperty("examStartsAt");
+    expect(result.points[1]).not.toHaveProperty("examStartsAt");
+    expect(result.points[1]).not.toHaveProperty("examTitle");
+    // Deltas run first-to-last over the date-ordered points: exam-a (net 17.5) -> exam-b (net 20).
+    expect(result.netDelta).toBe(2.5);
+  });
+
+  it("aynı sınavın kurum geneli, seviye ve sınıf snapshotlarından en geniş kapsamlı olanı tek nokta olarak seçer", async () => {
+    const producer = new FakeProducer();
+    const tenantWide: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      id: "snapshot-tenant-wide",
+      campusId: undefined,
+      gradeLevelId: undefined,
+      classId: undefined,
+      courseId: undefined,
+      termId: undefined,
+      generatedAt: "2026-06-01T09:00:00.000Z",
+      createdAt: "2026-06-01T09:00:00.000Z",
+    };
+    const level: ReportSnapshotRecord = {
+      ...tenantWide,
+      id: "snapshot-level",
+      gradeLevelId: "grade-8",
+      generatedAt: "2026-06-03T09:00:00.000Z",
+      createdAt: "2026-06-03T09:00:00.000Z",
+    };
+    const levelRegenerated: ReportSnapshotRecord = { ...level, id: "snapshot-level-2", generatedAt: "2026-06-04T09:00:00.000Z" };
+    const classScoped: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      id: "snapshot-class",
+      generatedAt: "2026-06-05T09:00:00.000Z",
+      createdAt: "2026-06-05T09:00:00.000Z",
+    };
+    const service = new ReportGenerationService(
+      producer,
+      new FakeReportSnapshotStore([classScoped, level, levelRegenerated, tenantWide, fakeOtherExamSnapshot]),
+    );
+
+    const all = await service.getStudentProgress(adminContext(), "exam-a", "student-a", { scope: "all" });
+    expect(all.points.map((point) => [point.examId, point.snapshotId])).toEqual([
+      ["exam-a", "snapshot-tenant-wide"],
+      ["exam-b", "snapshot-other-exam"],
+    ]);
+
+    const single = await service.getStudentProgress(adminContext(), "exam-a", "student-a");
+    expect(single.points.map((point) => point.snapshotId)).toEqual(["snapshot-tenant-wide"]);
+
+    // Without the tenant-wide snapshot the level snapshot (one filter) beats the class one; the newer level wins.
+    const withoutTenantWide = new ReportGenerationService(
+      producer,
+      new FakeReportSnapshotStore([classScoped, level, levelRegenerated]),
+    );
+    const levelOnly = await withoutTenantWide.getStudentProgress(adminContext(), "exam-a", "student-a");
+    expect(levelOnly.points.map((point) => point.snapshotId)).toEqual(["snapshot-level-2"]);
+  });
+
+  it("öğretmen yalnız erişebildiği sınıf snapshotını gelişim noktası olarak alır", async () => {
+    const producer = new FakeProducer();
+    const tenantWide: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      id: "snapshot-tenant-wide",
+      campusId: undefined,
+      gradeLevelId: undefined,
+      classId: undefined,
+      courseId: undefined,
+      termId: undefined,
+      generatedAt: "2026-06-07T09:00:00.000Z",
+      createdAt: "2026-06-07T09:00:00.000Z",
+    };
+    const service = new ReportGenerationService(
+      producer,
+      new FakeReportSnapshotStore([tenantWide, fakeSnapshot]),
+      undefined,
+      undefined,
+      new FakeStudentStore([
+        { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" },
+      ]) as unknown as StudentStore,
+      new FakeTeacherAssignmentStore([
+        {
+          id: "teacher-assignment-math",
+          tenantId: "tenant-a",
+          teacherId: "teacher-a",
+          classId: "class-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
+          role: "BRANCH_TEACHER",
+          startsAt: "2026-01-01",
+          endsAt: "2026-06-10",
+        },
+      ]) as unknown as TeacherAssignmentStore,
+    );
+    const teacherContext: RequestContext = {
+      tenantId: "tenant-a",
+      userId: "teacher-tenant-a",
+      roles: ["TEACHER"],
+      activePersona: "TEACHER",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+      subjectType: "TEACHER",
+      subjectId: "teacher-a",
+      bypassRls: false,
+    };
+
+    const teacherProgress = await service.getStudentProgress(teacherContext, "exam-a", "student-a", { scope: "all" });
+    expect(teacherProgress.points.map((point) => point.snapshotId)).toEqual(["snapshot-a"]);
+
+    const adminProgress = await service.getStudentProgress(adminContext(), "exam-a", "student-a", { scope: "all" });
+    expect(adminProgress.points.map((point) => point.snapshotId)).toEqual(["snapshot-tenant-wide"]);
   });
 
   it("öğrenciye ait hazır snapshot yoksa gelişim raporunu boş döner", async () => {
