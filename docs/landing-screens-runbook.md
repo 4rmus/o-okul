@@ -68,8 +68,13 @@ teslim worker'ları hiç başlatılmaz; kurumun veli otomatik bildirim anahtarla
 LANDING_SCREENS_DATABASE_URL=postgresql://app:app@127.0.0.1:55432/o_okul_landing_test \
 LANDING_SCREENS_DIRECT_DATABASE_URL=postgresql://migration:migration@127.0.0.1:55432/o_okul_landing_test \
 LANDING_SCREENS_API_PORT=3196 LANDING_SCREENS_WEB_PORT=43196 \
-pnpm landing:screens -- --build
+pnpm landing:screens --build
 ```
+
+Bayraklar doğrudan betik adından sonra yazılır (`pnpm landing:screens --build --with-exams`). pnpm 11, betik
+adından sonra yazılan `--` ayracını betiğe olduğu gibi geçirir (eski sürüm hat burada
+`ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL` ile duruyordu); hat artık baştaki tek `--` ayracını yok sayar, ama
+belgelenen biçim ayraçsızdır.
 
 | Değişken | Zorunlu | Anlam |
 | --- | --- | --- |
@@ -100,7 +105,13 @@ adresler loopback olmalıdır; staging veya uzak sunucuya çağrı yapılmaz.
    taslak not değerlendirmesi, bir gelişim değerlendirmesi ve bir öğretmen notu aynı uçlarla girilir.
 4. Öne çıkan öğretmen ve öğrenci için giriş hesabı davet teslimi olmadan bağlanır (SMS/e-posta kapalı).
 5. `--with-exams` ile üç sentetik LGS sınavı gerçek ham içe aktarma ve worker yolundan geçer; satır sayıları
-   `beklenen-sonuclar.json` ile denetlenir.
+   `beklenen-sonuclar.json` ile denetlenir. Sınavlar sınav formunun gönderdiği resmî puanlama kimliğiyle
+   açılır (`examType: LGS`, `examYear: 2026`, `scoringProfileId: TR-LGS-2026-NOSD-V1`, yanlış cezası 1/3);
+   veri setinin `wrongPenalty` değeri farklıysa hat `LANDING_SCREENS_WRONG_PENALTY_MISMATCH` ile durur.
+   `classIds` ile oluşturulan sınav 8-A/8-B öğrencilerini zaten katılımcı yapar; optik eşleştirme öğrenci
+   numarasını okuduğu için bu kayıtlar olduğu gibi eşleşir. Hat yalnız sınıf dışında kalan optik satırların
+   öğrencisini `POST /exams/:id/participants` ile ekler; sınıftan gelen bir öğrenci yeniden eklenmez
+   (`EXAM_PARTICIPANT_EXISTS` oluşmaz).
 6. `next start` ve önünde üretimdeki kenar yönlendiricinin yerini tutan yerel bir vekil (`/api`, `/health` →
    API; diğer her şey → web) açılır. Tarayıcı `<kurum>.localhost` adresinden gerçek giriş formuyla girer.
 
@@ -113,11 +124,19 @@ portal hesabı bağlama.
 `artifacts/landing-screens/<runId>/` (gitignore'daki `artifacts/` altında):
 
 - `<ekran>--<boyut>.png`: 15 PNG (5 ekran × 3 boyut). WebP dönüşümü yayın adımına bırakılır.
-- `manifest.json`: veri seti kimliği ve dosya SHA-256'ları, commit SHA ve kirli dosya sayısı, çekim zamanı
+- `manifest.json`: koşu durumu (`status: COMPLETED` veya `FAILED`; `FAILED` için `failure` alanında yalnız
+  hata kodu), veri seti kimliği ve dosya SHA-256'ları, commit SHA ve kirli dosya sayısı, çekim zamanı
   (koşuda doldurulur), araç sürümleri (Node, Playwright, Chromium), her ekranın rotası, boyutu, dosyası,
   bayt ve SHA-256 değeri, ekrandaki uyarılar, `gaps` ve `adjustments`, `evidenceClass: LOCAL_TEST`,
   `review.status: PENDING_HUMAN_PII_REVIEW`, `publication.status: NOT_APPROVED`.
 - `logs/api.log`, `logs/web.log`: yalnız yerel inceleme için; istek gövdesi yazılmaz.
+
+Koşu yarıda durursa (API hatası, zaman aşımı, eksik derleme) yığın kapatıldıktan sonra kısmi bir
+`manifest.json` yine yazılır: `status: FAILED`, `failure` (ör.
+`LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED`), boş `screens` ve o ana kadar
+biriken `gaps` ile `adjustments`. Yakalama sırasında ekran düşerse manifest ekran listesiyle birlikte
+`status: FAILED` ve `failure: LANDING_SCREENS_CAPTURE_FAILED:<sayı>` taşır. Veri seti doğrulaması gibi çıktı
+dizini açılmadan önceki hatalarda manifest yazılmaz.
 
 Görseller ve manifest depoya işlenmez.
 
