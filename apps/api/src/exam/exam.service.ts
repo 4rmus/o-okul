@@ -71,6 +71,8 @@ export interface ExamRepository {
   create(input: CreateExamRepositoryInput): Promise<ExamRecord>;
   list(tenantId: string): Promise<ExamRecord[]>;
   findById(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
+  /** Tenant-scoped batch read of live exams; callers fall back to findById when a repository does not offer it. */
+  listByIds?(tenantId: string, examIds: string[]): Promise<ExamRecord[]>;
   update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined>;
   publish(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
   delete(tenantId: string, examId: string): Promise<ExamRecord | undefined>;

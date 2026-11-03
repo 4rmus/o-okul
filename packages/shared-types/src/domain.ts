@@ -2838,9 +2838,13 @@ export interface ReportStudentProgressPoint {
   courseId?: string;
   /** Exam title frozen in the snapshot (snapshotData.examTitle). */
   examTitle?: string;
-  /** Exam date frozen in the snapshot (snapshotData.examStartsAt); points are ordered by it. */
+  /**
+   * Exam date the points are ordered by: snapshotData.examStartsAt when the snapshot froze it, otherwise the Exam
+   * row's startsAt read for snapshots generated before the exam date was frozen (2026-07-28). Absent only when the
+   * snapshot stored no date and the exam could not be read.
+   */
   examStartsAt?: string;
-  /** Report generation time; the ordering fallback for snapshots that did not store the exam date. */
+  /** Report generation time; the ordering fallback only for a point without examStartsAt. */
   generatedAt?: string;
   termId?: string;
   total: ReportStudentScoreSummary;
@@ -3686,7 +3690,10 @@ export interface GuardianExamSeriesPoint {
   examId?: string;
   /** Exam title frozen in the snapshot. */
   examTitle?: string;
-  /** Exam date frozen in the snapshot; the series is ordered by it (generatedAt is the fallback). */
+  /**
+   * Exam date the series is ordered by: frozen in the snapshot, else read from the Exam row for older snapshots
+   * (ReportStudentProgressPoint.examStartsAt); generatedAt is the fallback only when both are missing.
+   */
   examStartsAt?: string;
   generatedAt?: string;
   successRate?: number;

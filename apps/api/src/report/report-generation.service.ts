@@ -13,6 +13,7 @@ import type {
   ReportPdfRenderJobResult,
   ReportPdfSnapshotRecord,
   ReportErrorBooklet,
+  ExamRecord,
   ReportScopeRank,
   ReportStudentBranchStatistics,
   ReportStudentBranchSummary,
@@ -679,7 +680,10 @@ export class ReportGenerationService implements OnApplicationShutdown {
 
     const points: ReportStudentProgressPoint[] = [...selectedByExam.values()]
       .map(({ snapshot, student }) => toStudentProgressPoint(snapshot, student));
-    // Points are ordered by the exam date frozen in the snapshot; snapshots without it fall back to generation time.
+    // Points are ordered by the exam date frozen in the snapshot. Snapshots generated before the exam date was frozen
+    // (2026-07-28) take the exam's startsAt from the Exam row so one time axis orders the series; only a point whose
+    // exam cannot be read falls back to its generation time.
+    await this.fillExamStartsAtFromExams(context, points);
     points.sort((a, b) =>
       toTime(a.examStartsAt ?? a.generatedAt) - toTime(b.examStartsAt ?? b.generatedAt)
       || toTime(a.generatedAt) - toTime(b.generatedAt)
@@ -760,6 +764,30 @@ export class ReportGenerationService implements OnApplicationShutdown {
       };
     } catch {
       return {};
+    }
+  }
+
+  private async fillExamStartsAtFromExams(context: RequestContext, points: ReportStudentProgressPoint[]): Promise<void> {
+    if (!this.examRepository || !context.tenantId) return;
+    const legacyPoints = points.filter((point) => !point.examStartsAt && point.examId);
+    if (legacyPoints.length === 0) return;
+    const examIds = [...new Set(legacyPoints.map((point) => point.examId as string))];
+
+    let exams: ExamRecord[];
+    try {
+      exams = this.examRepository.listByIds
+        ? await this.examRepository.listByIds(context.tenantId, examIds)
+        : (await Promise.all(examIds.map((examId) => this.examRepository!.findById(context.tenantId!, examId))))
+          .filter((exam): exam is ExamRecord => Boolean(exam));
+    } catch {
+      return;
+    }
+    const startsAtByExamId = new Map(
+      exams.filter((exam) => exam.tenantId === context.tenantId && exam.startsAt).map((exam) => [exam.id, exam.startsAt as string]),
+    );
+    for (const point of legacyPoints) {
+      const startsAt = startsAtByExamId.get(point.examId as string);
+      if (startsAt) point.examStartsAt = startsAt;
     }
   }
 

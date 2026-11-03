@@ -58,6 +58,19 @@ export class PostgresExamRepository implements ExamRepository {
     });
   }
 
+  async listByIds(tenantId: string, examIds: string[]): Promise<ExamRecord[]> {
+    const ids = [...new Set(examIds)];
+    if (ids.length === 0) return [];
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ExamRow>(
+        `SELECT * FROM "Exam"
+         WHERE "tenantId" = $1 AND "id" = ANY($2::text[]) AND "deletedAt" IS NULL`,
+        [tenantId, ids],
+      );
+      return result.rows.map(toExamRecord);
+    });
+  }
+
   async hasScoringArtifacts(tenantId: string, examId: string): Promise<boolean> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<{ present: boolean }>(

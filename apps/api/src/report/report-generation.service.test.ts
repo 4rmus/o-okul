@@ -1149,9 +1149,10 @@ describe("ReportGenerationService", () => {
     expect(result.standardScoreDelta).toBe(2.5);
   });
 
-  it("gelişim noktaları snapshot'ta saklanan sınav tarihine göre sıralanır; sınav tarihi yoksa rapor tarihine düşer", async () => {
+  it("gelişim noktaları snapshot'ta saklanan sınav tarihine göre sıralanır; sınav tarihi yoksa sınav kaydının tarihine, o da yoksa rapor tarihine düşer", async () => {
     const producer = new FakeProducer();
-    // exam-b is generated first but held later; exam-a is generated later but held earlier; exam-c stored no exam date.
+    // exam-b is generated first but held later; exam-a is generated later but held earlier; exam-c stored no exam date
+    // (legacy snapshot) and its Exam row holds the date; exam-d stored none and its Exam row cannot be read.
     const examBSnapshot: ReportSnapshotRecord = {
       ...fakeOtherExamSnapshot,
       generatedAt: "2026-06-02T09:00:00.000Z",
@@ -1168,8 +1169,24 @@ describe("ReportGenerationService", () => {
       examId: "exam-c",
       generatedAt: "2026-05-15T09:00:00.000Z",
     };
-    const store = new InMemoryReportSnapshotStore({ snapshots: [examASnapshot, examBSnapshot, examCSnapshot] });
-    const service = new ReportGenerationService(producer, store);
+    const examDSnapshot: ReportSnapshotRecord = {
+      ...fakePreviousSnapshot,
+      id: "snapshot-exam-d",
+      examId: "exam-d",
+      generatedAt: "2026-05-12T09:00:00.000Z",
+    };
+    const store = new InMemoryReportSnapshotStore({ snapshots: [examASnapshot, examBSnapshot, examCSnapshot, examDSnapshot] });
+    // exam-c was held after exam-b although its report came out before exam-b's report.
+    const exams = new FakeExamDirectory([{ id: "exam-c", startsAt: "2026-05-25T07:00:00.000Z" }]);
+    const service = new ReportGenerationService(
+      producer,
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      exams as unknown as ExamRepository,
+    );
 
     const result = await service.getStudentProgress(
       { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
@@ -1178,15 +1195,73 @@ describe("ReportGenerationService", () => {
       { scope: "all" },
     );
 
+    // Only the legacy exams are read, in one tenant-scoped batch.
+    expect(exams.calls).toEqual([{ tenantId: "tenant-a", examIds: ["exam-c", "exam-d"] }]);
     expect(result.points.map((point) => [point.examId, point.examTitle, point.examStartsAt, point.generatedAt])).toEqual([
       ["exam-a", "Deneme 1", "2026-05-10T07:00:00.000Z", "2026-06-06T09:00:00.000Z"],
-      ["exam-c", undefined, undefined, "2026-05-15T09:00:00.000Z"],
+      ["exam-d", undefined, undefined, "2026-05-12T09:00:00.000Z"],
       ["exam-b", "Deneme 2", "2026-05-20T07:00:00.000Z", "2026-06-02T09:00:00.000Z"],
+      ["exam-c", undefined, "2026-05-25T07:00:00.000Z", "2026-05-15T09:00:00.000Z"],
     ]);
     expect(result.points[1]).not.toHaveProperty("examStartsAt");
-    expect(result.points[1]).not.toHaveProperty("examTitle");
-    // Deltas run first-to-last over the date-ordered points: exam-a (net 17.5) -> exam-b (net 20).
-    expect(result.netDelta).toBe(2.5);
+    expect(result.points[3]).not.toHaveProperty("examTitle");
+    // Deltas run first-to-last over the date-ordered points: exam-a (net 17.5) -> exam-c (net 14).
+    expect(result.netDelta).toBe(-3.5);
+  });
+
+  it("sınav kaydı eski snapshot'ın rapor tarihinden önce tutulduğunda nokta o sınav tarihine göre öne alınır", async () => {
+    const producer = new FakeProducer();
+    // E1's legacy snapshot was generated after E2's exam date; E1 was still held before E2, so it sorts first and the
+    // delta runs E1 -> E2 (net 14 -> 20) instead of flipping sign on the mixed time axis.
+    const e1Legacy: ReportSnapshotRecord = {
+      ...fakePreviousSnapshot,
+      id: "snapshot-e1-legacy",
+      examId: "exam-e1",
+      generatedAt: "2026-06-10T09:00:00.000Z",
+    };
+    const e2: ReportSnapshotRecord = {
+      ...fakeOtherExamSnapshot,
+      id: "snapshot-e2",
+      examId: "exam-e2",
+      generatedAt: "2026-06-03T09:00:00.000Z",
+      snapshotData: { ...fakeOtherExamSnapshot.snapshotData, examStartsAt: "2026-06-01T07:00:00.000Z", examTitle: "Deneme E2" },
+    };
+    const exams = new FakeExamDirectory([{ id: "exam-e1", startsAt: "2026-05-18T07:00:00.000Z" }]);
+    const service = new ReportGenerationService(
+      producer,
+      new InMemoryReportSnapshotStore({ snapshots: [e2, e1Legacy] }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      exams as unknown as ExamRepository,
+    );
+
+    const result = await service.getStudentProgress(adminContext(), "exam-e1", "student-a", { scope: "all" });
+
+    expect(result.points.map((point) => [point.examId, point.examStartsAt])).toEqual([
+      ["exam-e1", "2026-05-18T07:00:00.000Z"],
+      ["exam-e2", "2026-06-01T07:00:00.000Z"],
+    ]);
+    expect(result.netDelta).toBe(6);
+
+    // Without the batch read the repository's findById is used per legacy exam; the order is the same.
+    const findOnly = new ReportGenerationService(
+      producer,
+      new InMemoryReportSnapshotStore({ snapshots: [e2, e1Legacy] }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { findById: exams.findById.bind(exams) } as unknown as ExamRepository,
+    );
+    const viaFindById = await findOnly.getStudentProgress(adminContext(), "exam-e1", "student-a", { scope: "all" });
+    expect(viaFindById.points.map((point) => point.examId)).toEqual(["exam-e1", "exam-e2"]);
+
+    // No exam access at all: the legacy point keeps its generation time as the ordering key (E2 first).
+    const withoutExams = new ReportGenerationService(producer, new InMemoryReportSnapshotStore({ snapshots: [e2, e1Legacy] }));
+    const fallback = await withoutExams.getStudentProgress(adminContext(), "exam-e1", "student-a", { scope: "all" });
+    expect(fallback.points.map((point) => point.examId)).toEqual(["exam-e2", "exam-e1"]);
   });
 
   it("aynı sınavın kurum geneli, seviye ve sınıf snapshotlarından en geniş kapsamlı olanı tek nokta olarak seçer", async () => {
@@ -1404,6 +1479,35 @@ class FakeExamRepository {
       startsAt: "2026-06-06T09:00:00.000Z",
       createdAt: "2026-06-01T09:00:00.000Z",
       updatedAt: "2026-06-01T09:00:00.000Z",
+    };
+  }
+}
+
+class FakeExamDirectory {
+  readonly calls: Array<{ tenantId: string; examIds: string[] }> = [];
+
+  constructor(private readonly exams: Array<{ id: string; startsAt?: string }>) {}
+
+  async findById(tenantId: string, examId: string) {
+    const exam = this.exams.find((candidate) => candidate.id === examId);
+    return tenantId === "tenant-a" && exam ? this.toRecord(tenantId, exam) : undefined;
+  }
+
+  async listByIds(tenantId: string, examIds: string[]) {
+    this.calls.push({ tenantId, examIds });
+    if (tenantId !== "tenant-a") return [];
+    return this.exams.filter((exam) => examIds.includes(exam.id)).map((exam) => this.toRecord(tenantId, exam));
+  }
+
+  private toRecord(tenantId: string, exam: { id: string; startsAt?: string }) {
+    return {
+      id: exam.id,
+      tenantId,
+      title: `Sınav ${exam.id}`,
+      status: "PUBLISHED",
+      ...(exam.startsAt ? { startsAt: exam.startsAt } : {}),
+      createdAt: "2026-05-01T09:00:00.000Z",
+      updatedAt: "2026-05-01T09:00:00.000Z",
     };
   }
 }
