@@ -8,7 +8,7 @@
 // notification or announcement worker. Runbook: docs/landing-screens-runbook.md.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { createRequire } from "node:module";
 import { Socket } from "node:net";
@@ -19,6 +19,7 @@ import {
   LANDING_SCREENS,
   LANDING_SCREENS_DATASET_FILES,
   LANDING_SCREENS_LGS_SCORING,
+  LANDING_SCREENS_UNKNOWN_FAILURE,
   LANDING_SCREENS_VIEWPORTS,
   assertDisposableDatabaseUrl,
   assertLoopbackUrl,
@@ -26,6 +27,7 @@ import {
   buildProvenanceManifest,
   istanbulDateKey,
   lgsExamCreateBody,
+  manifestFailureCode,
   planMissingExamParticipants,
   previousSchoolDays,
   resolveOutputDir,
@@ -136,8 +138,10 @@ try {
   }
 } catch (error) {
   exitCode = 1;
-  failure = errorCode(error);
-  console.error(`landing-screens ${runId} durdu: ${failure}`);
+  // The manifest keeps only a LANDING_SCREENS_* code; the full error (message and stack) goes to logs/run.log.
+  failure = manifestFailureCode(error);
+  appendFileSync(join(outDir, "logs", "run.log"), `${new Date().toISOString()} ${runId} ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`, "utf8");
+  console.error(`landing-screens ${runId} durdu: ${failure} (ayrıntı: logs/run.log)`);
 } finally {
   if (edgeProxy) await new Promise((resolveClose) => edgeProxy.close(() => resolveClose()));
   for (const child of children.reverse()) await stopChild(child);
@@ -145,7 +149,7 @@ try {
   if (!manifestWritten) {
     // A stopped run still leaves its gaps and adjustments behind; no screen list, status FAILED.
     try {
-      writeManifest(seed, [], { tool: { node: process.version }, status: "FAILED", failure: failure ?? "LANDING_SCREENS_UNKNOWN_FAILURE" });
+      writeManifest(seed, [], { tool: { node: process.version }, status: "FAILED", failure: failure ?? LANDING_SCREENS_UNKNOWN_FAILURE });
       console.error(`landing-screens ${runId}: kısmi manifest yazıldı (status FAILED) -> ${relative(repoRoot, outDir) || outDir}/manifest.json`);
     } catch (manifestError) {
       console.error(`landing-screens ${runId}: kısmi manifest yazılamadı: ${errorCode(manifestError)}`);

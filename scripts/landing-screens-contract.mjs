@@ -36,6 +36,15 @@ export const LANDING_SCREENS_LGS_SCORING = Object.freeze({
 
 /** Run states written to manifest.json; a FAILED run still records its gaps and adjustments. */
 export const LANDING_SCREENS_RUN_STATUSES = Object.freeze(["COMPLETED", "FAILED"]);
+export const LANDING_SCREENS_UNKNOWN_FAILURE = "LANDING_SCREENS_UNKNOWN_FAILURE";
+// The manifest `failure` field carries a LANDING_SCREENS_* code only (the first line of the error, at most 160
+// characters, a code optionally followed by `:` details). Any other error text stays in logs/run.log.
+const MANIFEST_FAILURE_CODE = /^LANDING_SCREENS_[A-Z0-9_]+(?::[^\r\n]*)?$/;
+
+export function manifestFailureCode(error) {
+  const message = (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0].trim();
+  return message.length <= 160 && MANIFEST_FAILURE_CODE.test(message) ? message : LANDING_SCREENS_UNKNOWN_FAILURE;
+}
 
 /** Light theme only; sizes are fixed so later runs are comparable frame by frame. */
 export const LANDING_SCREENS_VIEWPORTS = Object.freeze([

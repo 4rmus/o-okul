@@ -13,11 +13,13 @@ import {
   LANDING_SCREENS_FORBIDDEN_ROUTE_PREFIXES,
   LANDING_SCREENS_LGS_SCORING,
   LANDING_SCREENS_RUN_STATUSES,
+  LANDING_SCREENS_UNKNOWN_FAILURE,
   LANDING_SCREENS_VIEWPORTS,
   assertDisposableDatabaseUrl,
   assertLoopbackUrl,
   assertProvidersDisabled,
   buildProvenanceManifest,
+  manifestFailureCode,
   findEnabledProviderEnv,
   lgsExamCreateBody,
   planMissingExamParticipants,
@@ -246,6 +248,27 @@ test("a stopped run writes a FAILED manifest that keeps gaps and adjustments", (
   assert.equal(buildProvenanceManifest({ ...manifestInput(), screens: [], failure: "x" }).failure, null);
   // The pipeline writes the partial manifest from its finally block, after the stack has stopped.
   assert.match(pipelineSource, /finally \{[\s\S]*if \(!manifestWritten\)[\s\S]*status: "FAILED"/);
+});
+
+test("the manifest failure field takes only a LANDING_SCREENS_* code; other errors become UNKNOWN_FAILURE and stay in logs/", () => {
+  assert.equal(LANDING_SCREENS_UNKNOWN_FAILURE, "LANDING_SCREENS_UNKNOWN_FAILURE");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED")), "LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_WEB_NOT_READY")), "LANDING_SCREENS_WEB_NOT_READY");
+  assert.equal(manifestFailureCode(new Error("LANDING_SCREENS_DATABASE_URL_REQUIRED\nat requireEnv (scripts/landing-screens.mjs:1:1)")), "LANDING_SCREENS_DATABASE_URL_REQUIRED");
+  // Driver, network and runtime messages never reach the manifest.
+  assert.equal(manifestFailureCode(new Error("connect ECONNREFUSED 127.0.0.1:5432")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error('password authentication failed for user "app"')), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new TypeError("fetch failed")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode("string thrown"), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(undefined), LANDING_SCREENS_UNKNOWN_FAILURE);
+  // A code with an oversized suffix is not written as is.
+  assert.equal(manifestFailureCode(new Error(`LANDING_SCREENS_API_FAILED:${"x".repeat(200)}`)), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error("landing_screens_lowercase")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  assert.equal(manifestFailureCode(new Error("Error: LANDING_SCREENS_WEB_NOT_READY")), LANDING_SCREENS_UNKNOWN_FAILURE);
+  // The pipeline stores the filtered code and appends the full error to logs/run.log.
+  assert.match(pipelineSource, /failure = manifestFailureCode\(error\);/);
+  assert.match(pipelineSource, /appendFileSync\(join\(outDir, "logs", "run\.log"\)/);
+  assert.doesNotMatch(pipelineSource, /failure = errorCode\(/);
 });
 
 test("LGS exams are created with the official scoring profile and its exam year", () => {

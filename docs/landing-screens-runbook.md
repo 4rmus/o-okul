@@ -125,15 +125,19 @@ portal hesabı bağlama.
 
 - `<ekran>--<boyut>.png`: 15 PNG (5 ekran × 3 boyut). WebP dönüşümü yayın adımına bırakılır.
 - `manifest.json`: koşu durumu (`status: COMPLETED` veya `FAILED`; `FAILED` için `failure` alanında yalnız
-  hata kodu), veri seti kimliği ve dosya SHA-256'ları, commit SHA ve kirli dosya sayısı, çekim zamanı
+  `LANDING_SCREENS_*` ile başlayan hata kodu; başka bir hata metni `LANDING_SCREENS_UNKNOWN_FAILURE` olarak
+  yazılır), veri seti kimliği ve dosya SHA-256'ları, commit SHA ve kirli dosya sayısı, çekim zamanı
   (koşuda doldurulur), araç sürümleri (Node, Playwright, Chromium), her ekranın rotası, boyutu, dosyası,
   bayt ve SHA-256 değeri, ekrandaki uyarılar, `gaps` ve `adjustments`, `evidenceClass: LOCAL_TEST`,
   `review.status: PENDING_HUMAN_PII_REVIEW`, `publication.status: NOT_APPROVED`.
-- `logs/api.log`, `logs/web.log`: yalnız yerel inceleme için; istek gövdesi yazılmaz.
+- `logs/api.log`, `logs/web.log`, `logs/run.log`: yalnız yerel inceleme için; istek gövdesi yazılmaz.
+  `run.log` koşuyu durduran hatanın tam metnini ve yığınını taşır; manifest'e yalnız kod geçer.
 
 Koşu yarıda durursa (API hatası, zaman aşımı, eksik derleme) yığın kapatıldıktan sonra kısmi bir
 `manifest.json` yine yazılır: `status: FAILED`, `failure` (ör.
-`LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED`), boş `screens` ve o ana kadar
+`LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED`; sürücü, ağ veya çalışma zamanı
+hatası gibi `LANDING_SCREENS_*` olmayan iletiler `LANDING_SCREENS_UNKNOWN_FAILURE` olarak yazılır, ayrıntı
+`logs/run.log` dosyasındadır), boş `screens` ve o ana kadar
 biriken `gaps` ile `adjustments`. Yakalama sırasında ekran düşerse manifest ekran listesiyle birlikte
 `status: FAILED` ve `failure: LANDING_SCREENS_CAPTURE_FAILED:<sayı>` taşır. Veri seti doğrulaması gibi çıktı
 dizini açılmadan önceki hatalarda manifest yazılmaz.
