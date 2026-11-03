@@ -153,6 +153,10 @@ describe("PostgresInstitutionDashboardStore", () => {
     expect(businessQuery?.sql).toContain('student."tenantId" = $1');
     expect(businessQuery?.sql).toContain('snapshot."snapshotData"->\'classes\'');
     expect(businessQuery?.sql).not.toContain("snapshotData\"->'students'");
+    // The headline prefers the tenant-wide READY snapshot, then the fewest scope filters, then the newest.
+    expect(businessQuery?.sql).toContain(
+      'ORDER BY ((snapshot."campusId" IS NOT NULL)::int + (snapshot."gradeLevelId" IS NOT NULL)::int + (snapshot."classId" IS NOT NULL)::int + (snapshot."courseId" IS NOT NULL)::int + (snapshot."termId" IS NOT NULL)::int) ASC, snapshot."generatedAt" DESC NULLS LAST',
+    );
     expect(result).toEqual({
       institution: {
         name: "Örnek Akademi",

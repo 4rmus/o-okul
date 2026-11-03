@@ -3,6 +3,7 @@ import type { InstitutionDashboardReportSummary, InstitutionDashboardSummary } f
 import { PostgresClassOverviewStore } from "../class-overview/class-overview.store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { reportSnapshotPreferenceOrderBySql } from "../report/report-snapshot-preference.js";
 
 /**
  * campusIds set: only rows attributable to these campuses are counted; unattributable tenant-wide counters read 0, and
@@ -129,7 +130,9 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
              AND snapshot."status" = 'READY'
              AND snapshot."snapshotData" IS NOT NULL
              AND snapshot."deletedAt" IS NULL
-           ORDER BY snapshot."generatedAt" DESC NULLS LAST, snapshot."createdAt" DESC
+           -- The headline is the tenant-wide snapshot when one is READY; otherwise the broadest scope (fewest campus,
+           -- level, class, course and term filters), then the newest: the rule the student progress series uses.
+           ORDER BY ${reportSnapshotPreferenceOrderBySql("snapshot")}
            LIMIT 1
          ),
          "scopedClass" AS (

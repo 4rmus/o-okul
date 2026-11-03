@@ -532,6 +532,31 @@ describe("ExamController", () => {
     expect(serialized).not.toContain("PII-42");
   });
 
+  it("workspace katılım özeti canlı sonucu olan katılımcıyı durumdan bağımsız katıldı sayar", async () => {
+    const issued = await login("admin-a@example.test");
+    const created = await repository.create({ tenantId: "tenant-a", title: "Katılım Kuralı Denemesi" });
+    // The raw import writes ExamResult rows and leaves the status REGISTERED (hasResult carries the evidence);
+    // an ABSENT row with a live result also attended; ABSENT without a result stays absent.
+    const roster: Array<[string, string, boolean]> = [
+      ["student-registered-result", "REGISTERED", true],
+      ["student-registered", "REGISTERED", false],
+      ["student-attended", "ATTENDED", false],
+      ["student-absent-result", "ABSENT", true],
+      ["student-absent", "ABSENT", false],
+    ];
+    for (const [studentId, status, hasResult] of roster) {
+      const registered = await participants.create({ tenantId: "tenant-a", examId: created.id, studentId });
+      participants.participants.set(registered.id, { ...registered, status, hasResult });
+    }
+
+    const response = await request(server)
+      .get(`/exams/${created.id}/workspace`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(response.body.participantSummary).toEqual({ total: 5, registered: 1, attended: 3, absent: 1 });
+  });
+
   it("workspace başka tenant sınavını 404 ile gizler", async () => {
     const issued = await login("admin-a@example.test");
     const otherTenantExam = await repository.create({ tenantId: "tenant-b", title: "Başka Kurum Gizli Sınav" });
