@@ -1,6 +1,13 @@
 export type TenantId = string;
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
-export { developmentMentorNoteMaxLength, licensePlanCodes, listExportKinds, listExportMaxRowCount, trialLicenseLimits } from "./domain.js";
+export {
+  developmentMentorNoteMaxLength,
+  licensePlanCodes,
+  listExportKinds,
+  listExportMaxRowCount,
+  studentBulkMaxStudentCount,
+  trialLicenseLimits,
+} from "./domain.js";
 export type { LicensePlanCode, LicenseState } from "./domain.js";
 export {
   assertProductEvent,

@@ -247,6 +247,8 @@ export function ClassMappingStep({ classes, loading, onChange, plan, state }: Cl
 
 interface ExitReviewStepProps {
   classes: ClassRecord[];
+  /** True while the confirmation in the address matches the current set of graduating and leaving students. */
+  confirmed: boolean;
   loading: boolean;
   onConfirm(confirmed: boolean): void;
   onOverrides(overrides: Record<string, StudentOverride>): void;
@@ -261,14 +263,14 @@ const actionLabels: Record<StudentAction, string> = {
   skip: "Geçişe dahil değil",
 };
 
-export function ExitReviewStep({ classes, loading, onConfirm, onOverrides, plan, state }: ExitReviewStepProps) {
+export function ExitReviewStep({ classes, confirmed, loading, onConfirm, onOverrides, plan, state }: ExitReviewStepProps) {
   const [leaverChoice, setLeaverChoice] = useState("");
   // The address is the source of truth; the local copy keeps the box responsive until the address catches up.
-  const [confirmedDraft, setConfirmedDraft] = useState(state.confirmed);
-  const [syncedConfirmed, setSyncedConfirmed] = useState(state.confirmed);
-  if (syncedConfirmed !== state.confirmed) {
-    setSyncedConfirmed(state.confirmed);
-    setConfirmedDraft(state.confirmed);
+  const [confirmedDraft, setConfirmedDraft] = useState(confirmed);
+  const [syncedConfirmed, setSyncedConfirmed] = useState(confirmed);
+  if (syncedConfirmed !== confirmed) {
+    setSyncedConfirmed(confirmed);
+    setConfirmedDraft(confirmed);
   }
   const classNames = classNameMap(classes);
   const rows = (plan?.candidates ?? []).filter((item) => item.action === "graduate" || item.action === "leave" || state.overrides[item.student.id]);
@@ -355,6 +357,9 @@ export function ExitReviewStep({ classes, loading, onConfirm, onOverrides, plan,
             onConfirm(event.target.checked);
           }}
         />
+      ) : null}
+      {exitCount > 0 && state.confirmation && !confirmed ? (
+        <Alert tone="warning">Mezun veya ayrılan öğrenci listesi onayınızdan sonra değişti. Listeyi kontrol edip yeniden onaylayın.</Alert>
       ) : null}
     </Panel>
   );

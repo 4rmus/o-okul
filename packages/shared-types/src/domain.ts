@@ -1132,7 +1132,14 @@ export interface StudentEnrollmentActionRequest {
   startsAt?: string;
 }
 
+/**
+ * Upper bound of `studentIds` in one bulk renewal and its preview; a caller with more students sends several
+ * requests. Same bound as the bulk guardian invitation.
+ */
+export const studentBulkMaxStudentCount = 500;
+
 export interface StudentBulkEnrollmentRequest extends StudentEnrollmentActionRequest {
+  /** 1 to `studentBulkMaxStudentCount` students. */
   studentIds?: string[];
   classIdBySourceClassId?: Record<string, string>;
   useAutomaticClassMapping?: boolean;
@@ -1175,6 +1182,11 @@ export interface StudentBulkRenewDryRunResult {
   termStartsAt: string;
   /** False while the target term starts after today; the wizard applies only a started term. */
   termStarted: boolean;
+  /**
+   * Whether the caller may run POST /academic-calendar/activate (academic:manage and a tenant-wide scope). The wizard
+   * refuses to start a transition it could not finish, so campus-restricted staff never leave one half applied.
+   */
+  canActivateCalendar: boolean;
   items: StudentBulkRenewDryRunItem[];
   conflictStudentIds: string[];
   quota: {
@@ -1189,6 +1201,7 @@ export interface StudentBulkRenewDryRunResult {
 export type StudentBulkStatusTarget = "GRADUATED" | "TRANSFERRED";
 
 export interface StudentBulkStatusRequest {
+  /** 1 to 1000 students. */
   studentIds: string[];
   status: StudentBulkStatusTarget;
   /** Must be true: the change suspends portal access and is not undone by the wizard. */

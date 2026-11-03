@@ -14,6 +14,7 @@ import {
   StudentImportService,
 } from "./student-import.service.js";
 import { StudentGuardianInvitationService } from "./student-guardian-invitation.service.js";
+import { studentBulkMaxStudentCount } from "@o-okul/shared-types";
 import {
   StudentService,
   type StudentBulkEnrollmentInput,
@@ -122,9 +123,10 @@ const studentEnrollmentActionBodySchema = z.object({
   startsAt: optionalStudentEnrollmentStartsAtSchema,
   termId: optionalTrimmedString,
 }).strict();
+// One bulk renewal (and its preview) names at most studentBulkMaxStudentCount students; the wizard sends batches.
 const studentBulkEnrollmentBodySchema = studentEnrollmentActionBodySchema.extend({
   classIdBySourceClassId: z.record(z.string(), z.string()).optional(),
-  studentIds: z.array(requiredTrimmedString).optional(),
+  studentIds: z.array(requiredTrimmedString).max(studentBulkMaxStudentCount).optional(),
   useAutomaticClassMapping: z.boolean().optional(),
 }).strict();
 // DEC-20261102-08: year-end exits only; the explicit flag records that the caller confirmed an irreversible change.

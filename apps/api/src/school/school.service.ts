@@ -23,6 +23,7 @@ import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService, type IdempotencyTransactionCompletion } from "../http/idempotency.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import {
   type AcademicCalendarActivation,
@@ -90,6 +91,27 @@ type SchoolRecord =
   | CourseRecord
   | GradeLevelRecord
   | LearningOutcomeRecord;
+
+/**
+ * DEC-20261102-08: the campus-scope rule of POST /academic-calendar/activate. The calendar is tenant-wide, so a
+ * campus-restricted staff context (or an operations staff context without a scope) may not activate it.
+ */
+export function academicCalendarActivationScopeDenial(
+  context: Pick<RequestContext, "roles" | "campusScope">,
+): "SCHOOL_CAMPUS_SCOPE_MISSING" | "SCHOOL_CAMPUS_SCOPE_FORBIDDEN" | undefined {
+  if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) return "SCHOOL_CAMPUS_SCOPE_MISSING";
+  return context.campusScope?.scopeMode === "CAMPUSES" ? "SCHOOL_CAMPUS_SCOPE_FORBIDDEN" : undefined;
+}
+
+/**
+ * Whether the caller would pass POST /academic-calendar/activate: the endpoint capability and the campus-scope rule.
+ * The term-transition wizard reads it from the bulk-renew preview before it commits any irreversible step.
+ */
+export function canActivateAcademicCalendar(
+  context: Pick<RequestContext, "roles" | "capabilities" | "campusScope">,
+): boolean {
+  return hasCapability(context, "academic:manage") && !academicCalendarActivationScopeDenial(context);
+}
 
 @Injectable()
 export class SchoolService {
@@ -566,8 +588,9 @@ export class SchoolService {
   ): Promise<AcademicCalendarActivation> {
     const tenantId = this.resolveTenantId(context, undefined);
     // The calendar is tenant-wide; a campus-restricted staff member must not switch it for other campuses.
-    if (this.isCampusRestricted(context)) {
-      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    const scopeDenial = academicCalendarActivationScopeDenial(context);
+    if (scopeDenial) {
+      throw new ForbiddenException(scopeDenial);
     }
     let result: AcademicCalendarActivation;
     try {

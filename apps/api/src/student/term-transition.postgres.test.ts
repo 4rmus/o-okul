@@ -211,4 +211,22 @@ run("term transition with restricted app role and RLS", () => {
     }))).resolves.toBeUndefined();
     expect((await admin.query('SELECT status FROM "Student" WHERE id = $1', [student.id])).rows[0]).toEqual({ status: "GRADUATED" });
   });
+
+  it("toplu okuma yalnız istek kurumunun silinmemiş öğrencilerini tek sorguda döner", async () => {
+    const create = (tenant: string, studentNo: string) => inTenant(tenant, () => students.create({
+      tenantId: tenant,
+      studentNo,
+      firstName: "DENİZ",
+      lastName: "AK",
+      gradeLevelId: id(tenant, "grade-8"),
+      classId: id(tenant, "class-8a"),
+      status: "ACTIVE",
+    }));
+    const [own, deleted, foreign] = [await create(tenantA, "320"), await create(tenantA, "321"), await create(tenantB, "322")];
+    await inTenant(tenantA, () => students.softDelete(deleted.id, new Date().toISOString()));
+
+    const found = await inTenant(tenantA, () => students.findManyByIds([own.id, deleted.id, foreign.id, "missing"]));
+    expect(found.map((student) => student.id)).toEqual([own.id]);
+    await expect(inTenant(tenantA, () => students.findManyByIds([]))).resolves.toEqual([]);
+  });
 });

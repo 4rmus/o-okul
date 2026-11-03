@@ -83,6 +83,7 @@ export async function loadOpenClassAssignments(accessToken: string, today: strin
 
 const errorMessages: Record<string, string> = {
   ACADEMIC_CALENDAR_NOT_STARTED: "Başlangıç tarihi gelmemiş yıl veya dönem etkinleştirilemez.",
+  ACADEMIC_TERM_NOT_STARTED: "Başlangıç tarihi gelmemiş döneme kayıt yenilenemez. Dönem başladığında yeniden deneyin.",
   ACADEMIC_TERM_YEAR_MISMATCH: "Seçilen dönem bu akademik yıla ait değil.",
   ACTIVE_STUDENT_LIMIT_REACHED: "Lisanstaki aktif öğrenci sınırı aşılıyor. Lisans dönemini güncelledikten sonra yeniden deneyin.",
   IDEMPOTENCY_KEY_IN_PROGRESS: "Bu adım hâlâ işleniyor. Biraz sonra yeniden deneyin.",

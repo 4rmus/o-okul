@@ -186,6 +186,8 @@ export interface StudentStore {
     input: StudentPortalAccessUpdateRequest,
   ): Promise<StudentPortalAccessUpdateResult | undefined>;
   findById(id: string): Promise<StudentRecord | undefined>;
+  /** Live (not deleted) students among `ids` in one read, under the request tenant; missing ids are left out. */
+  findManyByIds?(ids: string[]): Promise<StudentRecord[]>;
   /** Pass tenantId when there is no request tenant (unauthenticated invitation accept). */
   findProfileById(id: string, tenantId?: string): Promise<StudentProfileStorageRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<StudentRecord | undefined>;
@@ -348,6 +350,11 @@ export class InMemoryStudentStore implements StudentStore {
 
   async findById(id: string): Promise<StudentRecord | undefined> {
     return this.students.find((candidate) => candidate.id === id && !candidate.deletedAt);
+  }
+
+  async findManyByIds(ids: string[]): Promise<StudentRecord[]> {
+    const wanted = new Set(ids);
+    return this.students.filter((candidate) => wanted.has(candidate.id) && !candidate.deletedAt);
   }
 
   async findProfileById(id: string): Promise<StudentProfileStorageRecord | undefined> {
@@ -860,6 +867,17 @@ export class PostgresStudentStore implements StudentStore {
         [id],
       );
       return result.rows[0] ? toStudentRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async findManyByIds(ids: string[]): Promise<StudentRecord[]> {
+    if (ids.length === 0) return [];
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<StudentRow>(
+        `SELECT * FROM "Student" WHERE "id" = ANY($1::text[]) AND "deletedAt" IS NULL`,
+        [ids],
+      );
+      return result.rows.map(toStudentRecord);
     });
   }
 
