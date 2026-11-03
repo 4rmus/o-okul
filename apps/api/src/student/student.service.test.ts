@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryDevelopmentStore } from "../development/development-store.js";
 import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
+import { InMemoryAcademicCalendarStore } from "../school/academic-calendar-store.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
@@ -289,6 +290,8 @@ describe("StudentService", () => {
     const input = {
       studentIds: ["student-a", secondStudent.id],
       useAutomaticClassMapping: true,
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
       startsAt: "2026-06-03",
     };
 
@@ -309,6 +312,115 @@ describe("StudentService", () => {
     expect(renewalAudits).toHaveLength(2);
     expect((await setup.studentStore.findById("student-a"))?.classId).toBe(class9.id);
     expect((await setup.studentStore.findById(secondStudent.id))?.classId).toBe(class9.id);
+    // DEC-20261102-08: the wizard resumes by skipping students whose open enrollment is already in the target term.
+    await expect(setup.service.dryRunBulkRenewEnrollments(adminContext, { ...input, useAutomaticClassMapping: false }))
+      .resolves.toMatchObject({
+        items: [
+          expect.objectContaining({ studentId: "student-a", currentTermId: "term-2026-spring" }),
+          expect.objectContaining({ studentId: secondStudent.id, currentTermId: "term-2026-spring" }),
+        ],
+      });
+  });
+
+  it("DEC-20261102-08: toplu yenileme yıl ve dönemi açıkça ister ve birbirine ait olmalarını denetler", async () => {
+    const setup = createService();
+    await expect(setup.service.bulkRenewEnrollments(adminContext, { studentIds: ["student-a"], classId: "class-a" }))
+      .rejects.toThrow("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
+    await expect(setup.service.dryRunBulkRenewEnrollments(adminContext, { studentIds: ["student-a"], academicYearId: "academic-year-2026" }))
+      .rejects.toThrow("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
+    await expect(setup.service.bulkRenewEnrollments(adminContext, {
+      studentIds: ["student-a"],
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring-b",
+    })).rejects.toThrow("STUDENT_ENROLLMENT_TERM_INVALID");
+    expect(await setup.enrollmentStore.listByStudent("student-a")).toHaveLength(1);
+  });
+
+  it("DEC-20261102-08: aktif olmayan öğrenci içeren toplu yenileme 409 ile öğrenci kimlikleri döner ve yazmaz", async () => {
+    const setup = createService();
+    const graduate = await setup.service.create(adminContext, {
+      firstName: "Mezun",
+      lastName: "Öğrenci",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+    });
+    await setup.service.update(adminContext, graduate.id, { status: "GRADUATED" });
+    const input = {
+      studentIds: ["student-a", graduate.id],
+      classId: "class-a",
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+    };
+
+    const preview = await setup.service.dryRunBulkRenewEnrollments(adminContext, input);
+    expect(preview).toMatchObject({
+      dryRun: true,
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+      termStartsAt: "2026-02-01",
+      conflictStudentIds: [graduate.id],
+      quota: { incoming: 0, wouldExceed: false },
+    });
+    expect(preview.items).toEqual([
+      expect.objectContaining({ studentId: "student-a", status: "ACTIVE", targetClassId: "class-a", addsToQuota: false }),
+      expect.objectContaining({ studentId: graduate.id, status: "GRADUATED", conflict: "STUDENT_NOT_ACTIVE", addsToQuota: false }),
+    ]);
+
+    const before = (await setup.enrollmentStore.listByStudent("student-a")).length;
+    const error = await setup.service.bulkRenewEnrollments(adminContext, input).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      error: { code: "STUDENT_BULK_RENEW_NOT_ACTIVE", details: { studentIds: [graduate.id] } },
+    });
+    expect(await setup.enrollmentStore.listByStudent("student-a")).toHaveLength(before);
+    expect((await setup.studentStore.findById(graduate.id))?.status).toBe("GRADUATED");
+  });
+
+  it("DEC-20261102-08: yenileme lisans kotasına yeni öğrenci eklerse sınırı aşamaz", async () => {
+    const setup = createService({ activeStudentLimit: 1 });
+    await setup.service.update(adminContext, "student-a", { status: "GRADUATED" });
+
+    await expect(setup.service.renewEnrollment(adminContext, "student-a", {
+      classId: "class-a",
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+    })).resolves.toMatchObject({ status: "ACTIVE", reason: "RENEWED" });
+    await expect(setup.service.previewQuota(adminContext, 0)).resolves.toMatchObject({ current: 1 });
+
+    const second = await setup.studentStore.create({ tenantId: "tenant-a", firstName: "Plansız", lastName: "Öğrenci", status: "ACTIVE" });
+    const input = { studentIds: [second.id], classId: "class-a", academicYearId: "academic-year-2026", termId: "term-2026-spring" };
+    await expect(setup.service.dryRunBulkRenewEnrollments(adminContext, input)).resolves.toMatchObject({
+      items: [expect.objectContaining({ studentId: second.id, addsToQuota: true })],
+      quota: { limit: 1, current: 1, incoming: 1, wouldExceed: true },
+    });
+    await expect(setup.service.bulkRenewEnrollments(adminContext, input)).rejects.toThrow("ACTIVE_STUDENT_LIMIT_REACHED");
+    await expect(setup.enrollmentStore.listByStudent(second.id)).resolves.toEqual([]);
+  });
+
+  it("DEC-20261102-08: toplu mezuniyet idempotency anahtarı ve geri alınamaz onayı ister, tekrarında değişmez", async () => {
+    const setup = createService({ idempotency: new IdempotencyService(new InMemoryIdempotencyStore()) });
+    const input = { studentIds: ["student-a"], status: "GRADUATED" as const, confirmIrreversible: true as const };
+
+    await expect(setup.service.bulkUpdateStatus(adminContext, input)).rejects.toThrow("IDEMPOTENCY_KEY_REQUIRED");
+    await expect(setup.service.bulkUpdateStatus(adminContext, { ...input, confirmIrreversible: false as unknown as true }, "bulk-status-a"))
+      .rejects.toThrow("STUDENT_BULK_STATUS_CONFIRMATION_REQUIRED");
+
+    const result = await setup.service.bulkUpdateStatus(adminContext, input, "bulk-status-a");
+    expect(result).toEqual({
+      updatedCount: 1,
+      unchangedCount: 0,
+      results: [{ studentId: "student-a", outcome: "UPDATED", previousStatus: "ACTIVE", status: "GRADUATED", portalAccessSuspended: false }],
+    });
+    await expect(setup.service.bulkUpdateStatus(adminContext, input, "bulk-status-a")).resolves.toEqual(result);
+    expect((await setup.studentStore.findById("student-a"))?.status).toBe("GRADUATED");
+    expect((await setup.enrollmentStore.listByStudent("student-a")).filter((enrollment) => !enrollment.endsAt)).toEqual([]);
+    expect(setup.auditRecords.filter((record) => (record as { action?: string }).action === "student.updated")).toHaveLength(1);
+
+    await expect(setup.service.bulkUpdateStatus(adminContext, input, "bulk-status-b")).resolves.toMatchObject({
+      updatedCount: 0,
+      unchangedCount: 1,
+      results: [expect.objectContaining({ outcome: "UNCHANGED" })],
+    });
   });
 
   it("sınıfsız seviyeli öğrenci açık enrollment oluşturarak aktif lisans kotasını tüketir", async () => {
@@ -848,7 +960,7 @@ function createService(options: {
       guardianStudentStore,
       teacherAssignmentStore,
       enrollmentStore,
-      { listYears: async () => [], listTerms: async () => [] } as never,
+      new InMemoryAcademicCalendarStore(),
       {} as never,
       classStore,
       gradeLevelStore,

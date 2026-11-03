@@ -12,6 +12,13 @@ import {
 import type {
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
+  StudentBulkRenewConflictCode,
+  StudentBulkRenewDryRunItem,
+  StudentBulkRenewDryRunResult,
+  StudentBulkStatusItemResult,
+  StudentBulkStatusRequest,
+  StudentBulkStatusResult,
+  StudentBulkStatusTarget,
   StudentCreateRequest,
   StudentContactCreateRequest,
   StudentEnrollmentActionRequest,
@@ -45,13 +52,13 @@ import {
 } from "../school/guardian-student-store.js";
 import { StudentPortalActivationService } from "../identity-invitation/student-portal-activation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
-import { IdempotencyService } from "../http/idempotency.js";
+import { IdempotencyService, type IdempotencyTransactionCompletion } from "../http/idempotency.js";
 import { withCursorListMeta } from "../listing/list-query.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { type LicenseTermStore, licenseTermStoreToken } from "../license/license-term-store.js";
 import { type ReportSnapshotStore, reportSnapshotStoreToken } from "../report/report-snapshot-store.js";
-import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken, istanbulDateString } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GradeLevelRecord, type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
@@ -70,6 +77,7 @@ import {
   type StudentRegistryQuery,
   type StudentStore,
   studentCursorInvalid,
+  studentEnrollmentTransitionErrors,
   studentImportBatchErrors,
   studentStoreToken,
 } from "./student-store.js";
@@ -145,6 +153,43 @@ export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName
 
 /** An audit written with the bulk create (same transaction when the store supports `importBatch`). */
 export type StudentBulkCreateAudit = StudentImportBatchAudit;
+
+interface StudentRenewalOptions {
+  /** Bulk renewal: refuse (409) a student who is not ACTIVE, also when the status changes before the write. */
+  requireActive?: boolean;
+  completion?: IdempotencyTransactionCompletion;
+  /** Precomputed by the bulk renewal; a single renewal works it out itself. */
+  quota?: { addsToQuota: boolean; limit: number };
+}
+
+interface BulkRenewalPlanItem {
+  student: StudentRecord;
+  placement?: { gradeLevelId?: string; classId?: string };
+  addsToQuota: boolean;
+  currentTermId?: string;
+  conflict?: StudentBulkRenewConflictCode;
+  error?: HttpException;
+}
+
+interface BulkRenewalPlan {
+  academicContext: { academicYearId: string; termId: string; termStartsAt: string };
+  items: BulkRenewalPlanItem[];
+}
+
+const bulkStatusTargets: readonly StudentBulkStatusTarget[] = ["GRADUATED", "TRANSFERRED"];
+const bulkRenewConflictCodes = new Set<string>([
+  "CLASS_NOT_FOUND",
+  "GRADE_LEVEL_NOT_FOUND",
+  "STUDENT_GRADE_LEVEL_REQUIRED",
+  "STUDENT_CLASS_GRADE_LEVEL_MISMATCH",
+  "STUDENT_CAMPUS_SCOPE_FORBIDDEN",
+  "FORBIDDEN_TENANT",
+] satisfies StudentBulkRenewConflictCode[]);
+
+function toBulkRenewConflictCode(error: unknown): StudentBulkRenewConflictCode | undefined {
+  if (!(error instanceof HttpException)) return undefined;
+  return bulkRenewConflictCodes.has(error.message) ? error.message as StudentBulkRenewConflictCode : undefined;
+}
 
 export interface StudentBulkCreateOptions {
   /** Placement lookups already loaded by the caller (the import validator); loaded from the stores otherwise. */
@@ -892,7 +937,7 @@ export class StudentService {
       return this.idempotency.run(
         context,
         { key: idempotencyKey, operation: "student.enrollment.renew", request: { studentId: id, ...input } },
-        () => this.renewEnrollmentOnce(context, id, input),
+        (completion) => this.renewEnrollmentOnce(context, id, input, { completion }),
       );
     }
 
@@ -903,8 +948,12 @@ export class StudentService {
     context: RequestContext,
     id: string,
     input: StudentEnrollmentActionInput,
+    options: StudentRenewalOptions = {},
   ): Promise<StudentEnrollmentRecord> {
     const existing = await this.findOne(context, id);
+    if (options.requireActive && existing.status !== "ACTIVE") {
+      throw new ConflictException("STUDENT_NOT_ACTIVE");
+    }
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
     const requestedClassId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
@@ -916,6 +965,9 @@ export class StudentService {
           : existing.gradeLevelId,
       classId: requestedClassId,
     }, true);
+    // DEC-20261102-08: a renewal that brings the student into the licensed count (a reactivation, or an active
+    // student without an open enrollment) is checked against the licence like create and import.
+    const quota = options.quota ?? await this.resolveRenewalQuota(context, existing);
     const transition = {
       closeActive: { endsAt: startsAt },
       create: {
@@ -927,10 +979,17 @@ export class StudentService {
         reason: "RENEWED",
       },
     };
+    const studentUpdate = { gradeLevelId: placement.gradeLevelId, classId: placement.classId ?? "", status: "ACTIVE" as const };
+    const completion = options.completion;
     const atomicResult = this.store.updateWithEnrollmentTransition
-      ? await this.store.updateWithEnrollmentTransition(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId ?? "", status: "ACTIVE" }, transition)
+      ? await this.runEnrollmentTransition(() => this.store.updateWithEnrollmentTransition!(id, studentUpdate, {
+          ...transition,
+          expectedStatus: options.requireActive ? "ACTIVE" : undefined,
+          activeStudentLimit: quota.addsToQuota ? quota.limit : undefined,
+          finalize: completion ? (client, result) => completion.complete(client, result.enrollment) : undefined,
+        }))
       : undefined;
-    const updated = atomicResult?.student ?? await this.store.update(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId ?? "", status: "ACTIVE" });
+    const updated = atomicResult?.student ?? await this.store.update(id, studentUpdate);
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
@@ -969,45 +1028,82 @@ export class StudentService {
     return this.bulkRenewEnrollmentBatch(context, input);
   }
 
+  /** DEC-20261102-08: the bulk renewal preview; same plan and checks as the renewal, nothing is written. */
+  async dryRunBulkRenewEnrollments(
+    context: RequestContext,
+    input: StudentBulkEnrollmentInput,
+  ): Promise<StudentBulkRenewDryRunResult> {
+    const plan = await this.planBulkRenewal(context, input);
+    const items: StudentBulkRenewDryRunItem[] = plan.items.map((item) => {
+      const conflict = item.student.status !== "ACTIVE" ? "STUDENT_NOT_ACTIVE" as const : item.conflict;
+      return {
+        studentId: item.student.id,
+        status: item.student.status,
+        sourceClassId: item.student.classId,
+        sourceGradeLevelId: item.student.gradeLevelId,
+        currentTermId: item.currentTermId,
+        targetClassId: item.placement?.classId,
+        targetGradeLevelId: item.placement?.gradeLevelId,
+        ...(conflict ? { conflict } : {}),
+        addsToQuota: !conflict && item.addsToQuota,
+      };
+    });
+    const quota = await this.previewQuota(context, items.filter((item) => item.addsToQuota).length);
+    return {
+      dryRun: true,
+      academicYearId: plan.academicContext.academicYearId,
+      termId: plan.academicContext.termId,
+      termStartsAt: plan.academicContext.termStartsAt,
+      termStarted: plan.academicContext.termStartsAt <= istanbulDateString(),
+      items,
+      conflictStudentIds: items.filter((item) => item.conflict).map((item) => item.studentId),
+      quota: { limit: quota.limit, current: quota.current, incoming: quota.incoming, wouldExceed: quota.wouldExceed },
+    };
+  }
+
   private async bulkRenewEnrollmentBatch(
     context: RequestContext,
     input: StudentBulkEnrollmentInput,
     idempotencyKey?: string,
   ): Promise<StudentBulkEnrollmentResult> {
-    const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
-    if (studentIds.length === 0) {
-      throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
+    const plan = await this.planBulkRenewal(context, input);
+    // DEC-20261102-08: renewal forces ACTIVE, so a graduated or transferred student would silently come back.
+    // The whole batch is refused before any write and names the students to take out.
+    const notActiveStudentIds = plan.items.filter((item) => item.student.status !== "ACTIVE").map((item) => item.student.id);
+    if (notActiveStudentIds.length > 0) {
+      throw new ConflictException({
+        error: {
+          code: "STUDENT_BULK_RENEW_NOT_ACTIVE",
+          message: "Aktif olmayan öğrenci toplu yenilemeye alınamaz.",
+          details: { studentIds: notActiveStudentIds },
+        },
+      });
+    }
+    const failed = plan.items.find((item) => item.error);
+    if (failed?.error) throw failed.error;
+    const quota = await this.previewQuota(context, plan.items.filter((item) => item.addsToQuota).length);
+    if (quota.wouldExceed) {
+      throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
-    const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
-    const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
-    const renewals = await Promise.all(students.map(async (student) => {
-      const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
-      const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
-      const classId = mappedClassId ?? automaticClassId ?? input.classId;
-      return {
-        student,
-        placement: await this.resolveStudentPlacement(context, student.tenantId, {
-          gradeLevelId: input.gradeLevelId ?? (classId ? undefined : student.gradeLevelId),
-          classId: classId ?? student.classId,
-        }, true),
-      };
-    }));
-
     const enrollments: StudentEnrollmentRecord[] = [];
-    for (const { student, placement } of renewals) {
-      // ponytail: per-student keys make retries resumable; use one DB transaction only if batches must become all-or-nothing.
+    for (const { student, placement, addsToQuota } of plan.items) {
+      // Per-student keys make retries resumable; each key completes in the transaction of its renewal.
       const itemIdempotencyKey = idempotencyKey
         ? `bulk-renew.${createHash("sha256").update(idempotencyKey.trim()).update("\0").update(student.id).digest("hex")}`
         : undefined;
       const renewalInput = {
-        academicYearId: input.academicYearId,
-        termId: input.termId,
-        gradeLevelId: placement.gradeLevelId,
-        classId: placement.classId,
+        academicYearId: plan.academicContext.academicYearId,
+        termId: plan.academicContext.termId,
+        gradeLevelId: placement!.gradeLevelId,
+        classId: placement!.classId,
         startsAt: input.startsAt,
       };
-      const renew = () => this.renewEnrollmentOnce(context, student.id, renewalInput);
+      const renew = (completion?: IdempotencyTransactionCompletion) => this.renewEnrollmentOnce(context, student.id, renewalInput, {
+        requireActive: true,
+        completion,
+        quota: { addsToQuota, limit: quota.limit },
+      });
       enrollments.push(itemIdempotencyKey && this.idempotency
         ? await this.idempotency.run(
             context,
@@ -1024,6 +1120,234 @@ export class StudentService {
       updatedCount: enrollments.length,
       enrollments,
     };
+  }
+
+  /**
+   * DEC-20261102-08: bulk GRADUATED / TRANSFERRED with the current status semantics (open enrollment closed, student
+   * portal suspended). Each student completes its own idempotency key in its own transaction, so a retry with the
+   * same key resumes where a failed run stopped.
+   */
+  async bulkUpdateStatus(
+    context: RequestContext,
+    input: StudentBulkStatusRequest,
+    idempotencyKey?: string,
+  ): Promise<StudentBulkStatusResult> {
+    const key = idempotencyKey?.trim();
+    if (!key) {
+      throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
+    }
+    if (input.confirmIrreversible !== true) {
+      throw new BadRequestException("STUDENT_BULK_STATUS_CONFIRMATION_REQUIRED");
+    }
+    if (!this.idempotency) {
+      return this.bulkUpdateStatusBatch(context, input, key);
+    }
+    return this.idempotency.run(
+      context,
+      { key, operation: "student.bulk-status", request: input },
+      () => this.bulkUpdateStatusBatch(context, input, key),
+    );
+  }
+
+  private async bulkUpdateStatusBatch(
+    context: RequestContext,
+    input: StudentBulkStatusRequest,
+    idempotencyKey: string,
+  ): Promise<StudentBulkStatusResult> {
+    const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
+    if (studentIds.length === 0) {
+      throw new BadRequestException("STUDENT_BULK_STATUS_STUDENTS_REQUIRED");
+    }
+    if (!bulkStatusTargets.includes(input.status)) {
+      throw new BadRequestException("STUDENT_STATUS_INVALID");
+    }
+    // Every student is resolved (tenant and campus scope) before the first write.
+    const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
+    const results: StudentBulkStatusItemResult[] = [];
+    for (const student of students) {
+      const itemIdempotencyKey = `bulk-status.${createHash("sha256").update(idempotencyKey).update("\0").update(student.id).digest("hex")}`;
+      const apply = (completion?: IdempotencyTransactionCompletion) => this.applyStudentStatusOnce(context, student.id, input.status, completion);
+      results.push(this.idempotency
+        ? await this.idempotency.run(
+            context,
+            {
+              key: itemIdempotencyKey,
+              operation: "student.bulk-status",
+              request: { studentId: student.id, batch: input },
+            },
+            apply,
+          )
+        : await apply());
+    }
+    return {
+      updatedCount: results.filter((result) => result.outcome === "UPDATED").length,
+      unchangedCount: results.filter((result) => result.outcome === "UNCHANGED").length,
+      results,
+    };
+  }
+
+  private async applyStudentStatusOnce(
+    context: RequestContext,
+    id: string,
+    status: StudentBulkStatusTarget,
+    completion?: IdempotencyTransactionCompletion,
+  ): Promise<StudentBulkStatusItemResult> {
+    const existing = await this.findOne(context, id);
+    if (existing.status === status) {
+      return { studentId: existing.id, outcome: "UNCHANGED", previousStatus: existing.status, status, portalAccessSuspended: false };
+    }
+    // Read before the write: an in-memory store hands out the record it mutates.
+    const previousStatus = existing.status;
+    const endsAt = todayDateString();
+    const toResult = (portalAccessSuspended: boolean): StudentBulkStatusItemResult => ({
+      studentId: existing.id,
+      outcome: "UPDATED",
+      previousStatus,
+      status,
+      portalAccessSuspended,
+    });
+    // An exit always closes the open enrollment with the exit status and suspends the student portal, also for a
+    // student who was PASSIVE (a manually reopened portal must not outlive graduation).
+    const atomicResult = this.store.updateWithEnrollmentTransition
+      ? await this.runEnrollmentTransition(() => this.store.updateWithEnrollmentTransition!(id, { status }, {
+          closeActive: { endsAt, status },
+          suspendPortalAccess: { reason: `STUDENT_STATUS_${status}` },
+          expectedStatus: previousStatus,
+          finalize: completion
+            ? (client, result) => completion.complete(client, toResult(Boolean(result.portalAccess)))
+            : undefined,
+        }))
+      : undefined;
+    const updated = atomicResult?.student ?? await this.store.update(id, { status });
+    if (!updated) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    if (!atomicResult) {
+      await this.enrollmentStore.closeActiveForStudent(updated.id, endsAt, status);
+    }
+    await this.auditLogs?.record({
+      tenantId: updated.tenantId,
+      actorUserId: context.userId,
+      entityType: "Student",
+      entityId: updated.id,
+      action: "student.updated",
+      diff: {
+        fieldsChanged: ["status"],
+        previousStatus,
+        status,
+        bulk: true,
+        ...(atomicResult?.portalAccess
+          ? {
+              portalAccessSuspended: true,
+              membershipSuspended: atomicResult.portalAccess.membershipSuspended,
+              sessionsRevoked: atomicResult.portalAccess.sessionsRevoked,
+              invitationsRevoked: atomicResult.portalAccess.invitationsRevoked,
+            }
+          : {}),
+      },
+    });
+    return toResult(Boolean(atomicResult?.portalAccess));
+  }
+
+  /** Maps the sentinels of the transition store; the store has already rolled the transaction back. */
+  private async runEnrollmentTransition<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      if (error instanceof Error && error.message === studentEnrollmentTransitionErrors.statusChanged) {
+        throw new ConflictException("STUDENT_STATUS_CHANGED");
+      }
+      if (error instanceof Error && error.message === studentEnrollmentTransitionErrors.activeStudentLimitReached) {
+        throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
+      }
+      throw error;
+    }
+  }
+
+  private async resolveRenewalQuota(
+    context: RequestContext,
+    student: StudentRecord,
+  ): Promise<{ addsToQuota: boolean; limit: number }> {
+    const addsToQuota = !(await this.licensedStudentIds([student])).has(student.id);
+    const quota = await this.previewQuota(context, addsToQuota ? 1 : 0);
+    if (addsToQuota && quota.wouldExceed) {
+      throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
+    }
+    return { addsToQuota, limit: quota.limit };
+  }
+
+  /** Students already in the licensed count: ACTIVE with exactly one open ACTIVE enrollment (license usage rule). */
+  private async licensedStudentIds(students: StudentRecord[]): Promise<Set<string>> {
+    const openEnrollments = await this.openActiveEnrollments(students.filter((student) => student.status === "ACTIVE"));
+    return new Set(students
+      .filter((student) => student.status === "ACTIVE" && openEnrollments.get(student.id)?.length === 1)
+      .map((student) => student.id));
+  }
+
+  private async openActiveEnrollments(students: StudentRecord[]): Promise<Map<string, StudentEnrollmentRecord[]>> {
+    const byStudent = new Map<string, StudentEnrollmentRecord[]>();
+    if (students.length === 0) return byStudent;
+    for (const enrollment of await this.enrollmentStore.listByStudents(students.map((student) => student.id))) {
+      if (enrollment.status !== "ACTIVE" || enrollment.endsAt) continue;
+      byStudent.set(enrollment.studentId, [...(byStudent.get(enrollment.studentId) ?? []), enrollment]);
+    }
+    return byStudent;
+  }
+
+  private async planBulkRenewal(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<BulkRenewalPlan> {
+    const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
+    if (studentIds.length === 0) {
+      throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
+    }
+    const academicContext = await this.resolveBulkRenewalAcademicContext(context, input);
+    const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
+    const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
+    const openEnrollments = await this.openActiveEnrollments(students.filter((student) => student.status === "ACTIVE"));
+    const items = await Promise.all(students.map(async (student): Promise<BulkRenewalPlanItem> => {
+      const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
+      const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
+      const classId = mappedClassId ?? automaticClassId ?? input.classId;
+      const open = openEnrollments.get(student.id) ?? [];
+      const addsToQuota = !(student.status === "ACTIVE" && open.length === 1);
+      const currentTermId = open.length === 1 ? open[0]!.termId : undefined;
+      try {
+        const placement = await this.resolveStudentPlacement(context, student.tenantId, {
+          gradeLevelId: input.gradeLevelId ?? (classId ? undefined : student.gradeLevelId),
+          classId: classId ?? student.classId,
+        }, true);
+        return { student, placement, addsToQuota, currentTermId };
+      } catch (error) {
+        const conflict = toBulkRenewConflictCode(error);
+        if (!conflict || !(error instanceof HttpException)) throw error;
+        return { student, addsToQuota, currentTermId, conflict, error };
+      }
+    }));
+    return { academicContext, items };
+  }
+
+  /** Bulk renewal names its year and term explicitly; they must exist for the tenant and belong together. */
+  private async resolveBulkRenewalAcademicContext(
+    context: RequestContext,
+    input: StudentBulkEnrollmentInput,
+  ): Promise<{ academicYearId: string; termId: string; termStartsAt: string }> {
+    const academicYearId = optionalText(input.academicYearId);
+    const termId = optionalText(input.termId);
+    if (!academicYearId || !termId) {
+      throw new BadRequestException("STUDENT_BULK_ENROLLMENT_ACADEMIC_CONTEXT_REQUIRED");
+    }
+    const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
+    const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
+    if (!years.some((year) => year.id === academicYearId)) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_ACADEMIC_YEAR_INVALID");
+    }
+    const term = terms.find((record) => record.id === termId);
+    if (!term) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_TERM_INVALID");
+    }
+    if (term.academicYearId !== academicYearId) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_TERM_YEAR_MISMATCH");
+    }
+    return { academicYearId, termId, termStartsAt: term.startsAt };
   }
 
   private async buildAutomaticClassMapping(context: RequestContext): Promise<Record<string, string>> {
@@ -1594,9 +1918,10 @@ export class StudentService {
       throw new BadRequestException("STUDENT_ENROLLMENT_TERM_YEAR_MISMATCH");
     }
 
+    // An explicit year without a term must not borrow the active term of another year.
     return {
       academicYearId,
-      termId: term?.id ?? fallback.termId,
+      termId: term?.id ?? (academicYearId === fallback.academicYearId ? fallback.termId : undefined),
     };
   }
 

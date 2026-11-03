@@ -104,7 +104,22 @@ export interface StudentEnrollmentTransition {
   closeActive?: { endsAt: string; status?: StudentRecord["status"] };
   create?: Omit<StudentEnrollmentInput, "tenantId" | "studentId">;
   suspendPortalAccess?: { reason: string };
+  /** Locks the student row and refuses the write with `studentEnrollmentTransitionErrors.statusChanged` otherwise. */
+  expectedStatus?: StudentRecord["status"];
+  /**
+   * Licensed active-student limit (DEC-20261102-08). Set only when the write adds the student to the licensed count;
+   * the count is taken again under the tenant student lock after the writes.
+   */
+  activeStudentLimit?: number;
+  /** Runs on the open transaction after every write, e.g. to complete the idempotency key atomically. */
+  finalize?: (client: Queryable, result: StudentEnrollmentTransitionResult) => Promise<void>;
 }
+
+/** Sentinel error messages thrown by `updateWithEnrollmentTransition`; the service maps them to HTTP exceptions. */
+export const studentEnrollmentTransitionErrors = {
+  statusChanged: "STUDENT_STATUS_CHANGED",
+  activeStudentLimitReached: "ACTIVE_STUDENT_LIMIT_REACHED",
+} as const;
 
 export interface StudentEnrollmentTransitionResult {
   student: StudentRecord;
@@ -931,6 +946,15 @@ export class PostgresStudentStore implements StudentStore {
     transition: StudentEnrollmentTransition,
   ): Promise<StudentEnrollmentTransitionResult | undefined> {
     return withTenantQuery(this.pool, async (client) => {
+      if (transition.expectedStatus) {
+        const current = await client.query<Pick<StudentRow, "status">>(
+          `SELECT "status" FROM "Student" WHERE "id" = $1 AND "deletedAt" IS NULL FOR UPDATE`,
+          [id],
+        );
+        if (current.rows[0] && current.rows[0].status !== transition.expectedStatus) {
+          throw new Error(studentEnrollmentTransitionErrors.statusChanged);
+        }
+      }
       const result = await updateStudent(client, id, input);
       const row = result.rows[0];
       if (!row) return undefined;
@@ -953,7 +977,17 @@ export class PostgresStudentStore implements StudentStore {
       const portalAccess = transition.suspendPortalAccess
         ? await suspendStudentPortalAccess(client, student, transition.suspendPortalAccess.reason)
         : undefined;
-      return { student, enrollment, portalAccess };
+      if (transition.activeStudentLimit !== undefined) {
+        // After the writes: the tenant lock serializes concurrent creates and renewals, and the count below sees
+        // the rows of this transaction plus every committed one.
+        await lockStudentNoAllocation(client, student.tenantId);
+        if (await selectLicensedActiveStudentCount(client, student.tenantId) > transition.activeStudentLimit) {
+          throw new Error(studentEnrollmentTransitionErrors.activeStudentLimitReached);
+        }
+      }
+      const transitionResult = { student, enrollment, portalAccess };
+      await transition.finalize?.(client, transitionResult);
+      return transitionResult;
     });
   }
 

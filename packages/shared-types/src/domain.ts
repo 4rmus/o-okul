@@ -733,6 +733,19 @@ export interface AcademicYearUpdateRequest {
   isActive?: boolean;
 }
 
+/** DEC-20261102-08: activates one academic year and one of its terms together; every other one is deactivated. */
+export interface AcademicCalendarActivateRequest {
+  academicYearId: string;
+  termId: string;
+}
+
+export interface AcademicCalendarActivateResult {
+  academicYear: AcademicYearRecord;
+  term: AcademicTermRecord;
+  deactivatedAcademicYearIds: string[];
+  deactivatedTermIds: string[];
+}
+
 export interface AcademicTermRecord {
   id: string;
   tenantId: string;
@@ -1128,6 +1141,72 @@ export interface StudentBulkEnrollmentRequest extends StudentEnrollmentActionReq
 export interface StudentBulkEnrollmentResult {
   updatedCount: number;
   enrollments: StudentEnrollmentRecord[];
+}
+
+/** Why a bulk renewal would refuse a student; `STUDENT_NOT_ACTIVE` turns the whole batch into a 409. */
+export type StudentBulkRenewConflictCode =
+  | "STUDENT_NOT_ACTIVE"
+  | "CLASS_NOT_FOUND"
+  | "GRADE_LEVEL_NOT_FOUND"
+  | "STUDENT_GRADE_LEVEL_REQUIRED"
+  | "STUDENT_CLASS_GRADE_LEVEL_MISMATCH"
+  | "STUDENT_CAMPUS_SCOPE_FORBIDDEN"
+  | "FORBIDDEN_TENANT";
+
+export interface StudentBulkRenewDryRunItem {
+  studentId: string;
+  status: StudentStatus;
+  sourceClassId?: string;
+  sourceGradeLevelId?: string;
+  /** Term of the student's open enrollment; equal to the target term once the student has been renewed into it. */
+  currentTermId?: string;
+  targetClassId?: string;
+  targetGradeLevelId?: string;
+  conflict?: StudentBulkRenewConflictCode;
+  /** True when the renewal would add this student to the licensed active-student count. */
+  addsToQuota: boolean;
+}
+
+/** DEC-20261102-08: preview of POST /students/enrollments/bulk-renew; writes nothing. */
+export interface StudentBulkRenewDryRunResult {
+  dryRun: true;
+  academicYearId: string;
+  termId: string;
+  termStartsAt: string;
+  /** False while the target term starts after today; the wizard applies only a started term. */
+  termStarted: boolean;
+  items: StudentBulkRenewDryRunItem[];
+  conflictStudentIds: string[];
+  quota: {
+    limit: number;
+    current: number;
+    incoming: number;
+    wouldExceed: boolean;
+  };
+}
+
+/** Year-end exits: GRADUATED (mezun) or TRANSFERRED (ayrılan/nakil). */
+export type StudentBulkStatusTarget = "GRADUATED" | "TRANSFERRED";
+
+export interface StudentBulkStatusRequest {
+  studentIds: string[];
+  status: StudentBulkStatusTarget;
+  /** Must be true: the change suspends portal access and is not undone by the wizard. */
+  confirmIrreversible: true;
+}
+
+export interface StudentBulkStatusItemResult {
+  studentId: string;
+  outcome: "UPDATED" | "UNCHANGED";
+  previousStatus: StudentStatus;
+  status: StudentStatus;
+  portalAccessSuspended: boolean;
+}
+
+export interface StudentBulkStatusResult {
+  updatedCount: number;
+  unchangedCount: number;
+  results: StudentBulkStatusItemResult[];
 }
 
 export interface StudentImportRequest {

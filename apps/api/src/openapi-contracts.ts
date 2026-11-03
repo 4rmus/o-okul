@@ -1188,6 +1188,19 @@ const academicTermRecordSchema = objectSchema({
   isActive: { type: "boolean" },
 }, ["id", "tenantId", "academicYearId", "name", "startsAt", "endsAt", "isActive"]);
 
+// DEC-20261102-08: term-transition wizard activation.
+const academicCalendarActivateRequestSchema = objectSchema({
+  academicYearId: stringSchema({ minLength: 1 }),
+  termId: stringSchema({ minLength: 1 }),
+}, ["academicYearId", "termId"]);
+
+const academicCalendarActivateResultSchema = objectSchema({
+  academicYear: academicYearRecordSchema,
+  term: academicTermRecordSchema,
+  deactivatedAcademicYearIds: arraySchema(stringSchema()),
+  deactivatedTermIds: arraySchema(stringSchema()),
+}, ["academicYear", "term", "deactivatedAcademicYearIds", "deactivatedTermIds"]);
+
 const academicTermCreateRequestSchema = objectSchema({
   academicYearId: stringSchema(),
   endsAt: stringSchema({ format: "date" }),
@@ -2917,6 +2930,7 @@ const studentEnrollmentActionRequestSchema = objectSchema({
   termId: stringSchema(),
 });
 
+// DEC-20261102-08: bulk renewal names its year and term; they must belong together.
 const studentBulkEnrollmentRequestSchema = objectSchema({
   academicYearId: stringSchema(),
   classId: stringSchema(),
@@ -2926,7 +2940,7 @@ const studentBulkEnrollmentRequestSchema = objectSchema({
   studentIds: arraySchema(stringSchema(), { minItems: 1 }),
   termId: stringSchema(),
   useAutomaticClassMapping: { type: "boolean" },
-});
+}, ["academicYearId", "studentIds", "termId"]);
 
 const studentEnrollmentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -3027,6 +3041,58 @@ const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
 }, ["updatedCount", "enrollments"]);
+
+const studentBulkRenewConflictCodeSchema = {
+  type: "string",
+  enum: [
+    "STUDENT_NOT_ACTIVE", "CLASS_NOT_FOUND", "GRADE_LEVEL_NOT_FOUND", "STUDENT_GRADE_LEVEL_REQUIRED",
+    "STUDENT_CLASS_GRADE_LEVEL_MISMATCH", "STUDENT_CAMPUS_SCOPE_FORBIDDEN", "FORBIDDEN_TENANT",
+  ],
+};
+
+const studentBulkRenewDryRunResultSchema = objectSchema({
+  dryRun: { type: "boolean", enum: [true] },
+  academicYearId: stringSchema(),
+  termId: stringSchema(),
+  termStartsAt: stringSchema({ format: "date" }),
+  termStarted: { type: "boolean" },
+  items: arraySchema(objectSchema({
+    studentId: stringSchema(),
+    status: studentStatusSchema,
+    sourceClassId: stringSchema(),
+    sourceGradeLevelId: stringSchema(),
+    currentTermId: stringSchema(),
+    targetClassId: stringSchema(),
+    targetGradeLevelId: stringSchema(),
+    conflict: studentBulkRenewConflictCodeSchema,
+    addsToQuota: { type: "boolean" },
+  }, ["studentId", "status", "addsToQuota"])),
+  conflictStudentIds: arraySchema(stringSchema()),
+  quota: objectSchema({
+    limit: integerSchema({ minimum: 0 }),
+    current: integerSchema({ minimum: 0 }),
+    incoming: integerSchema({ minimum: 0 }),
+    wouldExceed: { type: "boolean" },
+  }, ["limit", "current", "incoming", "wouldExceed"]),
+}, ["dryRun", "academicYearId", "termId", "termStartsAt", "termStarted", "items", "conflictStudentIds", "quota"]);
+
+const studentBulkStatusRequestSchema = objectSchema({
+  confirmIrreversible: { type: "boolean", enum: [true] },
+  status: { type: "string", enum: ["GRADUATED", "TRANSFERRED"] },
+  studentIds: arraySchema(stringSchema({ minLength: 1 }), { minItems: 1, maxItems: 1000 }),
+}, ["confirmIrreversible", "status", "studentIds"]);
+
+const studentBulkStatusResultSchema = objectSchema({
+  updatedCount: integerSchema({ minimum: 0 }),
+  unchangedCount: integerSchema({ minimum: 0 }),
+  results: arraySchema(objectSchema({
+    studentId: stringSchema(),
+    outcome: { type: "string", enum: ["UPDATED", "UNCHANGED"] },
+    previousStatus: studentStatusSchema,
+    status: studentStatusSchema,
+    portalAccessSuspended: { type: "boolean" },
+  }, ["studentId", "outcome", "previousStatus", "status", "portalAccessSuspended"])),
+}, ["updatedCount", "unchangedCount", "results"]);
 
 const studentImportRequestSchema = objectSchema({
   fileBase64: stringSchema({ minLength: 1 }),
@@ -4345,6 +4411,11 @@ const operationContracts: Record<string, OperationContract> = {
   "delete /api/v1/academic-years/{id}": {
     noContent: true,
   },
+  "post /api/v1/academic-calendar/activate": {
+    idempotent: true,
+    requestBody: academicCalendarActivateRequestSchema,
+    responseBody: academicCalendarActivateResultSchema,
+  },
   "get /api/v1/academic-terms": {
     responseBody: arraySchema(academicTermRecordSchema),
     listResponse: true,
@@ -4959,6 +5030,16 @@ const operationContracts: Record<string, OperationContract> = {
     idempotent: true,
     requestBody: studentBulkEnrollmentRequestSchema,
     responseBody: studentBulkEnrollmentResultSchema,
+  },
+  "post /api/v1/students/enrollments/bulk-renew/dry-run": {
+    requestBody: studentBulkEnrollmentRequestSchema,
+    responseBody: studentBulkRenewDryRunResultSchema,
+  },
+  "post /api/v1/students/bulk-status": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentBulkStatusRequestSchema,
+    responseBody: studentBulkStatusResultSchema,
   },
   "post /api/v1/students/{id}/enrollments/renew": {
     idempotent: true,
