@@ -86,6 +86,25 @@ test("Gate C operasyon çalışanı STAFF personasında listeden çalışma alan
   expect(evidence.unknownRequests).toEqual([]);
 });
 
+// Katılım rozeti ve özeti API'nin hasResult kuralını izler (ExamParticipantRecord.hasResult): ham içe aktarma sonucu
+// olan REGISTERED katılımcı "Katıldı" sayılır; sonucu olmayan REGISTERED katılımcı "Kayıtlı" kalır. Ekran tahmin yapmaz.
+test("Gate C sınav listesi sonucu olan REGISTERED katılımcıyı Katıldı sayar", async ({ page }) => {
+  const evidence = await installGateCApi(page, "enabled");
+  await page.goto(`/kurum/sinavlar?examId=${examId}`, { waitUntil: "domcontentloaded" });
+
+  const participantsTable = page.getByRole("region", { name: "Sınav katılımcıları" }).getByRole("table");
+  await expect(participantsTable.getByRole("row")).toHaveCount(22);
+  await expect(participantsTable.getByText("Katıldı", { exact: true })).toHaveCount(20);
+  await expect(participantsTable.getByText("Kayıtlı", { exact: true })).toHaveCount(1);
+  await expect(participantsTable.getByText("Gelmedi", { exact: true })).toHaveCount(0);
+  const metrics = page.getByRole("region", { name: "Seçili sınav metrikleri" });
+  await expect(metrics.getByText("20/21", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sınav operasyon özeti" })).toContainText("Katılım: 20 katıldı / 0 gelmedi");
+  await expect(page.getByRole("region", { name: "Sınav hazırlık durumu" })).toContainText("1 kayıtlı katılımcı");
+  expect(evidence.mutationRequests).toEqual([]);
+  expect(evidence.unknownRequests).toEqual([]);
+});
+
 // DEC-20261102-03: oturum rolleri aktif personadan gelir (API resolvePersonaSessionContext). Öğretmen personası da
 // olan tenant geneli OPERATIONS_STAFF üyeliği STAFF personasında yalnız [OPERATIONS_STAFF] taşır ve çalışma alanını
 // açar; TEACHER personasında yalnız [TEACHER] taşır ve kurum sınav yüzeyine giremez.
@@ -301,7 +320,7 @@ const workspaceFixture = {
     createdAt: "2026-08-10T08:00:00.000Z",
     updatedAt: "2026-08-10T09:00:00.000Z",
   },
-  participantSummary: { total: 21, registered: 0, attended: 21, absent: 0 },
+  participantSummary: { total: 21, registered: 1, attended: 20, absent: 0 },
   readiness: [
     { key: "EXAM", status: "READY" },
     { key: "ANSWER_KEY", status: "READY" },
@@ -324,12 +343,15 @@ const otherExamFixture = {
   title: "İlk Sıradaki Başka Sınav",
 };
 
+// participant-1 was matched by the raw import: its status stays REGISTERED and the live ExamResult (hasResult) says it
+// attended. participant-2 is registered without a result. The rest carry an explicit ATTENDED status.
 const participantFixtures = Array.from({ length: 21 }, (_, index) => ({
   id: `participant-${index + 1}`,
   tenantId: "tenant-gate-c",
   examId,
   studentId: `synthetic-student-${index + 1}`,
-  status: "ATTENDED",
+  status: index <= 1 ? "REGISTERED" : "ATTENDED",
+  ...(index === 0 ? { hasResult: true } : {}),
   createdAt: "2026-08-10T08:00:00.000Z",
   updatedAt: "2026-08-10T09:00:00.000Z",
 }));

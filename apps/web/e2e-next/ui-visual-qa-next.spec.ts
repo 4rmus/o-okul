@@ -1741,7 +1741,7 @@ function createPortalAnnouncements(audience: "GUARDIANS" | "STUDENTS" | "TEACHER
 function createStudentSelfOverview() {
   return {
     attendance: { absent: 1, excused: 0, late: 1, present: 28, total: 30 },
-    examSeries: [{ generatedAt: "2026-06-17T08:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-a", successRate: 81.7 }],
+    examSeries: [{ examId: "exam-a", examStartsAt: "2026-06-10T09:00:00.000Z", examTitle: "LGS Hazirlik Denemesi", generatedAt: "2026-06-17T08:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-a", successRate: 81.7 }],
     homework: { materialAssignmentCount: 1, openClassHomeworkCount: 0 },
     schoolGrades: [{ absent: false, assessmentId: "assessment-a", courseId: "course-math", courseName: "Matematik", heldOn: "2026-06-10", kind: "WRITTEN", maxScore: 100, score: 84, title: "1. Yazılı", version: 1 }],
   };

@@ -6,7 +6,10 @@ import type { ReportSnapshotRecord } from "@o-okul/shared-types";
  * level, class, course and term filters, so a tenant-wide snapshot beats a level or class one. Within the same width
  * the most recent snapshot wins by COALESCE(generatedAt, createdAt), then by createdAt; the snapshot id breaks a
  * remaining tie deterministically. The SQL form below renders the same three keys (report-snapshot-preference.fixture.ts
- * pins both). Snapshot generation, shape and the frozen ReportSnapshot contract are untouched.
+ * pins both). Course- and term-scoped snapshots stay candidates and only rank behind wider ones: when an exam has no
+ * wider READY snapshot its course snapshot becomes the single series point (the worker carries courseId as a scope
+ * label and totals cover the whole exam). Snapshot generation, shape and the frozen ReportSnapshot contract are
+ * untouched.
  */
 export const reportSnapshotScopeFilters = ["campusId", "gradeLevelId", "classId", "courseId", "termId"] as const;
 

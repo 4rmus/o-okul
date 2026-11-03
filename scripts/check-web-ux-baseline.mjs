@@ -26,6 +26,7 @@ const files = {
   "apps/web/e2e-next/teacher-portal-contract-next.spec.ts": readFileSync("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts": readFileSync("apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "utf8"),
   "apps/web/e2e-next/ui-visual-qa-next.spec.ts": readFileSync("apps/web/e2e-next/ui-visual-qa-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts": readFileSync("apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts", "utf8"),
   "apps/web/package.json": readFileSync("apps/web/package.json", "utf8"),
   "apps/web/app/(app)/_shared/access.ts": readFileSync("apps/web/app/(app)/_shared/access.ts", "utf8"),
   "apps/web/app/(app)/_shared/report-chart-panel.tsx": readFileSync("apps/web/app/(app)/_shared/report-chart-panel.tsx", "utf8"),
@@ -3012,6 +3013,26 @@ requireTokens("apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", [
   "Öğrenci kapsamı doğrulanmadı",
   "Sınıf kapsamı doğrulanmadı",
   "formatBookletSummary",
+  // Katılım, API'nin hasResult kuralını izler: sonucu olan REGISTERED katılımcı "Katıldı" sayılır; ekran tahmin yapmaz.
+  "function participantAttendance(participant: ExamParticipantRecord): string {",
+  'if (participant.hasResult) return "ATTENDED";',
+  'participantAttendance(participant) === "ATTENDED"',
+  'participantAttendance(participant) === "ABSENT"',
+  'participantAttendance(participant) === "REGISTERED"',
+  "participantStatusTone(participantAttendance(participant))",
+  "participantStatusLabel(participantAttendance(participant))",
+  'label: `Katılım: ${formatCount(selectedAttendedCount)} katıldı / ${formatCount(selectedAbsentCount)} gelmedi`,',
+  'if (status === "ATTENDED") return "Katıldı";',
+]);
+
+// Gate C e2e: REGISTERED + hasResult katılımcının "Katıldı" rozeti ve "Katılan 20/21" özeti sabitlenir.
+requireTokens("apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts", [
+  "Gate C sınav listesi sonucu olan REGISTERED katılımcıyı Katıldı sayar",
+  '...(index === 0 ? { hasResult: true } : {}),',
+  'getByText("Katıldı", { exact: true })).toHaveCount(20)',
+  'getByText("Kayıtlı", { exact: true })).toHaveCount(1)',
+  'getByText("20/21", { exact: true })',
+  '"Katılım: 20 katıldı / 0 gelmedi"',
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", [
