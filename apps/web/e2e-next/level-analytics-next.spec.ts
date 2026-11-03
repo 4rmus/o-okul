@@ -49,7 +49,7 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
     await expect(region.getByRole("heading", { name: "Seviye seçin" })).toBeVisible();
     expect(requests.analytics).toEqual([]);
 
-    await region.getByLabel("Seviye", { exact: true }).selectOption("grade-8");
+    await region.getByRole("combobox", { exact: true, name: "Seviye" }).selectOption("grade-8");
 
     const lgs = region.getByRole("region", { exact: true, name: "LGS Başarı % gidişi" });
     await expect(lgs).toBeVisible();
@@ -74,8 +74,8 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
     await expect(lgsTable).not.toContainText("LGS Deneme 4");
 
     expect(requests.analytics.at(-1)).toBe("gradeLevelId=grade-8");
-    await region.getByLabel("Sınav türü", { exact: true }).selectOption("LGS");
-    await region.getByLabel("Dönem", { exact: true }).selectOption("term-1");
+    await region.getByRole("combobox", { exact: true, name: "Sınav türü" }).selectOption("LGS");
+    await region.getByRole("combobox", { exact: true, name: "Dönem" }).selectOption("term-1");
     await expect.poll(() => requests.analytics.at(-1)).toBe("examType=LGS&gradeLevelId=grade-8&termId=term-1");
   });
 
@@ -87,7 +87,7 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
       needsRefresh: [],
     });
     const region = page.getByRole("region", { exact: true, name: "Seviye analitiği" });
-    await region.getByLabel("Seviye", { exact: true }).selectOption("grade-7");
+    await region.getByRole("combobox", { exact: true, name: "Seviye" }).selectOption("grade-7");
 
     await expect(region.getByRole("heading", { name: "Çizilecek seviye raporu yok" })).toBeVisible();
     await expect(region).toContainText("7. SINIF için seviye raporu hazır olan yayınlanmış sınav bulunmuyor.");
@@ -106,7 +106,7 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
     test(`seviye analitiği ${width}px genişlikte yatay taşma yapmaz`, async ({ page }) => {
       await open(page, "/kurum/raporlar/seviyeler", width);
       const region = page.getByRole("region", { exact: true, name: "Seviye analitiği" });
-      await region.getByLabel("Seviye", { exact: true }).selectOption("grade-8");
+      await region.getByRole("combobox", { exact: true, name: "Seviye" }).selectOption("grade-8");
       await expect(region.getByRole("table", { name: "TYT seviye raporları" })).toBeVisible();
       await expect(region.locator(".uh-chart-loading")).toHaveCount(0);
       await expectNoHorizontalOverflow(page, `seviye analitiği ${width}px`);

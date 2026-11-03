@@ -717,7 +717,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
     >
       {reportWorkspace}
       {/* DEC-20261102-08 (G3): below the workspace so the report frame above it stays unchanged; hidden in print. */}
-      <nav className="next-list-controls" aria-label="Diğer rapor görünümleri">
+      <nav className="uh-toolbar uh-toolbar--start" aria-label="Diğer rapor görünümleri">
         <Link className="uh-button uh-button--secondary uh-button--md" href="/kurum/raporlar/seviyeler">Seviye analitiği</Link>
       </nav>
     </PageFrame>
