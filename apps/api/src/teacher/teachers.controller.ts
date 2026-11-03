@@ -144,7 +144,9 @@ const teacherListFields = [
 ];
 
 function toTeacherResponse(record: TeacherRecord, context: ReturnType<typeof getRequestContext>): TeacherRecord {
-  const response = { ...record } as TeacherRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
+  const response = { ...record } as TeacherRecord & { deletedAt?: string; nationalIdEncrypted?: string; nationalIdHash?: string };
+  // A purge of a deleted teacher (DEC-20261102-08) returns the record; the deletion time is not part of the contract.
+  delete response.deletedAt;
   delete response.nationalIdEncrypted;
   delete response.nationalIdHash;
   delete response.userId;

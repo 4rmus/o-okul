@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { loginAs, registerTestLoginIdentity } from "../test-auth.js";
-import { normalizeFiltersSummary } from "./list-export.service.js";
+import { normalizeFiltersSummary } from "./list-export-validation.js";
 
 // DEC-20261102-08: masked CSV export writes one audit record (user, list, row count) before the browser builds it.
 describe("List export audit API", () => {
@@ -101,7 +101,8 @@ describe("List export audit API", () => {
     expect(exportLogs[0]).toMatchObject({
       action: "list.exported",
       actorUserId: "user-tenant-a",
-      diff: { filtersSummary: "q;classId=class-a;sort=-firstName;page=2", listType: "students", rowCount: 3 },
+      // `page` is not a students list filter (that list pages with a cursor), so it is dropped.
+      diff: { filtersSummary: "q;classId=class-a;sort=-firstName", listType: "students", rowCount: 3 },
       entityId: "students",
       tenantId: "tenant-a",
     });
@@ -177,7 +178,42 @@ describe("List export audit API", () => {
   });
 
   it("arama değerini süzgeç özetinden düşürür", () => {
-    expect(normalizeFiltersSummary("q=ada;search=kaya;classId=class-a")).toBe("q;search;classId=class-a");
-    expect(normalizeFiltersSummary("")).toBe("");
+    expect(normalizeFiltersSummary("students", "q=ada;classId=class-a")).toBe("q;classId=class-a");
+    expect(normalizeFiltersSummary("teachers", "q=ada;page=2")).toBe("q;page=2");
+    expect(normalizeFiltersSummary("students", "")).toBe("");
+  });
+
+  it("listeye ait olmayan süzgeç anahtarlarını düşürür ve değerleri kurala göre sınırlar", () => {
+    // Web callers: students sends cursor/q/sort and its filter panel; teachers and classes page/q/sort; attendance adds classId.
+    expect(normalizeFiltersSummary(
+      "students",
+      "cursor=eyJpZCI6InN0dWRlbnQtYSJ9;q;sort=-studentNo;classId=class-a;level=8;responsibleTeacherId=teacher-a;status=ACTIVE;guardianLinked=true",
+    )).toBe("cursor;q;sort=-studentNo;classId=class-a;level=8;responsibleTeacherId=teacher-a;status=ACTIVE;guardianLinked=true");
+    expect(normalizeFiltersSummary("teachers", "page=2;q;sort=lastName;classId=class-a;search=kaya;adaKaya;note=ada")).toBe("page=2;q;sort=lastName");
+    expect(normalizeFiltersSummary("classes", "page=1;sort=-name;studentName=ada")).toBe("page=1;sort=-name");
+    expect(normalizeFiltersSummary("attendance", "classId=class-a;page=3;q;sort=-date;status=ABSENT")).toBe("classId=class-a;page=3;q;sort=-date");
+    // Values outside the key's rule keep only the key; repeated keys keep the first one; key match is exact.
+    expect(normalizeFiltersSummary("students", "status=ada;guardianLinked=maybe;page=2;classId=class-a;classId=class-b;Q=ada"))
+      .toBe("status;guardianLinked;classId=class-a");
+    expect(normalizeFiltersSummary("teachers", "page=0;sort=a.b;page=3")).toBe("page;sort");
+    expect(normalizeFiltersSummary("classes", `page=${"9".repeat(7)}`)).toBe("page");
+    expect(normalizeFiltersSummary("students", "constructor=x;toString;__proto__")).toBe("");
+  });
+
+  it("bilinmeyen süzgeç anahtarı denetim kaydına ulaşmaz", async () => {
+    await request(server)
+      .post("/audit/list-exports")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Idempotency-Key", "list-export-unknown-keys-a")
+      .send({ filtersSummary: "page=4;adaKaya;phone=5551112233;sort=lastName", list: "teachers", rowCount: 2 })
+      .expect(201);
+    const logs = await request(server)
+      .get("/audit-logs")
+      .query({ entityType: "ListExport" })
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    const teacherExport = (logs.body as Array<{ diff?: Record<string, unknown>; entityId?: string }>).find((log) => log.entityId === "teachers");
+    expect(teacherExport?.diff).toMatchObject({ filtersSummary: "page=4;sort=lastName", listType: "teachers", rowCount: 2 });
+    expect(JSON.stringify(teacherExport)).not.toMatch(/adaKaya|5551112233|phone/);
   });
 });

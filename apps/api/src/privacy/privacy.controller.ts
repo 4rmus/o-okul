@@ -22,7 +22,8 @@ export class PrivacyController {
     const context = getRequestContext();
     const [students, teachers, guardians, users] = await Promise.all([
       this.students.listPiiPresence(context),
-      this.teachers.listTeachers(context),
+      // DEC-20261102-08: a deleted teacher keeps personal data until it is purged, so the inventory lists it too.
+      this.teachers.listTeachersForPiiPurge(context),
       this.guardians.listGuardians(context),
       this.users.listByTenant(context.tenantId ?? ""),
     ]);

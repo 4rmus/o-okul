@@ -4,8 +4,8 @@
 // Screens are captured from a real local stack with the fictional sentetik-v1 dataset; nothing here
 // publishes into apps/web/public. Publication needs separate product-owner approval after staging UAT.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const LANDING_SCREENS_DATASET_ID = "sentetik-v1";
 export const LANDING_SCREENS_MANIFEST_VERSION = 1;
@@ -112,16 +112,59 @@ export function assertProvidersDisabled(env) {
 /**
  * Output stays outside apps/web/public; the default is artifacts/landing-screens/<runId> (gitignored).
  * Absolute paths outside the repository are allowed for operators who keep captures elsewhere.
+ * The checks run on the lexical path and again on the real path (symlinks resolved through the nearest existing
+ * ancestor), so a symlinked artifacts or output directory cannot land files in apps/web/public or a tracked folder.
  */
 export function resolveOutputDir(repoRoot, requested, runId) {
   const base = requested ? resolve(repoRoot, requested) : join(repoRoot, "artifacts", "landing-screens");
   const target = join(base, runId);
   const publicDir = join(repoRoot, "apps", "web", "public");
-  if (isInside(publicDir, target) || isInside(target, publicDir)) throw new Error("LANDING_SCREENS_OUTPUT_IN_PUBLIC");
-  const insideRepo = isInside(repoRoot, target);
   const artifactsDir = join(repoRoot, "artifacts");
-  if (insideRepo && !isInside(artifactsDir, target)) throw new Error("LANDING_SCREENS_OUTPUT_NOT_GITIGNORED");
+  assertOutputLocation({ artifactsDir, publicDir, repoRoot, target });
+
+  const realRepoRoot = realPathThroughNearestAncestor(repoRoot);
+  assertOutputLocation({
+    // The ignore rule matches artifacts/ by its place in the repository, not by where a symlink named artifacts points.
+    artifactsDir: join(realRepoRoot, "artifacts"),
+    publicDir: realPathThroughNearestAncestor(publicDir),
+    repoRoot: realRepoRoot,
+    target: realPathThroughNearestAncestor(target),
+  });
   return target;
+}
+
+function assertOutputLocation({ artifactsDir, publicDir, repoRoot, target }) {
+  if (isInside(publicDir, target) || isInside(target, publicDir)) throw new Error("LANDING_SCREENS_OUTPUT_IN_PUBLIC");
+  if (isInside(repoRoot, target) && !isInside(artifactsDir, target)) throw new Error("LANDING_SCREENS_OUTPUT_NOT_GITIGNORED");
+}
+
+/**
+ * The real path of `path`: the nearest ancestor that exists is resolved with realpathSync and the missing tail is
+ * appended. A dangling symlink on the way cannot be resolved, so it is refused instead of guessed.
+ */
+export function realPathThroughNearestAncestor(path) {
+  let current = resolve(path);
+  const missing = [];
+  for (;;) {
+    let exists = true;
+    try {
+      lstatSync(current);
+    } catch (error) {
+      if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+      exists = false;
+    }
+    if (exists) {
+      try {
+        return join(realpathSync.native(current), ...missing);
+      } catch {
+        throw new Error("LANDING_SCREENS_OUTPUT_UNRESOLVED");
+      }
+    }
+    const parent = dirname(current);
+    if (parent === current) return join(current, ...missing);
+    missing.unshift(basename(current));
+    current = parent;
+  }
 }
 
 function isInside(parent, child) {

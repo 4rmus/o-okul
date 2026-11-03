@@ -2,7 +2,7 @@
 // They pin the local-only, provider-off, no-publication guards; the pipeline itself needs a local stack and is run
 // by hand (docs/landing-screens-runbook.md).
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -86,6 +86,48 @@ test("output stays outside apps/web/public and inside a gitignored directory", (
   assert.equal(resolveOutputDir(repoRoot, outside, runId), join(outside, runId));
   const gitignore = readFileSync(join(repoRoot, ".gitignore"), "utf8").split("\n").map((line) => line.trim());
   assert.ok(gitignore.includes("artifacts/"), ".gitignore must keep artifacts/ out of the repository");
+});
+
+test("a symlinked output path cannot land files in apps/web/public or a tracked folder", () => {
+  const runId = "2026-11-03-abcdef12";
+  const root = mkdtempSync(join(tmpdir(), "landing-screens-symlink-"));
+  try {
+    const repo = join(root, "repo");
+    const publicDir = join(repo, "apps", "web", "public");
+    mkdirSync(publicDir, { recursive: true });
+    mkdirSync(join(repo, "docs"), { recursive: true });
+
+    // artifacts -> apps/web/public: the default output and any path under artifacts resolve into public.
+    symlinkSync(publicDir, join(repo, "artifacts"), "dir");
+    assert.throws(() => resolveOutputDir(repo, undefined, runId), /OUTPUT_IN_PUBLIC/);
+    assert.throws(() => resolveOutputDir(repo, "artifacts/landing-screens/nested", runId), /OUTPUT_IN_PUBLIC/);
+    rmSync(join(repo, "artifacts"));
+
+    // An outside directory that links into public is refused too.
+    const outsideLink = join(root, "outside-link");
+    symlinkSync(join(publicDir, "landing"), outsideLink, "dir");
+    mkdirSync(join(publicDir, "landing"));
+    assert.throws(() => resolveOutputDir(repo, outsideLink, runId), /OUTPUT_IN_PUBLIC/);
+
+    // artifacts/landing-screens -> docs: inside the repository but not in the ignored artifacts/ folder.
+    mkdirSync(join(repo, "artifacts"));
+    symlinkSync(join(repo, "docs"), join(repo, "artifacts", "landing-screens"), "dir");
+    assert.throws(() => resolveOutputDir(repo, undefined, runId), /OUTPUT_NOT_GITIGNORED/);
+    rmSync(join(repo, "artifacts", "landing-screens"));
+
+    // A dangling symlink cannot be resolved and is refused instead of guessed.
+    symlinkSync(join(publicDir, "missing"), join(repo, "artifacts", "landing-screens"), "dir");
+    assert.throws(() => resolveOutputDir(repo, undefined, runId), /OUTPUT_UNRESOLVED/);
+    rmSync(join(repo, "artifacts", "landing-screens"));
+
+    // A symlink to a directory outside the repository and outside public stays allowed.
+    const captures = join(root, "captures");
+    mkdirSync(captures);
+    symlinkSync(captures, join(repo, "artifacts", "landing-screens"), "dir");
+    assert.equal(resolveOutputDir(repo, undefined, runId), join(repo, "artifacts", "landing-screens", runId));
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });
 
 test("dataset files are checked against the sentetik-v1 manifest before anything runs", () => {

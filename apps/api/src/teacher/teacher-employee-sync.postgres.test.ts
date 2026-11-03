@@ -195,6 +195,41 @@ run("teacher -> Employee sync on PostgreSQL with the app role and RLS", () => {
     });
   });
 
+  it("purges a deleted teacher and its ended Employee copy; only the purge path finds the deleted teacher", async () => {
+    const teacher = await asAdmin(tenantA, () => store.create({
+      tenantId: tenantA, firstName: "Silinmis", lastName: "Imha", phone: "5550000004", nationalIdEncrypted: "enc-deleted", nationalIdHash: id(tenantA, "hash-deleted"),
+    }));
+    const employeeId = (await linkedEmployeeId(teacher.id))!;
+    await admin.query(`UPDATE "Employee" SET "workEmail" = 'silinmis@example.test' WHERE "id" = $1`, [employeeId]);
+    await asAdmin(tenantA, () => store.softDelete(teacher.id, "2026-11-02T10:00:00.000Z"));
+    await expect(store.endLinkedEmployee(tenantA, teacher.id, "2026-11-02T10:00:00.000Z")).resolves.toBe("ENDED");
+
+    // Ordinary reads keep hiding the deleted teacher; the KVKK purge lookups see it, inside the request tenant only.
+    await expect(asAdmin(tenantA, () => store.findById(teacher.id))).resolves.toBeUndefined();
+    expect((await asAdmin(tenantA, () => store.list())).map((record) => record.id)).not.toContain(teacher.id);
+    await expect(asAdmin(tenantA, () => store.update(teacher.id, { firstName: "Geri" }))).resolves.toBeUndefined();
+    await expect(asAdmin(tenantA, () => store.findByIdForPiiPurge(teacher.id))).resolves.toMatchObject({ id: teacher.id, deletedAt: expect.any(String) });
+    expect((await asAdmin(tenantA, () => store.listForPiiPurge())).map((record) => record.id)).toContain(teacher.id);
+    await expect(asAdmin(tenantB, () => store.findByIdForPiiPurge(teacher.id))).resolves.toBeUndefined();
+    expect((await asAdmin(tenantB, () => store.listForPiiPurge())).every((record) => record.tenantId === tenantB)).toBe(true);
+    await expect(asAdmin(tenantB, () => store.purgePii(teacher.id))).resolves.toBeUndefined();
+
+    const purged = await asAdmin(tenantA, () => store.purgePii(teacher.id));
+
+    expect(purged).toMatchObject({ teacher: { id: teacher.id, firstName: "Anonim", lastName: "Ogretmen", deletedAt: expect.any(String) }, employeeId });
+    expect(purged?.teacher.phone).toBeUndefined();
+    expect(purged?.teacher.nationalIdHash).toBeUndefined();
+    const teacherRow = await admin.query<{ firstName: string; lastName: string; phone: string | null; nationalIdEncrypted: string | null; nationalIdHash: string | null }>(
+      `SELECT "firstName", "lastName", "phone", "nationalIdEncrypted", "nationalIdHash" FROM "Teacher" WHERE "id" = $1`,
+      [teacher.id],
+    );
+    expect(teacherRow.rows[0]).toEqual({ firstName: "Anonim", lastName: "Ogretmen", phone: null, nationalIdEncrypted: null, nationalIdHash: null });
+    expect(await employee(employeeId)).toMatchObject({
+      firstName: "Anonim", lastName: "Ogretmen", phone: null, nationalIdEncrypted: null, nationalIdHash: null, workEmail: null,
+      status: "ENDED", endedReason: "TEACHER_DELETED", deletedAt: null,
+    });
+  });
+
   it("keeps every step inside the request tenant", async () => {
     const tenantAEmployee = await employee(id(tenantA, "employee-staff"));
 

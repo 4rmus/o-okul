@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { AccountPiiPurgeService } from "../account-pii/account-pii-purge.service.js";
 import type { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -30,7 +30,7 @@ function setup(store: Partial<TeacherStore>) {
   };
   const accountPii = { purgeLinkedAccount: vi.fn(async () => "NONE" as const) };
   const service = new TeacherService(
-    { findById: vi.fn(async () => teacher), ...store } as unknown as TeacherStore,
+    { findById: vi.fn(async () => teacher), findByIdForPiiPurge: vi.fn(async () => teacher), ...store } as unknown as TeacherStore,
     {} as TeacherAssignmentStore,
     {} as StudentStore,
     {} as GradeLevelCourseStore,
@@ -87,6 +87,35 @@ describe("TeacherService Employee sync (DEC-20261102-08)", () => {
         linkedEmployeeId: "employee-a",
       }),
     }));
+  });
+
+  it("silinmiş öğretmen yalnız imha yolunda bulunur; imha denetime silinmiş olduğunu yazar", async () => {
+    const deleted = { ...teacher, deletedAt: "2026-11-02T10:00:00.000Z" };
+    const purged = { ...deleted, firstName: "Anonim", lastName: "Ogretmen" };
+    const purgePii = vi.fn(async () => ({ teacher: purged, employeeId: "employee-a" }));
+    const { service, auditLogs } = setup({
+      findById: vi.fn(async () => undefined),
+      findByIdForPiiPurge: vi.fn(async () => deleted),
+      purgePii,
+    });
+
+    await expect(service.findTeacher(context, "teacher-a")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.updateTeacher(context, "teacher-a", { firstName: "Geri" })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.purgeTeacherPii(context, "teacher-a")).resolves.toEqual(purged);
+    expect(purgePii).toHaveBeenCalledWith("teacher-a");
+    expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "kvkk.teacher_pii_purged",
+      diff: expect.objectContaining({ isTeacherDeleted: true, linkedEmployeeId: "employee-a" }),
+    }));
+  });
+
+  it("imha yolu başka tenant'ın silinmiş öğretmenine erişmez", async () => {
+    const otherTenant = { ...teacher, tenantId: "tenant-b", deletedAt: "2026-11-02T10:00:00.000Z" };
+    const purgePii = vi.fn();
+    const { service } = setup({ findByIdForPiiPurge: vi.fn(async () => otherTenant), purgePii });
+
+    await expect(service.purgeTeacherPii(context, "teacher-a")).rejects.toThrow();
+    expect(purgePii).not.toHaveBeenCalled();
   });
 
   it("bağlı Çalışan'ın ulusal kimlik çakışması 409 döner", async () => {
