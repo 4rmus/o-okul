@@ -123,8 +123,8 @@ export class PostgresGradebookStore implements GradebookStore {
 
   async listAssessments(filter: { classIds?: readonly string[]; termId?: string; courseId?: string }): Promise<GradeAssessmentRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
-      // Drafts live only on a student's newest version (saveDrafts), so distinct students with an unpublished row
-      // are the students waiting for publish.
+      // Drafts live only on the newest version of each student (saveDrafts), so distinct students with an
+      // unpublished row are the students waiting for publish.
       const result = await client.query<GradeAssessmentRow>(
         `SELECT a.*,
            (SELECT count(DISTINCT e."studentId")::int FROM "GradeEntry" e
