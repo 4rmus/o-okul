@@ -51,6 +51,8 @@ const inventory = [
   entry("student.contact.guardian-unlink", "DELETE", "/api/v1/students/{studentId}/contacts/{id}/guardian", "covered", "apps/api/src/student/student-contact.controller.ts", "apps/api/src/student/student-contact-guardian-link.service.ts", "apps/api/src/student/student-contact-guardian-link.e2e.test.ts", ["@Delete(\":id/guardian\")", "@Headers(\"idempotency-key\")"], ["kv3b-unlink-a"]),
   entry("student.guardian-invitation.bulk", "POST", "/api/v1/students/guardian-invitations", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student-guardian-invitation.service.ts", "apps/api/src/student/student-guardian-invitation.e2e.test.ts", ["@Post(\"guardian-invitations\")", "@Headers(\"idempotency-key\")"], ["kv3-guardian-invite-a"]),
   entry("student.enrollment.bulk-renew", "POST", "/api/v1/students/enrollments/bulk-renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"enrollments/bulk-renew\")", "@Headers(\"idempotency-key\")"], ["student-bulk-renew-"]),
+  entry("student.bulk-status", "POST", "/api/v1/students/bulk-status", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/student/term-transition.e2e.test.ts", ["@Post(\"bulk-status\")", "@Headers(\"idempotency-key\")"], ["student-bulk-status-idempotency-a"]),
+  entry("academic-calendar.activate", "POST", "/api/v1/academic-calendar/activate", "covered", "apps/api/src/school/academic-calendar.controller.ts", "apps/api/src/school/school.service.ts", "apps/api/src/student/term-transition.e2e.test.ts", ["@Post(\"academic-calendar/activate\")", "@Headers(\"idempotency-key\")"], ["academic-calendar-activate-idempotency-a"]),
   entry("student.enrollment.renew", "POST", "/api/v1/students/{id}/enrollments/renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/enrollments/renew\")", "@Headers(\"idempotency-key\")"], ["student-renew-"]),
   entry("student.enrollment.transfer", "POST", "/api/v1/students/{id}/enrollments/transfer", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/enrollments/transfer\")", "@Headers(\"idempotency-key\")"], ["student-transfer-"]),
   entry("student.import.commit", "POST", "/api/v1/students/imports", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student-import.service.ts", "apps/api/src/app.e2e.test.ts", ["@Post(\"imports\")", "@Headers(\"idempotency-key\")"], ["student-import-idempotency-a"]),
@@ -225,6 +227,7 @@ const knownNonIdempotentMutations = {
   },
   "apps/api/src/student/student.controller.ts": {
     "@Post(\"imports/dry-run\")": "D: Yazmaz",
+    "@Post(\"enrollments/bulk-renew/dry-run\")": "D: Yazmaz; toplu yenileme ön izlemesi (DEC-20261102-08)",
     "@Patch(\":id\")": "C: Mevcut durumla fark alır; bkz. 5.3",
     "@Patch(\":id/profile\")": "C: Değere set eder",
     "@Patch(\":id/portal-access\")": "C: Hedef durum + sürüm kontrolü",

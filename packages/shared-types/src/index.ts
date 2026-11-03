@@ -41,6 +41,8 @@ export {
   tenantRoles,
 } from "./role-capabilities.js";
 export type {
+  AcademicCalendarActivateRequest,
+  AcademicCalendarActivateResult,
   AcademicTermRecord,
   AcademicTermCreateRequest,
   AcademicTermUpdateRequest,
@@ -314,6 +316,13 @@ export type {
   StudentCreateRequest,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult,
+  StudentBulkRenewConflictCode,
+  StudentBulkRenewDryRunItem,
+  StudentBulkRenewDryRunResult,
+  StudentBulkStatusItemResult,
+  StudentBulkStatusRequest,
+  StudentBulkStatusResult,
+  StudentBulkStatusTarget,
   StudentEnrollmentRecord,
   StudentHomeworkRecord,
   StudentEnrollmentActionRequest,

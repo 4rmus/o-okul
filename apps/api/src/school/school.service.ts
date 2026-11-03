@@ -21,10 +21,16 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
-import { IdempotencyService } from "../http/idempotency.js";
+import { IdempotencyService, type IdempotencyTransactionCompletion } from "../http/idempotency.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
-import { type AcademicCalendarStore, academicCalendarStoreToken } from "./academic-calendar-store.js";
+import {
+  type AcademicCalendarActivation,
+  academicCalendarActivationErrors,
+  type AcademicCalendarStore,
+  academicCalendarStoreToken,
+  istanbulDateString,
+} from "./academic-calendar-store.js";
 import { type AlanStore, alanStoreToken } from "./alan-store.js";
 import { type CampusStore, campusStoreToken } from "./campus-store.js";
 import { activeClassNameUniqueConstraint, type ClassStore, classStoreToken } from "./class-store.js";
@@ -534,6 +540,63 @@ export class SchoolService {
     });
   }
 
+  /**
+   * DEC-20261102-08: activates one year and one of its terms in a single tenant transaction and deactivates the
+   * rest. A year or term that starts after today is refused, so the wizard never switches to a future calendar.
+   */
+  async activateAcademicCalendar(
+    context: RequestContext,
+    input: { academicYearId: string; termId: string },
+    idempotencyKey?: string,
+  ): Promise<AcademicCalendarActivation> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "academic-calendar.activate", request: input },
+        (completion) => this.activateAcademicCalendarOnce(context, input, completion),
+      );
+    }
+    return this.activateAcademicCalendarOnce(context, input);
+  }
+
+  private async activateAcademicCalendarOnce(
+    context: RequestContext,
+    input: { academicYearId: string; termId: string },
+    completion?: IdempotencyTransactionCompletion,
+  ): Promise<AcademicCalendarActivation> {
+    const tenantId = this.resolveTenantId(context, undefined);
+    // The calendar is tenant-wide; a campus-restricted staff member must not switch it for other campuses.
+    if (this.isCampusRestricted(context)) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    let result: AcademicCalendarActivation;
+    try {
+      result = await this.academicCalendarStore.activate({
+        tenantId,
+        academicYearId: input.academicYearId,
+        termId: input.termId,
+        today: istanbulDateString(),
+        finalize: completion ? (client, activation) => completion.complete(client, activation) : undefined,
+      });
+    } catch (error) {
+      throw toAcademicCalendarActivationException(error);
+    }
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicTerm",
+      entityId: result.term.id,
+      action: "academic_calendar.activated",
+      diff: {
+        academicYearId: result.academicYear.id,
+        termId: result.term.id,
+        deactivatedAcademicYearIds: result.deactivatedAcademicYearIds,
+        deactivatedTermIds: result.deactivatedTermIds,
+      },
+    });
+    return result;
+  }
+
   async findClass(context: RequestContext, id: string): Promise<ClassRecord> {
     return this.find(context, await this.listClasses(context), id, "CLASS_NOT_FOUND");
   }
@@ -912,6 +975,21 @@ function changedInputFields<TRecord>(
   fields: Array<keyof TRecord>,
 ): string[] {
   return fields.filter((field) => input[field] !== undefined).map(String);
+}
+
+function toAcademicCalendarActivationException(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  switch (error.message) {
+    case academicCalendarActivationErrors.yearNotFound:
+    case academicCalendarActivationErrors.termNotFound:
+      return new NotFoundException(error.message);
+    case academicCalendarActivationErrors.termYearMismatch:
+      return new BadRequestException(error.message);
+    case academicCalendarActivationErrors.notStarted:
+      return new ConflictException(error.message);
+    default:
+      return error;
+  }
 }
 
 function throwClassNameConflict(error: unknown): never {

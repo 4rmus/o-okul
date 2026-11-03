@@ -53,6 +53,7 @@ const tenantModules = {
   dersler: ["academic-structure", "REGISTRY"],
   destek: ["communication", "MASTER_DETAIL"],
   devamsizlik: ["attendance", "WORKFLOW"],
+  "donem-gecisi": ["setup", "WORKFLOW"],
   duyurular: ["communication", "REGISTRY"],
   etutler: ["academic-structure", "REGISTRY"],
   finans: ["finance", "MASTER_DETAIL"],
@@ -183,6 +184,9 @@ export const institutionRoutes = [
   navRoute("/kurum/destek", "Kurum içi destek", "İletişim", "LifeBuoy", { capability: "support:manage", menuLabel: "Destek" }),
   navRoute("/kurum/finans", "Ödeme planları", "Finans", "CreditCard", { breadcrumbLabel: "Finans", capability: "finance:manage" }),
   navRoute("/kurum/kurulum", "Kurulum", "Ayarlar", "Settings", { capability: "setup:manage" }),
+  // DEC-20261102-08: the term-transition wizard opens from the command palette, outside the menu. The page also needs
+  // student:manage and academic:manage and checks them itself.
+  navRoute("/kurum/donem-gecisi", "Dönem Geçişi", "Ayarlar", "CalendarDays", { capability: "setup:manage", hiddenFromRail: true }),
   navRoute("/kurum/lisans-donemleri", "Lisans Dönemleri", "Ayarlar", "ClipboardCheck", { capability: "setup:manage" }),
   navRoute("/kurum/rol-onizleme", "Rol Önizleme", "Ayarlar", "ShieldCheck", { capability: "role-preview:manage" }),
   navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit", tabLabel: "Genel bakış" }),
@@ -281,8 +285,8 @@ export const examWorkspaceSegments = {
 
 // Komut paletindeki iş akışı ve hızlı işlem girdileri.
 export const commandActions = [
-  // Toplu dönem geçişi Öğrenciler listesindeki "Toplu işlemler" bölümündedir; ilk kurulum sihirbazı menüdeki Kurulum girdisidir.
-  commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage"),
+  // DEC-20261102-08: yıl sonu dönem geçişi sihirbazı; ilk kurulum sihirbazı menüdeki Kurulum girdisidir.
+  commandAction("/kurum/donem-gecisi", "Dönem geçişi", "İş akışı", "setup:manage"),
   commandAction("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı", "academic:manage"),
   commandAction("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem", "class:manage"),
   commandAction("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem", "class:manage"),
