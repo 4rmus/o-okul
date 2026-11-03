@@ -495,7 +495,7 @@ export function ExamsPage() {
   return (
     <PageFrame
       title="Sınavlar"
-      subtitle="Deneme sınavlarını oluştur, yayın durumunu takip et ve rapor zincirine hazırla."
+      subtitle="Deneme sınavlarını oluşturun, yayın durumunu takip edin ve rapor zincirine hazırlayın."
       actions={
         <Button onClick={openCreateForm}>
           <Plus size={17} aria-hidden="true" />
@@ -530,7 +530,7 @@ export function ExamsPage() {
           emptyText={
             <EmptyState
               title="Henüz sınav yok"
-              description="İlk deneme sınavını ekleyerek katılımcı ve rapor hazırlığını başlat."
+              description="İlk deneme sınavını ekleyerek katılımcı ve rapor hazırlığını başlatın."
               primaryAction={{ label: "Sınav ekle", onClick: openCreateForm }}
             />
           }

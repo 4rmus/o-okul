@@ -449,11 +449,11 @@ export function TeachersPage() {
         aria-label="Öğretmen yönetimi"
         columns={columns}
         density="compact"
-        description="Ders, sınıf, rehberlik ve portal hesabı ilişkilerini tek yerden yönet."
+        description="Ders, sınıf, rehberlik ve portal hesabı ilişkilerini tek yerden yönetin."
         emptyState={
           <EmptyState
             title="Henüz öğretmen yok"
-            description="Öğretmen ekleyerek ders programı, yoklama ve öğrenci sorumluluğu akışlarını hazırla."
+            description="Öğretmen ekleyerek ders programı, yoklama ve öğrenci sorumluluğu akışlarını hazırlayın."
             primaryAction={{ label: "Öğretmen ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />

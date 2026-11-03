@@ -270,11 +270,11 @@ export function StudySessionsPage() {
         aria-label="Etüt yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum etütlerini sınıf, öğretmen, ders ve öğrenci bağlantısıyla yönet."
+        description="Kurum etütlerini sınıf, öğretmen, ders ve öğrenci bağlantısıyla yönetin."
         emptyState={
           <EmptyState
             title="Etüt planı boş"
-            description="Öğrenciler için ilk etüt oturumunu oluşturarak başla."
+            description="Öğrenciler için ilk etüt oturumunu oluşturarak başlayın."
             hint="Etüt oluşturmak için sınıf, öğretmen, ders ve öğrenci kayıtları gerekir."
             primaryAction={{ label: "Etüt ekle", onClick: openCreateForm }}
           />

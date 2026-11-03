@@ -300,7 +300,7 @@ export function ClassesPage() {
         emptyState={
           <EmptyState
             title="Henüz sınıf yok"
-            description="Sınıf ekleyerek öğrencileri yerleştireceğin temel yapıyı kur."
+            description="Sınıf ekleyerek öğrencileri yerleştireceğiniz temel yapıyı kurun."
             hint={gradeLevels.length === 0 ? "Önce seviye eklemen önerilir." : undefined}
             primaryAction={{ label: "Sınıf ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}

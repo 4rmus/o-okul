@@ -536,8 +536,8 @@ export function HomeworkMaterialsPage() {
         emptyState={
           <EmptyState
             title="Materyal havuzu boş"
-            description="İlk materyali ekleyerek dosya ve öğrenci atama akışını başlat."
-            hint="Materyal eklendikten sonra dosya yükleyebilir ve öğrencilere atayabilirsin."
+            description="İlk materyali ekleyerek dosya ve öğrenci atama akışını başlatın."
+            hint="Materyal eklendikten sonra dosya yükleyebilir ve öğrencilere atayabilirsiniz."
             primaryAction={{ label: "Materyal ekle", onClick: openCreateForm }}
           />
         }
@@ -587,7 +587,7 @@ export function HomeworkMaterialsPage() {
               </InfoGrid>
             </div>
           ) : (
-            <p>Dosya ve atama işlemi için listeden bir materyal seç.</p>
+            <p>Dosya ve atama işlemi için listeden bir materyal seçin.</p>
           )}
           <div className="next-material-actions">
             <form className="next-material-form" onSubmit={(event) => void submitFile(event)}>
@@ -666,7 +666,7 @@ export function HomeworkMaterialsPage() {
             ) : (
               <article>
                 <h3>Seçili materyal yok</h3>
-                <p>Dosya ve atama geçmişi için listeden bir materyal seç.</p>
+                <p>Dosya ve atama geçmişi için listeden bir materyal seçin.</p>
               </article>
             )}
           </section>

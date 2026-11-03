@@ -469,11 +469,11 @@ export function AcademicCalendarPage() {
         aria-label="Akademik yıl yönetimi"
         columns={yearColumns}
         density="compact"
-        description="Kurumun eğitim yıllarını tarih aralıklarıyla yönet."
+        description="Kurumun eğitim yıllarını tarih aralıklarıyla yönetin."
         emptyState={
           <EmptyState
             title="Akademik yıl yok"
-            description="Yeni dönemi planlamak için ilk akademik yılı oluştur."
+            description="Yeni dönemi planlamak için ilk akademik yılı oluşturun."
             hint="Akademik yıl, dönem ve ders programı kayıtlarının temelidir."
             primaryAction={{ label: "Akademik yıl ekle", onClick: openYearCreateForm }}
           />
@@ -515,11 +515,11 @@ export function AcademicCalendarPage() {
         aria-label="Akademik dönem yönetimi"
         columns={termColumns}
         density="compact"
-        description="Akademik yıllara bağlı dönemleri yönet."
+        description="Akademik yıllara bağlı dönemleri yönetin."
         emptyState={
           <EmptyState
             title="Dönem yok"
-            description="Akademik yıl oluşturduktan sonra ilk dönemi ekle."
+            description="Akademik yıl oluşturduktan sonra ilk dönemi ekleyin."
             hint="Dönemler ders programı, not ve rapor akışlarını bağlar."
             primaryAction={years.length > 0 ? { label: "Dönem ekle", onClick: openTermCreateForm } : undefined}
           />

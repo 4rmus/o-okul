@@ -738,7 +738,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   }
 
   return (
-    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırla.">
+    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırlayın.">
       <section className="next-onboarding-hero" aria-label="Kurulum karşılama">
         <div>
           <span>{isFinished ? "Temel kurum kayıtları oluşturuldu" : "İlk giriş akışı"}</span>

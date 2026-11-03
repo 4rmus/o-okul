@@ -238,11 +238,11 @@ export function GradeLevelsPage() {
         aria-label="Seviye yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum seviyelerini sınıf bölümlerine bağlamak için yönet."
+        description="Kurum seviyelerini sınıf bölümlerine bağlamak için yönetin."
         emptyState={
           <EmptyState
             title="Henüz seviye yok"
-            description="Seviye ekleyerek sınıfları daha düzenli kur."
+            description="Seviye ekleyerek sınıfları daha düzenli kurun."
             primaryAction={{ label: "Seviye ekle", onClick: openCreateForm }}
             secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
           />
