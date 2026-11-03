@@ -38,7 +38,8 @@ interface AuthStore {
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   /** Resolves false when the server did not confirm the logout (its session may survive); local state is cleared. */
   logout(): Promise<boolean>;
-  switchPersona(activePersona: ActivePersona): Promise<void>;
+  /** Resolves with the new session once the switch is applied. */
+  switchPersona(activePersona: ActivePersona): Promise<AuthResponse>;
 }
 
 const AuthContext = createContext<AuthStore | null>(null);
@@ -112,6 +113,7 @@ export function Providers({ children }: { children: ReactNode }) {
         const nextAuth = await requestSwitchPersona(auth.accessToken, activePersona);
         queryClient.clear();
         setAuth(nextAuth);
+        return nextAuth;
       },
       async logout() {
         // The API clears the refresh and CSRF cookies even on a refused logout; without the CSRF cookie this browser

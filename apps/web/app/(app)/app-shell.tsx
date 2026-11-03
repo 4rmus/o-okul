@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -207,20 +207,28 @@ export function AppShell({ children }: { children: ReactNode }) {
     // redirect below replaces the guard's history entry, so no forward entry leads back into the page.
     closeMobileNavBeforePageDialog();
     if (!(await confirmInAppNavigation({ replace: true }))) return;
-    const confirmed = await logout();
+    let confirmed: boolean;
+    try {
+      confirmed = await logout();
+    } catch {
+      // The session is still here, and so is the unsaved work: back must ask again.
+      rearmInAppNavigationGuard();
+      return;
+    }
     router.replace(loginPathAfterLogout(loginPathFor(pathname), !confirmed));
   }
 
   async function handlePersonaSwitch(target: ActivePersona) {
     if (isPersonaSwitching) return;
     closeMobileNavBeforePageDialog();
-    // A persona the page does not allow is redirected with a history replace; one that keeps the page gets the guard
-    // back once the page is found still on its address.
+    // A persona the page does not allow is redirected with a history replace over the guard entry; a persona that keeps
+    // the page gets the guard back right away.
     if (!(await confirmInAppNavigation({ replace: true }))) return;
     setIsPersonaSwitching(true);
     setPersonaSwitchError("");
     try {
-      await switchPersona(target);
+      const nextAuth = await switchPersona(target);
+      if (canAccessPath(nextAuth.session, pathname, searchParams)) rearmInAppNavigationGuard();
       closeMobileNav();
     } catch {
       setPersonaSwitchError("Çalışma alanı değiştirilemedi. Tekrar deneyin.");
@@ -229,6 +237,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     } finally {
       setIsPersonaSwitching(false);
     }
+  }
+
+  /**
+   * Moves focus to the content without a fragment navigation, which would add a history entry; an extra entry over
+   * the page's unsaved-work guard would turn the next back press into a step within the page.
+   */
+  function skipToContent(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const content = document.getElementById("next-content");
+    if (!content) return;
+    event.preventDefault();
+    content.scrollIntoView({ block: "start", inline: "nearest" });
+    content.focus({ preventScroll: true });
   }
 
   function isActive(href: string) {
@@ -315,7 +336,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="next-app-shell" data-shell-version="v3">
-      <a className="next-skip-link" href="#next-content">
+      <a className="next-skip-link" href="#next-content" onClick={skipToContent}>
         İçeriğe geç
       </a>
       <header className="next-mobile-topbar">

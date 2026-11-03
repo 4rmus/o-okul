@@ -58,8 +58,13 @@ const classes = [
 const courses = [{ id: "course-math", tenantId: "tenant-gb", name: "Matematik", code: "MAT" }];
 const terms = [{ id: "term-1", tenantId: "tenant-gb", academicYearId: "year-1", name: "2. Dönem", startsAt: "2026-02-01", endsAt: "2026-06-30", isActive: true }];
 
+// Back/forward guard tests; ux-rc runs them in Chromium and WebKit (apps/web/package.json, playwright.rc.config.ts).
+const backForwardTag = { tag: "@geri-koruma" };
+
 interface Captured {
   saves: string[];
+  /** Delays the logout and persona switch responses (milliseconds). */
+  slowAuthMs?: number;
   /** Offers a STAFF → TEACHER persona switch whose request succeeds or fails. */
   personaSwitch?: "ok" | "fail";
   loggedOut?: boolean;
@@ -264,7 +269,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
   });
 
-  test("kaydedilmemiş not varken tarayıcı geri tuşu onay ister; vazgeçince adres ve not yerinde kalır", async ({ page }) => {
+  test("kaydedilmemiş not varken tarayıcı geri tuşu onay ister; vazgeçince adres ve not yerinde kalır", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/hesap/oturumlar", { saves: [] });
     await page.goto("/kurum/not-defteri");
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
@@ -290,7 +295,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("uygulama içi geçmişte geri onay ister; not temizlenince koruma kaydı geçmişten kalkar", async ({ page }) => {
+  test("uygulama içi geçmişte geri onay ister; not temizlenince koruma kaydı geçmişten kalkar", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/hesap/oturumlar", { saves: [] });
     const palette = page.getByRole("dialog", { name: "Komut paleti" });
     // The shortcut listener attaches on hydration; retry until the palette opens.
@@ -325,7 +330,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("kaydedilmemiş not varken çıkış onay ister; vazgeçince oturum ve not yerinde kalır", async ({ page }) => {
+  test("kaydedilmemiş not varken çıkış onay ister; vazgeçince oturum ve not yerinde kalır", backForwardTag, async ({ page }) => {
     const logoutRequests: string[] = [];
     page.on("request", (request) => {
       if (new URL(request.url()).pathname.endsWith("/api/v1/auth/logout") && request.method() !== "OPTIONS") logoutRequests.push(request.method());
@@ -347,7 +352,7 @@ test.describe("Not girişi tablosu", () => {
     expect(logoutRequests).toEqual(["POST"]);
   });
 
-  test("iki adım geri sonra vazgeçince adres sayfayla aynı kalır; kayıt koruma kaydını adresi değiştirmeden kaldırır", async ({ page }) => {
+  test("iki adım geri sonra vazgeçince adres sayfayla aynı kalır; kayıt koruma kaydını adresi değiştirmeden kaldırır", backForwardTag, async ({ page }) => {
     const captured: Captured = { saves: [] };
     await openGradebookFromSessions(page, captured);
     const historyLength = await page.evaluate(() => window.history.length);
@@ -372,7 +377,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("Navigation API yokken iki adım geri ve vazgeç adresi sayfada tutar", async ({ page }) => {
+  test("Navigation API yokken iki adım geri ve vazgeç adresi sayfada tutar", backForwardTag, async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, "navigation", { configurable: true, value: undefined });
     });
@@ -392,7 +397,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toContainText("1. Yazılı");
   });
 
-  test("soru açıkken ikinci geri basışı vazgeçle geri alınır; sonraki onay bir önceki sayfaya iner", async ({ page }) => {
+  test("soru açıkken ikinci geri basışı vazgeçle geri alınır; sonraki onay bir önceki sayfaya iner", backForwardTag, async ({ page }) => {
     await openGradebookFromSessions(page, { saves: [] });
 
     await page.evaluate(() => window.history.back());
@@ -411,7 +416,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("ilk geçmiş kaydında onaylanan geri bir yere gitmezse koruma yeniden kurulur", async ({ page }) => {
+  test("ilk geçmiş kaydında onaylanan geri bir yere gitmezse koruma yeniden kurulur", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/kurum/not-defteri", { saves: [] });
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
     await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
@@ -434,7 +439,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" })).toBeVisible();
   });
 
-  test("çalışma alanı değişimi başarısız olursa koruma hemen geri gelir", async ({ page }) => {
+  test("çalışma alanı değişimi başarısız olursa koruma hemen geri gelir", backForwardTag, async ({ page }) => {
     await open(page, "admin", "/kurum/not-defteri", { saves: [], personaSwitch: "fail" });
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
     await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
@@ -451,7 +456,7 @@ test.describe("Not girişi tablosu", () => {
     await expect(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" })).toBeVisible();
   });
 
-  test("onaylanan çalışma alanı değişimi ve çıkış not defterine ileri kaydı bırakmaz", async ({ page }) => {
+  test("onaylanan çalışma alanı değişimi ve çıkış not defterine ileri kaydı bırakmaz", backForwardTag, async ({ page }) => {
     await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok" });
     await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
     await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
@@ -464,6 +469,128 @@ test.describe("Not girişi tablosu", () => {
     await second.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
     await expect(second).toHaveURL(/\/login/);
     expect(await canGoForward(second)).toBe(false);
+  });
+
+  test("yavaş çalışma alanı değişimi ve çıkış korumayı erken kurmaz; adres görünen sayfayla aynı kalır", backForwardTag, async ({ page }) => {
+    // Both requests take longer than the old fixed re-arm delay (2 s).
+    await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok", slowAuthMs: 2600 });
+    await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page).toHaveURL(/\/ogretmen$/, { timeout: 10_000 });
+    await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toHaveCount(0);
+    expect(await canGoForward(page)).toBe(false);
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/\/ogretmen$/);
+    expect(await canGoForward(page)).toBe(false);
+
+    const second = await page.context().newPage();
+    await openGradebookFromSessions(second, { saves: [], slowAuthMs: 2600 });
+    await second.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
+    await second.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(second).toHaveURL(/\/login/, { timeout: 10_000 });
+    await expect(second.getByRole("region", { name: "Değerlendirme notları" })).toHaveCount(0);
+    expect(await canGoForward(second)).toBe(false);
+    await second.waitForTimeout(500);
+    await expect(second).toHaveURL(/\/login/);
+    expect(await canGoForward(second)).toBe(false);
+  });
+
+  test("yavaş bağlantı geçişinde koruma yeniden kurulmaz; geçmişte not defterinin tek kaydı kalır", backForwardTag, async ({ page }) => {
+    // Route payloads: prefetches fail, so the navigation itself fetches, and that takes longer than the old fixed
+    // re-arm delay (2 s).
+    await page.route(/[?&]_rsc=/, async (route) => {
+      const headers = route.request().headers();
+      if (headers["next-router-prefetch"] || headers["next-router-segment-prefetch"]) {
+        await route.abort().catch(() => undefined);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.continue().catch(() => undefined);
+    });
+    await open(page, "admin", "/kurum/not-defteri", { saves: [] });
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    const historyLength = await page.evaluate(() => window.history.length);
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+
+    await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Oturumlar" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    // Still on its way after 2.4 s: the guard stays released instead of pushing a new entry under the navigation.
+    await page.waitForTimeout(2400);
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    expect(await onGuardSentinel(page)).toBe(false);
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/, { timeout: 10_000 });
+    await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toHaveCount(0);
+    // The guard entry left before the push, and no new one came while the navigation was pending.
+    expect(await page.evaluate(() => window.history.length)).toBe(historyLength + 1);
+    expect(await onGuardSentinel(page)).toBe(false);
+  });
+
+  test("içeriğe geç bağlantısı geçmiş kaydı eklemez; sayfa içi kayıttan geri soru açmaz, koruma sürer ve vazgeç kaydırmayı korur", backForwardTag, async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [] });
+    await page.setViewportSize({ width: 1280, height: 600 });
+    const historyLength = await page.evaluate(() => window.history.length);
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+
+    const skipLink = page.getByRole("link", { name: "İçeriğe geç" });
+    await skipLink.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#next-content")).toBeFocused();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+    expect(await onGuardSentinel(page)).toBe(true);
+
+    // A plain in-page anchor still adds a fragment entry above the guard entry; stepping back off it stays here.
+    await page.evaluate(() => {
+      window.location.hash = "next-content";
+    });
+    await expect(page).toHaveURL(/\/kurum\/not-defteri#next-content$/);
+    await page.evaluate(() => window.history.back());
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    // A false question would open within a frame or two of the popstate.
+    await page.waitForTimeout(500);
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    // The guard still protects, and cancel puts back the scroll position the user had when pressing back.
+    const scrollable = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(scrollable).toBeGreaterThan(300);
+    const armedAt = await page.evaluate(() => window.scrollY);
+    const target = armedAt > 150 ? 0 : Math.min(armedAt + 300, scrollable);
+    await page.evaluate((y) => window.scrollTo(0, y), target);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(target);
+    await page.evaluate(() => window.history.back());
+    await dialog.getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(target);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+  });
+
+  test("önceki belgeden kalan koruma kaydı temizlenir; onaylanan geri sayfayı yerinde yenilemez", backForwardTag, async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [] });
+    // A reload while armed: the new document starts on the old guard entry, which no guard owns any more. The page's
+    // own beforeunload asks first; the reload is confirmed.
+    page.on("dialog", (dialog) => void dialog.accept());
+    await page.reload();
+    await expect(page.getByRole("button", { name: "1. Yazılı notlarını aç" })).toBeVisible();
+    expect(await onGuardSentinel(page)).toBe(false);
+
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await page.evaluate(() => window.history.back());
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    const hasNavigationEntries = await page.evaluate(() => typeof (window as unknown as { navigation?: { entries?: unknown } }).navigation?.entries === "function");
+    if (hasNavigationEntries) {
+      // The earlier document's copies of the page right below the base are stepped over.
+      await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    } else {
+      // Without entries() the step lands on that copy: it shows the page again, not a mismatched address.
+      await expect(page).toHaveURL(/\/(hesap\/oturumlar|kurum\/not-defteri)$/);
+    }
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
   test("390 px çekmeceden çıkışta onay penceresi çekmecenin altında kalmaz", async ({ page }) => {
@@ -574,6 +701,9 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
   }
   const url = new URL(request.url());
   const path = url.pathname.replace(/^\/api\/v1/, "");
+  if (captured.slowAuthMs && (path === "/auth/logout" || path === "/auth/persona/switch")) {
+    await new Promise((resolve) => setTimeout(resolve, captured.slowAuthMs));
+  }
   if (path === "/auth/logout") captured.loggedOut = true;
   if (path === "/auth/refresh" && captured.loggedOut) {
     await route.fulfill({ headers: corsFor(route), status: 401 });

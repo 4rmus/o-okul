@@ -2004,7 +2004,8 @@ requireTokens("apps/web/app/(app)/app-shell.tsx", [
   "export function useInAppNavigationGuard(when: boolean, canLeave: LeaveCheck)",
   'document.addEventListener("click", handleClick, true);',
   'data-navigation-guard="manual"',
-  "void confirmInAppNavigation().then((canNavigate) => {",
+  "void confirmInAppNavigation({ navigate: () => onNavigate(href) });",
+  "void confirmInAppNavigation({ navigate: () => router.push(href) });",
 ]);
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-form-modal.tsx", [
   "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
