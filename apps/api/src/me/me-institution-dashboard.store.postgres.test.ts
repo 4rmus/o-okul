@@ -73,7 +73,9 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
           );
         }
         await db.query('INSERT INTO "Exam" (id,"tenantId",title,status,"startsAt","updatedAt") VALUES ($1,$2,\'Deneme\',\'PUBLISHED\',now(),now())', [t("exam"), tenant]);
-        for (const [student, status] of [["s1", "ATTENDED"], ["s2", "ATTENDED"], ["s3", "ABSENT"]] as const) {
+        // s4 is auto-registered (class roster) and then matched by the raw import: its status stays REGISTERED and only
+        // the ExamResult row says it attended. s3 is marked absent and has only a deleted result.
+        for (const [student, status] of [["s1", "ATTENDED"], ["s2", "ATTENDED"], ["s3", "ABSENT"], ["s4", "REGISTERED"]] as const) {
           await db.query(
             'INSERT INTO "ExamParticipant" (id,"tenantId","examId","studentId",status,"updatedAt") VALUES ($1,$2,$3,$4,$5,now())',
             [t(`participant-${student}`), tenant, t("exam"), t(student), status],
@@ -93,6 +95,13 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
           [t("snapshot"), tenant, t("exam"), JSON.stringify(snapshotData)],
         );
         await db.query('INSERT INTO "RawImport" (id,"tenantId","examId","sourceType","fileName","s3Key",sha256,"parserConfigVersion","updatedAt") VALUES ($1,$2,$3,\'TXT\',\'a.txt\',\'k\',\'s\',\'v1\',now())', [t("raw"), tenant, t("exam")]);
+        await db.query('INSERT INTO "AnswerKey" (id,"tenantId","examId",version,"keyData","updatedAt") VALUES ($1,$2,$3,\'v1\',\'{}\'::jsonb,now())', [t("answer-key"), tenant, t("exam")]);
+        for (const [student, deletedAt] of [["s4", null], ["s3", "2026-11-01T00:00:00Z"]] as const) {
+          await db.query(
+            'INSERT INTO "ExamResult" (id,"tenantId","examId","studentId","participantId","rawImportId","answerKeyId","answerKeyVersion","parserConfigVersion","engineVersion","resultKey","scoreData","computedAt","deletedAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,\'v1\',\'v1\',\'e1\',$1,\'{}\'::jsonb,now(),$8::timestamptz,now())',
+            [t(`result-${student}`), tenant, t("exam"), t(student), t(`participant-${student}`), t("raw"), t("answer-key"), deletedAt],
+          );
+        }
         await db.query('INSERT INTO "ImportQuarantine" (id,"tenantId","examId","rawImportId","rowNumber","rawRow",reason,status,"updatedAt") VALUES ($1,$2,$3,$4,1,\'{}\'::jsonb,\'NO_MATCH\',\'OPEN\',now())', [t("quarantine"), tenant, t("exam"), t("raw")]);
         // t1 names campus-1, t2 a campus-2 class, t3 a campus-1 student, t4 nothing attributable, t5 a campusless class
         // and a campus-1 student (falls through to the student's class campus).
@@ -118,7 +127,7 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
 
   afterAll(async () => {
     try {
-      for (const table of ["SupportTicket", "ImportQuarantine", "RawImport", "ReportSnapshot", "ExamParticipant", "Exam", "Attendance", "Student", "Class", "Campus"]) {
+      for (const table of ["SupportTicket", "ImportQuarantine", "ExamResult", "AnswerKey", "RawImport", "ReportSnapshot", "ExamParticipant", "Exam", "Attendance", "Student", "Class", "Campus"]) {
         await admin.query(`DELETE FROM "${table}" WHERE "tenantId"=ANY($1::text[])`, [[tenantA, tenantB]]);
       }
       await admin.query('DELETE FROM "Tenant" WHERE id=ANY($1::text[])', [[tenantA, tenantB]]);
@@ -135,8 +144,8 @@ run("institution dashboard campus scope with restricted app role and RLS", () =>
       activeStudentCount: 4,
       attention: { attendanceAlertCount: 3, openImportQuarantineCount: 1, openSupportTicketCount: 5 },
       latestExam: {
-        registeredParticipantCount: 3,
-        attendedParticipantCount: 2,
+        registeredParticipantCount: 4,
+        attendedParticipantCount: 3,
         absentParticipantCount: 1,
         report: { resultCount: 3, net: 28 },
       },

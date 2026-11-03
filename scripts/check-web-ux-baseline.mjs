@@ -4069,6 +4069,9 @@ requireTokens("apps/web/app/(app)/kurum/raporlar/reports-page.tsx", [
   "<summary>Rapor ayrıntıları</summary>",
   "Excel/PDF hazır",
   "Hazır rapor sürümü gerekli",
+  // UAT L2: an unfetched report is "not fetched", never "none exists".
+  "const isReportFetched = reportData !== null;",
+  'title={isReportFetched ? "Hazır rapor yok" : "Rapor getirilmedi"}',
   'className="next-report-summary-hero"',
   'aria-label="Rapor özeti"',
   'className="next-report-summary-primary"',

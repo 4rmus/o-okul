@@ -208,11 +208,27 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
          FROM "Tenant" tenant
          LEFT JOIN "latestExam" exam ON true
          LEFT JOIN LATERAL (
+           -- The raw import matches answers to participants by writing ExamResult rows; it never moves the participant
+           -- status off REGISTERED. A participant with a live result therefore attended, whatever its status says;
+           -- ABSENT counts only a participant marked absent that has no result.
            SELECT
              COUNT(*) FILTER (WHERE participant."status" IN ('REGISTERED', 'ATTENDED', 'ABSENT')) AS "registeredParticipantCount",
-             COUNT(*) FILTER (WHERE participant."status" = 'ATTENDED') AS "attendedParticipantCount",
-             COUNT(*) FILTER (WHERE participant."status" = 'ABSENT') AS "absentParticipantCount"
+             COUNT(*) FILTER (
+               WHERE participant."status" IN ('REGISTERED', 'ATTENDED', 'ABSENT')
+                 AND (participant."status" = 'ATTENDED' OR participant_result."hasResult")
+             ) AS "attendedParticipantCount",
+             COUNT(*) FILTER (WHERE participant."status" = 'ABSENT' AND NOT participant_result."hasResult") AS "absentParticipantCount"
            FROM "ExamParticipant" participant
+           CROSS JOIN LATERAL (
+             SELECT EXISTS (
+               SELECT 1
+               FROM "ExamResult" result
+               WHERE result."tenantId" = $1
+                 AND result."examId" = participant."examId"
+                 AND result."participantId" = participant."id"
+                 AND result."deletedAt" IS NULL
+             ) AS "hasResult"
+           ) participant_result
            WHERE participant."tenantId" = $1
              AND participant."examId" = exam."id"
              AND participant."deletedAt" IS NULL
