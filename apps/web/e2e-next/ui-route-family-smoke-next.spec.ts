@@ -97,6 +97,7 @@ const routeCases = [
   route("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "tenantAdmin", { role: "region", name: "Operasyon ve kanıt araçları" }),
   route("/kurum/program", "Ders Programı", "assistantAdmin", { role: "region", name: "Ders programı yönetimi" }),
   route("/kurum/raporlar", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/raporlar/seviyeler", "Seviye Analitiği", "assistantAdmin", { role: "region", name: "Seviye analitiği" }),
   route("/kurum/rol-onizleme", "Rol Önizleme", "tenantAdmin", { role: "region", name: "Rol görünüm önizleme" }),
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),

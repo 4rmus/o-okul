@@ -362,6 +362,9 @@ jobs:
       TERM_TRANSITION_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       TERM_TRANSITION_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       TERM_TRANSITION_POSTGRES_REQUIRED: "1"
+      LEVEL_ANALYTICS_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      LEVEL_ANALYTICS_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      LEVEL_ANALYTICS_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -426,6 +429,7 @@ jobs:
           src/me/me-institution-dashboard.store.postgres.test.ts
           src/class-overview/class-overview.store.postgres.test.ts
           src/development/development-store.postgres.test.ts
+          src/report/grade-level-analytics.postgres.test.ts
           src/http/tenant-mutation-settle.postgres.test.ts
           src/listing/cursor-list-keyset.postgres.test.ts
           src/student/term-transition.postgres.test.ts

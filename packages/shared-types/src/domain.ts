@@ -2809,6 +2809,50 @@ export interface ReportStudentProgress {
   standardScoreDelta?: number;
 }
 
+/**
+ * DEC-20261102-08 (G3): grade-level analytics. Built only from level snapshots (gradeLevelId = L, no campus, class or
+ * course filter) that are READY, not deleted and belong to a PUBLISHED exam. Values are read as stored in the snapshot;
+ * nothing is recomputed. Başarı % (successRate) is the cross-exam metric; Net and Soru are context.
+ */
+export interface GradeLevelAnalyticsExamRef {
+  examId: string;
+  examTitle: string;
+  examType?: ExamType | string;
+  startsAt?: string;
+}
+
+export interface GradeLevelAnalyticsPoint extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  generatedAt?: string;
+  participantCount: number;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+}
+
+export interface GradeLevelAnalyticsSeries {
+  /** One Başarı % line per exam type; undefined groups exams without a type. */
+  examType?: ExamType | string;
+  points: GradeLevelAnalyticsPoint[];
+}
+
+/** A level snapshot marked STALE: shown as "rapor yenilenmeli", never as a point. */
+export interface GradeLevelAnalyticsNeedsRefreshItem extends GradeLevelAnalyticsExamRef {
+  snapshotId: string;
+  staleAt?: string;
+}
+
+export interface GradeLevelAnalytics {
+  tenantId: string;
+  gradeLevelId: string;
+  examType?: string;
+  termId?: string;
+  series: GradeLevelAnalyticsSeries[];
+  needsRefresh: GradeLevelAnalyticsNeedsRefreshItem[];
+  /** PUBLISHED exams of this grade level that have no level snapshot yet. */
+  withoutLevelReport: GradeLevelAnalyticsExamRef[];
+}
+
 export interface InstitutionDashboardClassSummary {
   classId?: string;
   className?: string;
