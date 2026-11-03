@@ -663,9 +663,12 @@ export class ReportGenerationService implements OnApplicationShutdown {
           continue;
         }
         if (isTeacherSubjectContext(context)) teacherAuthorizedSnapshot = true;
+        // The exam date frozen in the snapshot; the generation date stays the ordering key of the points.
+        const examStartsAt = readText(snapshot.snapshotData.examStartsAt);
         points.push({
           snapshotId: snapshot.id,
           ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
+          ...(examStartsAt ? { examStartsAt } : {}),
           ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
           ...(snapshot.termId ? { termId: snapshot.termId } : {}),
           total: readScoreSummary(student.total),

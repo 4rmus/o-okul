@@ -145,6 +145,7 @@ export type {
   GradeLevelAnalytics,
   GradeLevelAnalyticsExamRef,
   GradeLevelAnalyticsNeedsRefreshItem,
+  GradeLevelAnalyticsNoParticipantsItem,
   GradeLevelAnalyticsPoint,
   GradeLevelAnalyticsSeries,
   GradeLevelRecord,

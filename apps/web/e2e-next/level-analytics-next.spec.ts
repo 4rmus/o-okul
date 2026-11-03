@@ -36,6 +36,9 @@ const levelAnalytics = {
   needsRefresh: [
     { examId: "exam-lgs-3", examTitle: "LGS Deneme 3", examType: "LGS", startsAt: "2026-11-01T07:00:00.000Z", snapshotId: "level-lgs-3", staleAt: "2026-11-02T08:00:00.000Z" },
   ],
+  noParticipants: [
+    { examId: "exam-lgs-5", examTitle: "LGS Deneme 5", examType: "LGS", startsAt: "2026-10-25T07:00:00.000Z", snapshotId: "level-lgs-5", generatedAt: "2026-10-26T08:00:00.000Z" },
+  ],
   withoutLevelReport: [
     { examId: "exam-lgs-4", examTitle: "LGS Deneme 4", examType: "LGS", startsAt: "2026-10-20T07:00:00.000Z" },
   ],
@@ -72,6 +75,11 @@ test.describe("Seviye analitiği (DEC-20261102-08 G3)", () => {
     const missing = region.getByRole("region", { exact: true, name: "Bu seviye için seviye raporu üretilmemiş sınavlar" });
     await expect(missing.getByRole("link", { name: "LGS Deneme 4" })).toBeVisible();
     await expect(lgsTable).not.toContainText("LGS Deneme 4");
+    // Sonuçsuz READY seviye raporu %0 olarak çizilmez; ayrı listede açıklanır.
+    const empty = region.getByRole("region", { exact: true, name: "Katılımcısı olmayan seviye raporları" });
+    await expect(empty.getByRole("link", { name: "LGS Deneme 5" })).toHaveAttribute("href", "/kurum/sinavlar/exam-lgs-5/rapor/genel");
+    await expect(empty).toContainText("grafikte gösterilmez");
+    await expect(lgsTable).not.toContainText("LGS Deneme 5");
 
     expect(requests.analytics.at(-1)).toBe("gradeLevelId=grade-8");
     await region.getByRole("combobox", { exact: true, name: "Sınav türü" }).selectOption("LGS");

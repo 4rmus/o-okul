@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { runWithRequestContext, type RequestContext } from "../context/request-context.js";
 import { GradeLevelAnalyticsService, type GradeLevelAnalyticsQuery } from "./grade-level-analytics.service.js";
-import { createGradeLevelAnalyticsFixtures } from "./grade-level-analytics.test-support.js";
+import { createGradeLevelAnalyticsFixtures, gradeLevelAnalyticsTermBoundaryExtras } from "./grade-level-analytics.test-support.js";
 import { InMemoryReportSnapshotStore, PostgresReportSnapshotStore } from "./report-snapshot-store.js";
 
 const appUrl = process.env.LEVEL_ANALYTICS_POSTGRES_TEST_URL, adminUrl = process.env.LEVEL_ANALYTICS_POSTGRES_ADMIN_URL;
@@ -24,7 +24,8 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
   const [tenantA, tenantB] = ["a", "b"].map((suffix) => `level-analytics-${randomUUID()}-${suffix}`) as [string, string];
   const tenantMap = new Map([["tenant-a", tenantA], ["tenant-b", tenantB]]);
   const scoped = (tenant: string, value: string) => `${tenant}-${value}`;
-  const fixtures = createGradeLevelAnalyticsFixtures();
+  // The grade-6 term-boundary witnesses ride on the shared fixture; they never touch the grade-8/grade-7 assertions.
+  const fixtures = createGradeLevelAnalyticsFixtures(gradeLevelAnalyticsTermBoundaryExtras());
   const context = (tenantId: string): RequestContext => ({
     userId: "fixture",
     tenantId,
@@ -41,7 +42,7 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
       for (const tenant of [tenantA, tenantB]) {
         const t = (value: string) => scoped(tenant, value);
         await db.query('INSERT INTO "Tenant" (id,slug,name,status,"updatedAt") VALUES ($1,$1,\'Level analytics fixture\',\'ACTIVE\',now())', [tenant]);
-        for (const gradeLevel of ["grade-7", "grade-8"]) {
+        for (const gradeLevel of ["grade-6", "grade-7", "grade-8"]) {
           await db.query('INSERT INTO "GradeLevel" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,$3,now())', [t(gradeLevel), tenant, gradeLevel]);
         }
         await db.query('INSERT INTO "Campus" (id,"tenantId",name,"updatedAt") VALUES ($1,$2,\'Merkez\',now())', [t("campus-main"), tenant]);
@@ -62,7 +63,7 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
           'INSERT INTO "Exam" (id,"tenantId","gradeLevelId","examType",title,status,"startsAt","deletedAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())',
           [
             scoped(tenant, exam.id), tenant, exam.gradeLevelId ? scoped(tenant, exam.gradeLevelId) : null, exam.examType ?? null,
-            exam.title, exam.status, toDate(exam.startsAt), toDate(exam.deletedAt),
+            exam.title, exam.status, toUtcWallTime(exam.startsAt), toDate(exam.deletedAt),
           ],
         );
       }
@@ -113,7 +114,7 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
   }
 
   async function inMemoryAnalytics(tenantId: string, query: GradeLevelAnalyticsQuery) {
-    const service = new GradeLevelAnalyticsService(new InMemoryReportSnapshotStore(createGradeLevelAnalyticsFixtures()));
+    const service = new GradeLevelAnalyticsService(new InMemoryReportSnapshotStore(createGradeLevelAnalyticsFixtures(gradeLevelAnalyticsTermBoundaryExtras())));
     return service.getGradeLevelAnalytics(context(tenantId), query);
   }
 
@@ -139,6 +140,29 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
     expect(levelSeven.series.flatMap((series: { points: Array<{ snapshotId: string }> }) => series.points.map((point) => point.snapshotId))).toEqual(["level-grade-7"]);
   });
 
+  it("filters the term on the exam's Türkiye calendar day, not the UTC day", async () => {
+    for (const query of [{ gradeLevelId: "grade-6" }, { gradeLevelId: "grade-6", termId: "term-fall" }]) {
+      expect(await postgresAnalytics(tenantA, query)).toEqual(await inMemoryAnalytics("tenant-a", query));
+    }
+    const fall = await postgresAnalytics(tenantA, { gradeLevelId: "grade-6", termId: "term-fall" });
+    // 2026-08-31T21:30Z is 1 September 00:30 in Istanbul (inside term-fall); 2026-09-30T21:30Z is 1 October 00:30.
+    expect(fall.series.flatMap((series: { points: Array<{ examId: string }> }) => series.points.map((point) => point.examId)))
+      .toEqual(["exam-boundary-start"]);
+    expect(fall.series[0].points[0].startsAt).toBe("2026-08-31T21:30:00.000Z");
+    expect(fall.withoutLevelReport.map((item: { examId: string }) => item.examId)).toEqual(["exam-boundary-no-level"]);
+  });
+
+  it("carries the snapshot's frozen exam date into the student progress projection", async () => {
+    const store = new PostgresReportSnapshotStore(app);
+    const records = await runWithRequestContext(context(tenantA), () =>
+      store.listReadyByStudent(tenantA, "student-a", scoped(tenantA, "exam-boundary-start")));
+    expect(records.map((record) => record.snapshotData)).toEqual([{
+      generatedAt: null,
+      examStartsAt: "2026-08-31T21:30:00.000Z",
+      students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],
+    }]);
+  });
+
   it("keeps tenants apart: RLS hides another tenant's snapshots even when its ids are requested", async () => {
     const tenantBView = await postgresAnalytics(tenantB, { gradeLevelId: "grade-8" });
     expect(tenantBView.series.flatMap((series: { points: Array<{ snapshotId: string }> }) => series.points.map((point) => point.snapshotId))).toEqual(["level-tenant-b"]);
@@ -153,4 +177,10 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
 // Date objects round-trip through node-pg for the timestamp(3) columns regardless of the runner's time zone.
 function toDate(value: string | undefined): Date | null {
   return value ? new Date(value) : null;
+}
+
+// Exam.startsAt is written as UTC wall time, the way Prisma stores it; casting the ISO text to timestamp drops the "Z"
+// without shifting by the runner's time zone, so the Istanbul-day term rule is exercised on any runner.
+function toUtcWallTime(value: string | undefined): string | null {
+  return value ? new Date(value).toISOString() : null;
 }

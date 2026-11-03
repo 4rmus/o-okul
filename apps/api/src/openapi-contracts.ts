@@ -2820,6 +2820,7 @@ const reportStudentProgressPointSchema = objectSchema({
   snapshotId: stringSchema(),
   courseId: stringSchema(),
   examTitle: stringSchema(),
+  examStartsAt: stringSchema({ format: "date-time" }),
   generatedAt: stringSchema({ format: "date-time" }),
   termId: stringSchema(),
   total: reportScoreSummarySchema,
@@ -2868,8 +2869,13 @@ const gradeLevelAnalyticsSchema = objectSchema({
     snapshotId: stringSchema(),
     staleAt: stringSchema({ format: "date-time" }),
   }, ["examId", "examTitle", "snapshotId"])),
+  noParticipants: arraySchema(objectSchema({
+    ...gradeLevelAnalyticsExamRefProperties,
+    snapshotId: stringSchema(),
+    generatedAt: stringSchema({ format: "date-time" }),
+  }, ["examId", "examTitle", "snapshotId"])),
   withoutLevelReport: arraySchema(objectSchema(gradeLevelAnalyticsExamRefProperties, ["examId", "examTitle"])),
-}, ["tenantId", "gradeLevelId", "series", "needsRefresh", "withoutLevelReport"]);
+}, ["tenantId", "gradeLevelId", "series", "needsRefresh", "noParticipants", "withoutLevelReport"]);
 
 const reportStudentSnapshotSchema = objectSchema({
   tenantId: stringSchema(),

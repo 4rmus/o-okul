@@ -130,6 +130,8 @@ export function LevelAnalyticsPage() {
 }
 
 function LevelAnalyticsResult({ analytics, levelName }: { analytics: GradeLevelAnalytics; levelName: string }) {
+  // Sonuçsuz READY seviye raporu ayrı listelenir; alanı taşımayan eski API yanıtında liste boş sayılır.
+  const noParticipants = analytics.noParticipants ?? [];
   return (
     <>
       {analytics.series.length === 0 ? (
@@ -150,6 +152,16 @@ function LevelAnalyticsResult({ analytics, levelName }: { analytics: GradeLevelA
           tone="warning"
         >
           <ExamLinkList exams={analytics.needsRefresh} />
+        </Panel>
+      ) : null}
+      {noParticipants.length > 0 ? (
+        <Panel
+          aria-label="Katılımcısı olmayan seviye raporları"
+          title="Katılımcısı olmayan seviye raporları"
+          description="Bu seviye raporlarında sonuç bulunmuyor; %0 başarı gibi görünmemesi için grafikte gösterilmez. Sonuçları yükledikten sonra raporu yenileyin."
+          tone="muted"
+        >
+          <ExamLinkList exams={noParticipants} />
         </Panel>
       ) : null}
       {analytics.withoutLevelReport.length > 0 ? (

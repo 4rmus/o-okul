@@ -451,7 +451,11 @@ test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
         { date: "2026-06-01", id: "att-old", status: "LATE" as const, studentId: "student-a", tenantId: "t" },
       ],
       development: [{ createdAt: "2026-10-20T09:00:00.000Z", id: "dev-1", periodLabel: "1. Dönem", visibility: "INTERNAL" as const }],
-      examPoints: [{ examTitle: "Deneme B", generatedAt: "2026-10-25T09:00:00.000Z", snapshotId: "snap-b", total: { net: 15, questionCount: 20, successRate: 75 } }],
+      examPoints: [
+        { examTitle: "Deneme B", generatedAt: "2026-10-25T09:00:00.000Z", snapshotId: "snap-b", total: { net: 15, questionCount: 20, successRate: 75 } },
+        // Sınav 19 Ekim 00:30 (İstanbul) yapıldı, raporu 27 Ekim'de hazırlandı: olay sınav gününe yerleşir.
+        { examStartsAt: "2026-10-18T21:30:00.000Z", examTitle: "Deneme C", generatedAt: "2026-10-27T09:00:00.000Z", snapshotId: "snap-c", total: { net: 12, questionCount: 20, successRate: 60 } },
+      ],
       grades: [{ absent: false, assessmentId: "g-1", classId: "class-11a", courseId: "course-math", heldOn: "2026-10-28", kind: "WRITTEN" as const, maxScore: 100, publishedAt: "2026-10-29T09:00:00.000Z", score: 72.5, title: "1. Yazılı", version: 2 }],
       homework: [],
       materialAssignments: [],
@@ -475,10 +479,17 @@ test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
       "note:note-1",
       "exam:snap-b",
       "development:dev-1",
+      "exam:snap-c",
     ]);
     expect(events[0]).toMatchObject({ link: { href: "/kurum/devamsizlik?classId=class-11a" }, status: { label: "Yok" }, title: "Yoklama: Yok" });
     expect(events.find((event) => event.kind === "grade")?.detail).toBe("Matematik · 72,5 / 100 · 2. sürüm");
-    expect(events.find((event) => event.kind === "exam")?.detail).toBe("Başarı %75,0 · Net 15,00 · Soru 20");
+    expect(events.find((event) => event.id === "exam:snap-b")).toMatchObject({
+      dateKey: "2026-10-25",
+      detail: "Başarı %75,0 · Net 15,00 · Soru 20",
+      // Sınav tarihi saklanmamış raporda olay rapor tarihindedir ve sınav sonucu gibi adlandırılmaz.
+      title: "Sınav raporu hazırlandı: Deneme B",
+    });
+    expect(events.find((event) => event.id === "exam:snap-c")).toMatchObject({ dateKey: "2026-10-19", title: "Sınav sonucu: Deneme C" });
     expect(JSON.stringify(events)).not.toContain("Gizli not metni");
 
     const withFinance = buildStudentTimeline(sources as never, { ...context, canViewFinance: true });
