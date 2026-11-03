@@ -1,8 +1,8 @@
 import "reflect-metadata";
-import type { AcademicTermRecord, PublicStudentProfileRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
+import type { PublicStudentProfileRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
-import type { AcademicCalendarStore } from "../school/academic-calendar-store.js";
+import type { AcademicCalendarStore, AcademicTermRecord } from "../school/academic-calendar-store.js";
 import type { TeacherAssignmentStore } from "../school/teacher-assignment-store.js";
 import type { TeacherStore } from "../school/teacher-store.js";
 import type { StudentService } from "../student/student.service.js";
