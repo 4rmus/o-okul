@@ -93,6 +93,10 @@ const files = {
   "apps/web/app/(app)/_shared/report-analysis.ts": readFileSync("apps/web/app/(app)/_shared/report-analysis.ts", "utf8"),
   "apps/web/app/(app)/portals/guardian-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/guardian-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/activity-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/activity-panels.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/attendance-calendar.tsx": readFileSync("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts": readFileSync("apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts": readFileSync("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", "utf8"),
   "apps/web/app/(app)/portals/_shared/guardian-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/guardian-panels.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/announcements-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/announcements-panel.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/development-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/development-panel.tsx", "utf8"),
@@ -4683,6 +4687,55 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/activity-panels.tsx", [
   "?? note.termId",
   "?? note.studentId",
 ]);
+
+// DEC-20261102-08: monthly attendance calendar (Student 360 + student/guardian portals) and the staff-only Student 360
+// timeline. The calendar only reads attendance the surface already loads; a status is never shown by colour alone and the
+// grid has a table equivalent. The timeline reads a fixed set of bounded requests, never one per event, and never shows
+// teacher-note or mentor-note text.
+requireTokens("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", [
+  'title = "Yoklama takvimi"',
+  'aria-label="Ay seçimi"',
+  'aria-label="Takvim açıklaması"',
+  "attendanceStatusMarks[day.status]",
+  'className="uh-visually-hidden"',
+  'aria-current={isToday ? "date" : undefined}',
+  'caption="Ayın yoklama kayıtları"',
+  "export function PortalAttendanceCalendar",
+]);
+requireNoTokens("apps/web/app/(app)/portals/_shared/attendance-calendar.tsx", ["apiRequest", "useQuery", "rgb(", "oklch("]);
+requireTokens("apps/web/app/(app)/portals/_shared/attendance-calendar-model.ts", [
+  'ABSENT: "Yok"',
+  'EXCUSED: "İzinli"',
+  'LATE: "Geç"',
+  'PRESENT: "Var"',
+  "const statusSeverity",
+  "% 7",
+]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", [
+  'aria-label="Öğrenci zaman çizelgesi"',
+  'title="Zaman çizelgesi"',
+  "/grade-assessments/students/${encodedStudentId}/published",
+  "/homework/students/${encodedStudentId}",
+  "`${apiBaseUrl}/development/assessments`",
+  'hasCapabilityForRoles(roles, "attendance:read-assigned")',
+  'hasCapabilityForRoles(roles, "academic:read")',
+  'hasCapabilityForRoles(roles, "homework:read-assigned")',
+  "paymentPlans: canViewFinance ? paymentPlans : []",
+  "canAccessHref(roles, href, persona)",
+  "showRecordTable",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline.tsx", [".map(async", "Promise.all(", "note.body", "mentorNote"]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", [
+  "`Başarı ${formatPercentNumber(successRate)}`",
+  "`Net ${formatNet(net)}`",
+  "`Soru ${questionCount}`",
+  "if (context.canViewFinance)",
+  'record.status === "PRESENT"',
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-timeline-model.ts", ["note.body", "mentorNote", "apiRequest"]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", ["<StudentTimelinePanel", "<StudentAttendanceCalendar"]);
+requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", ["<PortalAttendanceCalendar records={data.attendance} />"]);
+requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", ['{view === "student" ? <PortalAttendanceCalendar records={data?.attendance ?? []} /> : null}']);
 
 requireTokens("apps/web/app/(app)/portals/_shared/development-panel.tsx", [
   "Panel,",

@@ -48,6 +48,7 @@ import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { GuardianLinkRetryAlert, isGuardianLinkConcurrentUpdate } from "../_shared/guardian-link-retry.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { StudentFormModal } from "./student-form-modal.js";
+import { StudentAttendanceCalendar, StudentTimelinePanel } from "./student-timeline.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -436,6 +437,19 @@ function StudentDashboard({
 
       {activeSection === "records" ? <div aria-labelledby="student-detail-tab-records" id="student-detail-panel-records" role="tabpanel" tabIndex={0}>
       <div className="next-student-detail-grid">
+        {/* DEC-20261102-08: zaman çizelgesi ve yoklama takvimi yalnız bu sekme açıldığında istek atar. */}
+        <StudentTimelinePanel
+          canViewFinance={canViewFinance}
+          materialAssignments={detail.homeworkAssignments}
+          overviewCourses={detail.courses}
+          paymentPlans={detail.paymentPlans}
+          progress={progress}
+          studentId={studentId}
+          teacherNotes={detail.teacherNotes}
+        />
+
+        <StudentAttendanceCalendar className="next-student-detail-panel next-student-detail-panel--wide" studentId={studentId} />
+
         <Panel
           aria-label="Öğrenci ilişki haritası"
           className="next-student-detail-panel next-student-detail-panel--wide"

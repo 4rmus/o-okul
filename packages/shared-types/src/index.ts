@@ -349,6 +349,7 @@ export type {
   GuardianExamSeriesPoint,
   GuardianSchoolGradeItem,
   GuardianStudentOverview,
+  StudentPublishedGradeItem,
   StudentSelfOverview,
   StudentContactUpdateRequest,
   StudentRecord,

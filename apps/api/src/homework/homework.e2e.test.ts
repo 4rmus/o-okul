@@ -1157,6 +1157,43 @@ describe("Homework API", () => {
       expect(homework.body.checkedAt).toBeUndefined();
     });
 
+    it("Öğrenci 360 zaman çizelgesi öğrencinin ödevlerini teslim durumuyla tek istekte okur (DEC-20261102-08)", async () => {
+      const homeworkId = await createClassAHomework("Zaman Çizelgesi Ödevi");
+      await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .expect(201);
+
+      const staffView = await request(server)
+        .get("/homework/students/student-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200);
+      expect(staffView.body).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: homeworkId,
+          classId: "class-a",
+          title: "Zaman Çizelgesi Ödevi",
+          submission: expect.objectContaining({ homeworkId, studentId: "student-a", status: "SUBMITTED" }),
+        }),
+      ]));
+      expect(JSON.stringify(staffView.body)).not.toContain("homework-b");
+      expect((staffView.body as Array<{ classId: string }>).every((record) => record.classId === "class-a")).toBe(true);
+
+      const teacherView = await request(server)
+        .get("/homework/students/student-a")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(200);
+      expect(teacherView.body).toEqual(expect.arrayContaining([expect.objectContaining({ id: homeworkId })]));
+
+      // Portal personas never reach the staff read; another tenant's student is never readable.
+      await request(server).get("/homework/students/student-a").set("Authorization", `Bearer ${studentAAccessToken}`).expect(403);
+      const crossTenant = await request(server)
+        .get("/homework/students/student-b")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`);
+      expect([403, 404]).toContain(crossTenant.status);
+      await request(server).get("/homework/students/student-a").expect(401);
+    });
+
     it("teslim etmemiş öğrenci varsa kontrol isteğinin tamamı 409 ile reddedilir, kısmi yazma olmaz", async () => {
       const homeworkId = await createClassAHomework("Defter Kontrolü");
       const classmate = await request(server)

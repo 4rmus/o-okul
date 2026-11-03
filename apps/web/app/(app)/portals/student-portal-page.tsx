@@ -27,6 +27,7 @@ import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
+import { PortalAttendanceCalendar } from "./_shared/attendance-calendar.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import {
   AccessPanel,
@@ -419,6 +420,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             {view === "attendance" ? <div id="portal-attendance">
               <PortalPanelGate label="Devamsızlık" queries={[attendanceQuery]} subject="Devamsızlık kayıtları" title="Devamsızlık">
                 <AttendancePanel records={data.attendance} summary={data.attendanceSummary ?? undefined} />
+                <PortalAttendanceCalendar records={data.attendance} />
               </PortalPanelGate>
             </div> : null}
             {view === "profile" ? (
