@@ -58,7 +58,12 @@ const classes = [
 const courses = [{ id: "course-math", tenantId: "tenant-gb", name: "Matematik", code: "MAT" }];
 const terms = [{ id: "term-1", tenantId: "tenant-gb", academicYearId: "year-1", name: "2. Dönem", startsAt: "2026-02-01", endsAt: "2026-06-30", isActive: true }];
 
-interface Captured { saves: string[] }
+interface Captured {
+  saves: string[];
+  /** Offers a STAFF → TEACHER persona switch whose request succeeds or fails. */
+  personaSwitch?: "ok" | "fail";
+  loggedOut?: boolean;
+}
 
 test.describe("Not girişi tablosu", () => {
   test("öğretmen ok tuşlarıyla satır ve alan arasında geçer; yayınlanmış satır atlanır, Enter alta iner", async ({ page }) => {
@@ -341,7 +346,172 @@ test.describe("Not girişi tablosu", () => {
     await expect(page).not.toHaveURL(/\/kurum\/not-defteri/);
     expect(logoutRequests).toEqual(["POST"]);
   });
+
+  test("iki adım geri sonra vazgeçince adres sayfayla aynı kalır; kayıt koruma kaydını adresi değiştirmeden kaldırır", async ({ page }) => {
+    const captured: Captured = { saves: [] };
+    await openGradebookFromSessions(page, captured);
+    const historyLength = await page.evaluate(() => window.history.length);
+
+    // Long-press history menu: two entries at once, past the gradebook's own entry.
+    await page.evaluate(() => window.history.go(-2));
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+    await dialog.getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    // With the Navigation API the guard steps forward to its entry; nothing is dropped or added.
+    expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect.poll(() => captured.saves.length).toBe(1);
+    await expect.poll(() => onGuardSentinel(page)).toBe(false);
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toContainText("1. Yazılı");
+
+    await page.evaluate(() => window.history.back());
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("Navigation API yokken iki adım geri ve vazgeç adresi sayfada tutar", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "navigation", { configurable: true, value: undefined });
+    });
+    const captured: Captured = { saves: [] };
+    await openGradebookFromSessions(page, captured);
+
+    await page.evaluate(() => window.history.go(-2));
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect.poll(() => captured.saves.length).toBe(1);
+    await expect.poll(() => onGuardSentinel(page)).toBe(false);
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect(page.getByRole("region", { name: "Değerlendirme notları" })).toContainText("1. Yazılı");
+  });
+
+  test("soru açıkken ikinci geri basışı vazgeçle geri alınır; sonraki onay bir önceki sayfaya iner", async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [] });
+
+    await page.evaluate(() => window.history.back());
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+    await expect(dialog).toBeVisible();
+    await page.evaluate(() => window.history.back());
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    await dialog.getByRole("button", { name: "Notlara dön" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await page.evaluate(() => window.history.back());
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page).toHaveURL(/\/hesap\/oturumlar$/);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("ilk geçmiş kaydında onaylanan geri bir yere gitmezse koruma yeniden kurulur", async ({ page }) => {
+    await open(page, "admin", "/kurum/not-defteri", { saves: [] });
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+
+    await page.evaluate(() => window.history.back());
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+    await expect(dialog).toBeVisible();
+    // On a tab's first entry the confirmed step back goes nowhere; Playwright's tab keeps about:blank below, so the
+    // no-op is simulated.
+    await page.evaluate(() => {
+      window.history.back = () => undefined;
+    });
+    await dialog.getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page), { timeout: 5000 }).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await page.evaluate(() => window.history.go(-1));
+    await expect(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" })).toBeVisible();
+  });
+
+  test("çalışma alanı değişimi başarısız olursa koruma hemen geri gelir", async ({ page }) => {
+    await open(page, "admin", "/kurum/not-defteri", { saves: [], personaSwitch: "fail" });
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+
+    await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Çalışma alanı değiştirilemedi" }).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+    await expect.poll(() => onGuardSentinel(page)).toBe(true);
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    await page.evaluate(() => window.history.back());
+    await expect(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" })).toBeVisible();
+  });
+
+  test("onaylanan çalışma alanı değişimi ve çıkış not defterine ileri kaydı bırakmaz", async ({ page }) => {
+    await openGradebookFromSessions(page, { saves: [], personaSwitch: "ok" });
+    await page.getByLabel("Üst gezinme").getByRole("button", { name: "Öğretmen alanına geç" }).click();
+    await page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(page).toHaveURL(/\/ogretmen$/);
+    expect(await canGoForward(page)).toBe(false);
+
+    const second = await page.context().newPage();
+    await openGradebookFromSessions(second, { saves: [] });
+    await second.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
+    await second.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Kaydetmeden devam et" }).click();
+    await expect(second).toHaveURL(/\/login/);
+    expect(await canGoForward(second)).toBe(false);
+  });
+
+  test("390 px çekmeceden çıkışta onay penceresi çekmecenin altında kalmaz", async ({ page }) => {
+    await open(page, "admin", "/kurum/not-defteri", { saves: [] }, { width: 390, height: 844 });
+    await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+    await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+
+    const menuButton = page.getByRole("button", { name: "Ana menüyü aç" });
+    await menuButton.click();
+    await page.getByRole("navigation", { name: "Ana menü" }).getByRole("button", { name: "Çıkış" }).click();
+    const dialog = page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" });
+    await expect(dialog).toBeVisible();
+    await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("main#next-content")).not.toHaveAttribute("aria-hidden", "true");
+    await expectReachable(dialog.getByRole("button", { name: "Notlara dön" }));
+    await dialog.getByRole("button", { name: "Notlara dön" }).click();
+    await expect(menuButton).toBeFocused();
+    await expect(page.getByLabel("Can Demir notu", { exact: true })).toHaveValue("70");
+
+    // A drawer link asks the same way: the drawer closes before the question appears.
+    await menuButton.click();
+    await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Oturumlar" }).click();
+    await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    await expectReachable(page.getByRole("dialog", { name: "Kaydedilmemiş notlar var" }).getByRole("button", { name: "Notlara dön" }));
+  });
 });
+
+/** Sessions page, then the gradebook through the command palette (same document), with one unsaved grade. */
+async function openGradebookFromSessions(page: Page, captured: Captured) {
+  await open(page, "admin", "/hesap/oturumlar", captured);
+  const palette = page.getByRole("dialog", { name: "Komut paleti" });
+  // The shortcut listener attaches on hydration; retry until the palette opens.
+  await expect(async () => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(palette).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  await palette.getByRole("combobox", { name: "Komut ara" }).fill("Not Defteri");
+  await palette.getByRole("combobox", { name: "Komut ara" }).press("Enter");
+  await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+  await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
+  await page.getByLabel("Can Demir notu", { exact: true }).fill("70");
+  await expect.poll(() => onGuardSentinel(page)).toBe(true);
+}
+
+/** Chromium's Navigation API: whether a forward entry exists. */
+async function canGoForward(page: Page) {
+  return page.evaluate(() => (window as unknown as { navigation: { canGoForward: boolean } }).navigation.canGoForward);
+}
 
 /** True while the navigation guard's history entry is the current one (see navigation-guard.ts). */
 async function onGuardSentinel(page: Page) {
@@ -404,6 +574,23 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
   }
   const url = new URL(request.url());
   const path = url.pathname.replace(/^\/api\/v1/, "");
+  if (path === "/auth/logout") captured.loggedOut = true;
+  if (path === "/auth/refresh" && captured.loggedOut) {
+    await route.fulfill({ headers: corsFor(route), status: 401 });
+    return;
+  }
+  if (path === "/auth/persona/switch" && captured.personaSwitch === "fail") {
+    await route.fulfill({ body: JSON.stringify({ message: "unavailable" }), headers: { ...corsFor(route), "content-type": "application/json" }, status: 503 });
+    return;
+  }
+  if (path === "/auth/persona/switch") {
+    await fulfill(route, auth("teacher"));
+    return;
+  }
+  if (path === "/me/profile" && captured.personaSwitch) {
+    await fulfill(route, { userId: "user-admin", tenantId: "tenant-gb", activePersona: "STAFF", availablePersonas: ["STAFF", "TEACHER"], capabilities: [], roles: ["TENANT_ADMIN"] });
+    return;
+  }
   const entriesMatch = /^\/grade-assessments\/(ga-\d)\/entries$/.exec(path);
   if (entriesMatch && request.method() === "PUT") {
     captured.saves.push(request.postData() ?? "");
