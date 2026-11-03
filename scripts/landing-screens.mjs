@@ -18,21 +18,26 @@ import { parseArgs } from "node:util";
 import {
   LANDING_SCREENS,
   LANDING_SCREENS_DATASET_FILES,
+  LANDING_SCREENS_LGS_SCORING,
   LANDING_SCREENS_VIEWPORTS,
   assertDisposableDatabaseUrl,
   assertLoopbackUrl,
   assertProvidersDisabled,
   buildProvenanceManifest,
   istanbulDateKey,
+  lgsExamCreateBody,
+  planMissingExamParticipants,
   previousSchoolDays,
   resolveOutputDir,
   schoolCalendar,
   sha256Hex,
+  stripLeadingArgSeparator,
   verifyDataset,
 } from "./landing-screens-contract.mjs";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const { values: args } = parseArgs({
+  args: stripLeadingArgSeparator(process.argv.slice(2)),
   options: {
     "with-exams": { type: "boolean", default: false },
     "skip-capture": { type: "boolean", default: false },
@@ -84,6 +89,9 @@ const children = [];
 let examWorkers = [];
 let edgeProxy;
 let exitCode = 0;
+let seed;
+let manifestWritten = false;
+let failure = null;
 try {
   await assertPortFree(apiPort, "LANDING_SCREENS_API_PORT");
   if (!skipCapture) {
@@ -92,7 +100,7 @@ try {
   }
   ensureBuilds();
 
-  const seed = await bootstrapTenant();
+  seed = await bootstrapTenant();
   if (examStack) examWorkers = await startExamWorkers(examStack);
   children.push(startApi());
   await waitForHttp(`${apiOrigin}/health`, 60_000, "LANDING_SCREENS_API_NOT_READY");
@@ -115,8 +123,11 @@ try {
     await waitForHttp(`http://127.0.0.1:${nextPort}/login`, 120_000, "LANDING_SCREENS_WEB_NOT_READY");
     edgeProxy = await startEdgeProxy();
     const capture = await captureScreens(seed, loaded);
-    writeManifest(seed, capture.screens, { tool: capture.tool });
     const failed = capture.screens.filter((screen) => screen.status === "FAILED");
+    writeManifest(seed, capture.screens, {
+      tool: capture.tool,
+      ...(failed.length > 0 ? { status: "FAILED", failure: `LANDING_SCREENS_CAPTURE_FAILED:${failed.length}` } : {}),
+    });
     if (failed.length > 0) {
       exitCode = 1;
       console.error(`landing-screens ${runId}: ${failed.length} ekran yakalanamadı (manifest.json içinde reason alanı).`);
@@ -125,11 +136,21 @@ try {
   }
 } catch (error) {
   exitCode = 1;
-  console.error(`landing-screens ${runId} durdu: ${error instanceof Error ? error.message : String(error)}`);
+  failure = errorCode(error);
+  console.error(`landing-screens ${runId} durdu: ${failure}`);
 } finally {
   if (edgeProxy) await new Promise((resolveClose) => edgeProxy.close(() => resolveClose()));
   for (const child of children.reverse()) await stopChild(child);
   for (const worker of examWorkers) await worker.close().catch(() => undefined);
+  if (!manifestWritten) {
+    // A stopped run still leaves its gaps and adjustments behind; no screen list, status FAILED.
+    try {
+      writeManifest(seed, [], { tool: { node: process.version }, status: "FAILED", failure: failure ?? "LANDING_SCREENS_UNKNOWN_FAILURE" });
+      console.error(`landing-screens ${runId}: kısmi manifest yazıldı (status FAILED) -> ${relative(repoRoot, outDir) || outDir}/manifest.json`);
+    } catch (manifestError) {
+      console.error(`landing-screens ${runId}: kısmi manifest yazılamadı: ${errorCode(manifestError)}`);
+    }
+  }
 }
 process.exit(exitCode);
 
@@ -677,24 +698,36 @@ async function startExamWorkers(stack) {
 async function loadExams(token, loaded) {
   const byStudentNo = new Map(loaded.students.map((student) => [String(student.studentNo), student]));
   const expected = JSON.parse(readFileSync(join(datasetDir, LANDING_SCREENS_DATASET_FILES.expectedResults), "utf8"));
+  // The expected nets were computed with the dataset's penalty; the official LGS profile accepts only its own.
+  if (expected.wrongPenalty !== undefined && Math.abs(expected.wrongPenalty - LANDING_SCREENS_LGS_SCORING.wrongPenalty) > 0.000001) {
+    throw new Error("LANDING_SCREENS_WRONG_PENALTY_MISMATCH");
+  }
+  let enrolledByClass = 0;
+  let addedOutsideClasses = 0;
   const examDates = previousSchoolDays(loaded.today, 30, loaded.activeTermStartsAt);
   for (const [index, exam] of LANDING_SCREENS_DATASET_FILES.exams.entries()) {
     const expectedExam = expected.exams.find((candidate) => candidate.opticalFile === exam.opticalTxt);
     if (!expectedExam) throw new Error(`LANDING_SCREENS_EXPECTED_RESULTS_MISSING:${exam.key}`);
     const examDate = examDates[Math.max(0, Math.min(examDates.length - 1, 20 - index * 8))] ?? loaded.today;
-    const created = await api(token, "POST", "/exams", {
-      title: exam.title, examType: "LGS", gradeLevelId: loaded.gradeLevel.id, classIds: [loaded.classes.A.id, loaded.classes.B.id],
+    const created = await api(token, "POST", "/exams", lgsExamCreateBody({
+      title: exam.title, gradeLevelId: loaded.gradeLevel.id, classIds: [loaded.classes.A.id, loaded.classes.B.id],
       startsAt: `${examDate}T09:00:00+03:00`,
-      answerKey: { version: `${exam.key}-v1`, fileBase64: fileBase64(exam.answerKey), scoringConfig: { wrongPenalty: expected.wrongPenalty ?? 1 / 3 } },
-    });
+      answerKey: { version: `${exam.key}-v1`, fileBase64: fileBase64(exam.answerKey) },
+    }));
     const suggestion = await api(token, "POST", `/exams/${created.id}/parser-configs/suggestions`, { preset: "OPTIK_7108_LGS" });
     const parserConfigVersion = `${exam.key}-optik-7108`;
     await api(token, "POST", `/exams/${created.id}/parser-configs/approvals`, { suggestion: suggestion.suggestion, version: parserConfigVersion });
-    for (const row of expectedExam.results) {
-      const student = byStudentNo.get(String(row.studentNo));
-      if (!student) throw new Error(`LANDING_SCREENS_PARTICIPANT_MISSING:${exam.key}`);
-      await api(token, "POST", `/exams/${created.id}/participants`, { studentId: student.id, participantNo: String(row.studentNo), bookletType: row.booklet });
+    // classIds already enrolled the class rosters; only optical rows outside them are added here.
+    const enrolled = await api(token, "GET", `/exams/${created.id}/participants`);
+    let missing;
+    try {
+      missing = planMissingExamParticipants(expectedExam.results, byStudentNo, enrolled);
+    } catch (error) {
+      throw new Error(`${errorCode(error)}:${exam.key}`);
     }
+    for (const participant of missing) await api(token, "POST", `/exams/${created.id}/participants`, participant);
+    enrolledByClass += expectedExam.results.length - missing.length;
+    addedOutsideClasses += missing.length;
     const upload = await api(token, "POST", `/exams/${created.id}/raw-imports`, {
       sourceType: "OPTICAL_TXT", fileName: exam.opticalTxt, contentType: "text/plain", parserConfigVersion, fileBase64: fileBase64(exam.opticalTxt),
     });
@@ -719,6 +752,7 @@ async function loadExams(token, loaded) {
     await api(token, "POST", `/exams/${created.id}/publish`);
     console.log(`landing-screens: ${exam.title} raporu hazır ve yayımlandı`);
   }
+  console.log(`landing-screens: sınav katılımcıları 8-A/8-B sınıflarından geldi (${LANDING_SCREENS_DATASET_FILES.exams.length} sınavda ${enrolledByClass} optik satır), sınıf dışından eklenen ${addedOutsideClasses}`);
 }
 
 async function poll(code, timeoutMs, probe) {
@@ -888,21 +922,25 @@ function gitCommit() {
   }
 }
 
-function writeManifest(seed, screens, { tool }) {
+function writeManifest(seedRecord, screens, { tool, status = "COMPLETED", failure: failureCode = null }) {
   const manifest = buildProvenanceManifest({
     capturedAt: new Date().toISOString(),
     commit: gitCommit(),
     dataset,
     examsLoaded: Boolean(examStack),
+    failure: failureCode,
     gaps,
     queueAvailable: Boolean(queueStack),
     adjustments,
     runId,
     screens,
-    tool: { ...tool, database: databaseName, tenantSlug: seed.tenantSlug },
+    status,
+    tool: { ...tool, database: databaseName, tenantSlug: seedRecord?.tenantSlug ?? null },
   });
   writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   for (const screen of screens) {
     if (screen.file && !statSync(join(outDir, screen.file)).isFile()) throw new Error(`LANDING_SCREENS_OUTPUT_MISSING:${screen.file}`);
   }
+  // Set only after the screen files are checked; a missing file leaves the FAILED manifest of the finally block.
+  manifestWritten = true;
 }
