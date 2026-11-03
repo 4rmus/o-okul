@@ -365,6 +365,9 @@ jobs:
       LEVEL_ANALYTICS_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       LEVEL_ANALYTICS_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       LEVEL_ANALYTICS_POSTGRES_REQUIRED: "1"
+      TEACHER_EMPLOYEE_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      TEACHER_EMPLOYEE_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      TEACHER_EMPLOYEE_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -433,3 +436,4 @@ jobs:
           src/http/tenant-mutation-settle.postgres.test.ts
           src/listing/cursor-list-keyset.postgres.test.ts
           src/student/term-transition.postgres.test.ts
+          src/teacher/teacher-employee-sync.postgres.test.ts

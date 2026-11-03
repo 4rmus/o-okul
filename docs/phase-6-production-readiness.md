@@ -837,7 +837,9 @@ pnpm backup:restore:smoke
   üzerinden doğrulanır.
 - KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `nationalIdEncrypted`,
   `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
-  `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
+  `nationalIdEncrypted`, `nationalIdHash`, `phone` ve bağlı Çalışan kaydının (DEC-20261102-08) `employee.firstName`,
+  `employee.lastName`, `employee.nationalIdEncrypted`, `employee.nationalIdHash`, `employee.phone`,
+  `employee.workEmail`; veli için `firstName`, `lastName`, `phone`;
   kullanıcı hesabı için `email`, `name`; `StudentContact` için ad, ilişki, şifreli/hash iletişim,
   izin ve consent alanlarının anonimleştirme/temizleme kapsamı doğrulanır.
   `whatsappConsent` bloğu bu release'te `recordCount=0`, exact

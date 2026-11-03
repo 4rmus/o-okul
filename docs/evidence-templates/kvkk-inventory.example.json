@@ -13,7 +13,7 @@
   "purgeCoverage": {
     "student": ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
     "studentContact": ["firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash", "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt"],
-    "teacher": ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
+    "teacher": ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "employee.firstName", "employee.lastName", "employee.nationalIdEncrypted", "employee.nationalIdHash", "employee.phone", "employee.workEmail"],
     "guardian": ["firstName", "lastName", "phone"],
     "user": ["email", "name"]
   },

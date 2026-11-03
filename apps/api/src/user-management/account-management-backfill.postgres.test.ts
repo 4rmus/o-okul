@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -83,6 +84,28 @@ describePostgres("account-management backfill on PostgreSQL (UAT F-16)", () => {
     expect(rows["f16-m-owner"]).toMatchObject({ staffRole: "TENANT_OWNER", scopeMode: "TENANT", version: 3 });
   });
 
+  // DEC-20261102-08: the app now creates the teacher's Employee row with the backfill's id scheme; the backfill must
+  // keep those rows, link the remaining teachers once and never add a second Employee for a teacher.
+  it("APPLY keeps app-created teacher Employee rows and adds exactly one row per unlinked teacher", async () => {
+    const teachers = await admin.query<{ id: string; employeeId: string | null }>(
+      `SELECT "id", "employeeId" FROM "Teacher" WHERE "tenantId" = $1 ORDER BY "id"`,
+      [tenantId],
+    );
+    const legacyEmployeeId = await admin.query<{ id: string }>(`SELECT 'employee-' || md5($1::text || ':' || 'f16-teacher-legacy') AS id`, [tenantId]);
+    expect(Object.fromEntries(teachers.rows.map((row) => [row.id, row.employeeId]))).toEqual({
+      "f16-teacher-app": appTeacherEmployeeId,
+      "f16-teacher-deleted": "f16-employee-ended",
+      "f16-teacher-hr": "f16-employee-hr",
+      "f16-teacher-legacy": legacyEmployeeId.rows[0]!.id,
+    });
+    const employees = await admin.query<{ id: string; status: string }>(
+      `SELECT "id", "status" FROM "Employee" WHERE "tenantId" = $1 ORDER BY "id"`,
+      [tenantId],
+    );
+    expect(employees.rows).toHaveLength(4);
+    expect(employees.rows.find((row) => row.id === "f16-employee-ended")?.status).toBe("ENDED");
+  });
+
   it("a second APPLY is a no-op", async () => {
     const before = await snapshot(admin);
     expect(runBackfill("APPLY")).toMatchObject({ result: "PASS", blockers: [] });
@@ -129,13 +152,18 @@ async function memberships(pool: pg.Pool): Promise<Record<string, MembershipStat
 }
 
 async function snapshot(pool: pg.Pool): Promise<unknown> {
-  const [members, scopes, users] = await Promise.all([
+  const [members, scopes, users, teachers, employees] = await Promise.all([
     pool.query(`SELECT * FROM "TenantMembership" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
     pool.query(`SELECT * FROM "MembershipCampusScope" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
     pool.query(`SELECT * FROM "User" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
+    pool.query(`SELECT * FROM "Teacher" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
+    pool.query(`SELECT * FROM "Employee" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
   ]);
-  return { members: members.rows, scopes: scopes.rows, users: users.rows };
+  return { members: members.rows, scopes: scopes.rows, users: users.rows, teachers: teachers.rows, employees: employees.rows };
 }
+
+// What PostgresTeacherStore.create inserts for f16-teacher-app (DEC-20261102-08).
+const appTeacherEmployeeId = `employee-${createHash("md5").update(`${tenantId}:f16-teacher-app`).digest("hex")}`;
 
 async function waitForSessionsToClose(server: pg.Pool, database: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -224,6 +252,23 @@ async function seed(pool: pg.Pool): Promise<void> {
        ('f16-s-guardian', 'f16-u-guardian', $1, 'f16-m-guardian', 'GUARDIAN', ARRAY['GUARDIAN'], 'GUARDIAN', 'f16-guardian-b',
         'f16-family-2', 'f16-hash-2', 'ACTIVE', 1, now() + interval '1 day', now())`,
     [tenantId],
+  );
+  // DEC-20261102-08 teachers: one whose Employee row the app created (backfill id scheme), one matching an HR-created
+  // Employee by national ID, one legacy teacher without an Employee, and a deleted teacher whose Employee was ended.
+  await pool.query(
+    `INSERT INTO "Employee" ("id", "tenantId", "firstName", "lastName", "nationalIdHash", "status", "employmentEndsAt", "endedReason", "updatedAt") VALUES
+       ($2, $1, 'UYGULAMA', 'ÖĞRETMEN', 'f16-hash-app', 'ACTIVE', NULL, NULL, now()),
+       ('f16-employee-hr', $1, 'İK', 'KAYDI', 'f16-hash-hr', 'ACTIVE', NULL, NULL, now()),
+       ('f16-employee-ended', $1, 'SİLİNEN', 'ÖĞRETMEN', NULL, 'ENDED', '2026-11-02', 'TEACHER_DELETED', now())`,
+    [tenantId, appTeacherEmployeeId],
+  );
+  await pool.query(
+    `INSERT INTO "Teacher" ("id", "tenantId", "employeeId", "firstName", "lastName", "nationalIdHash", "deletedAt", "updatedAt") VALUES
+       ('f16-teacher-app', $1, $2, 'UYGULAMA', 'ÖĞRETMEN', 'f16-hash-app', NULL, now()),
+       ('f16-teacher-hr', $1, NULL, 'İK', 'KAYDI', 'f16-hash-hr', NULL, now()),
+       ('f16-teacher-legacy', $1, NULL, 'ESKİ', 'ÖĞRETMEN', NULL, NULL, now()),
+       ('f16-teacher-deleted', $1, 'f16-employee-ended', 'SİLİNEN', 'ÖĞRETMEN', NULL, now(), now())`,
+    [tenantId, appTeacherEmployeeId],
   );
   // Same shape as UserManagementService.updateMembership writes (scopeMode itself is redacted; campusCount is kept).
   await pool.query(

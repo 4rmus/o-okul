@@ -52,7 +52,7 @@ requireTokens(paths.kvkkChecker, files.kvkkChecker, [
   "expectedPurgeCoverage",
   'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
   'studentContact: [',
-  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
+  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "employee.firstName", "employee.lastName", "employee.nationalIdEncrypted", "employee.nationalIdHash", "employee.phone", "employee.workEmail"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
   "expectedWhatsappConsentStoredFields",
@@ -68,7 +68,7 @@ requireTokens(paths.kvkkChecker, files.kvkkChecker, [
 requireTokens(paths.goLiveChecker, files.goLiveChecker, [
   'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
   'studentContact: [',
-  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
+  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "employee.firstName", "employee.lastName", "employee.nationalIdEncrypted", "employee.nationalIdHash", "employee.phone", "employee.workEmail"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
   "expectedWhatsappConsentStoredFields",
@@ -287,7 +287,7 @@ function requirePurgeCoverage(path, coverage, output) {
     "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
     "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt",
   ], output);
-  requireArrayIncludes(path, "purgeCoverage.teacher", coverage.teacher, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"], output);
+  requireArrayIncludes(path, "purgeCoverage.teacher", coverage.teacher, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "employee.firstName", "employee.lastName", "employee.nationalIdEncrypted", "employee.nationalIdHash", "employee.phone", "employee.workEmail"], output);
   requireArrayIncludes(path, "purgeCoverage.guardian", coverage.guardian, ["firstName", "lastName", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.user", coverage.user, ["email", "name"], output);
 }
