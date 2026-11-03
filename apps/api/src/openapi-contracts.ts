@@ -3441,6 +3441,7 @@ const gradeAssessmentRecordSchema = objectSchema({
   heldOn: stringSchema({ format: "date" }),
   maxScore: { type: "number" },
   publishedVersion: integerSchema({ minimum: 1 }),
+  unpublishedDraftCount: integerSchema({ minimum: 0, description: "List responses only: students whose newest entry is an unpublished draft." }),
   createdById: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);

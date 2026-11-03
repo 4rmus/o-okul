@@ -11,6 +11,21 @@ export interface GradeGridStudent {
   name: string;
 }
 
+const turkishCollator = new Intl.Collator("tr", { sensitivity: "base", numeric: true });
+
+/**
+ * Grid rows in roster order (UAT 2026-11-03 U8): surname, then first name, with Turkish collation so Ç, Ğ, İ, Ö,
+ * Ş and Ü sort in place; the id breaks ties so equal names keep a stable order. Students added later used to stay
+ * at the end because the API returns them in creation order.
+ */
+export function toGradeGridStudents(records: readonly { id: string; firstName: string; lastName: string }[]): GradeGridStudent[] {
+  return [...records]
+    .sort((left, right) => turkishCollator.compare(left.lastName, right.lastName)
+      || turkishCollator.compare(left.firstName, right.firstName)
+      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    .map((record) => ({ id: record.id, name: `${record.firstName} ${record.lastName}` }));
+}
+
 export interface GradeGridActionState {
   /** Entries typed in the grid that are not saved as a draft yet. */
   unsavedCount: number;

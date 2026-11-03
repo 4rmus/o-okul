@@ -38,6 +38,8 @@ const entry = (studentId: string, version: number, score: number, published: boo
   createdAt: "2026-03-10T09:00:00.000Z",
 });
 // Ada: correction draft (editable); Bora: published only (read-only row); the rest have nothing yet.
+// The grid sorts by surname (UAT U8), so the surnames keep Ada, Bora (skipped by the arrow keys), Can, then the
+// 30 "Sıra NN" students in this order.
 const details: Record<string, unknown> = {
   "ga-1": { assessment: assessments[0], entries: [entry("student-a", 1, 72.3, true), entry("student-a", 2, 75, false), entry("student-b", 1, 60, true)] },
   "ga-2": { assessment: assessments[1], entries: [] },
@@ -45,10 +47,10 @@ const details: Record<string, unknown> = {
 };
 const student = (id: string, firstName: string, lastName: string, classId = "class-8a") => ({ id, tenantId: "tenant-gb", firstName, lastName, classId, status: "ACTIVE" });
 const students = [
-  student("student-a", "Ada", "Kaya"),
-  student("student-b", "Bora", "Yılmaz"),
+  student("student-a", "Ada", "Acar"),
+  student("student-b", "Bora", "Bal"),
   student("student-c", "Can", "Demir"),
-  ...Array.from({ length: 30 }, (_, index) => student(`student-x${index}`, "Öğrenci", String(index + 1).padStart(2, "0"))),
+  ...Array.from({ length: 30 }, (_, index) => student(`student-x${index}`, "Öğrenci", `Sıra ${String(index + 1).padStart(2, "0")}`)),
   student("student-d", "Deniz", "Ak", "class-8b"),
 ];
 const classes = [
@@ -78,7 +80,7 @@ test.describe("Not girişi tablosu", () => {
     const panel = await openTeacher(page, { saves: [] });
     await panel.getByLabel("Değerlendirme").selectOption("ga-1");
 
-    const ada = page.getByLabel("Ada Kaya notu", { exact: true });
+    const ada = page.getByLabel("Ada Acar notu", { exact: true });
     const can = page.getByLabel("Can Demir notu", { exact: true });
     await ada.focus();
     await ada.press("ArrowDown");
@@ -89,8 +91,8 @@ test.describe("Not girişi tablosu", () => {
     // Right leaves the text only from its end; left only from its start.
     await placeCaret(ada, "end");
     await ada.press("ArrowRight");
-    await expect(page.getByLabel("Ada Kaya sınava girmedi")).toBeFocused();
-    await page.getByLabel("Ada Kaya sınava girmedi").press("ArrowDown");
+    await expect(page.getByLabel("Ada Acar sınava girmedi")).toBeFocused();
+    await page.getByLabel("Ada Acar sınava girmedi").press("ArrowDown");
     await expect(page.getByLabel("Can Demir sınava girmedi")).toBeFocused();
     await page.getByLabel("Can Demir sınava girmedi").press("ArrowLeft");
     await expect(can).toBeFocused();
@@ -100,7 +102,7 @@ test.describe("Not girişi tablosu", () => {
     await can.press("ArrowLeft");
     await expect(can).toBeFocused();
     await can.press("Enter");
-    await expect(page.getByLabel("Öğrenci 01 notu", { exact: true })).toBeFocused();
+    await expect(page.getByLabel("Öğrenci Sıra 01 notu", { exact: true })).toBeFocused();
     await expect(page.getByTestId("grade-unsaved-summary")).toHaveText("1 değişiklik kaydedilmedi");
   });
 
@@ -115,20 +117,20 @@ test.describe("Not girişi tablosu", () => {
     await can.blur();
     await expect(can).toHaveAttribute("aria-invalid", "true");
     await expect(can).toHaveAccessibleDescription("0 ile 100 arasında, en fazla iki ondalıklı olmalı.");
-    await page.getByLabel("Öğrenci 01 notu", { exact: true }).fill("7,555");
+    await page.getByLabel("Öğrenci Sıra 01 notu", { exact: true }).fill("7,555");
     await expect(page.getByTestId("grade-unsaved-summary")).toHaveText("2 değişiklik kaydedilmedi · 1 notta hata var");
 
     const bar = page.getByRole("group", { name: "Not kaydetme" });
     await bar.getByRole("button", { name: "Taslağı kaydet" }).click();
     await expect(bar.getByRole("alert")).toHaveText("2 notta hata var. İşaretli hücreleri düzeltip tekrar kaydedin.");
-    await expect(page.getByLabel("Öğrenci 01 notu", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByLabel("Öğrenci Sıra 01 notu", { exact: true })).toHaveAttribute("aria-invalid", "true");
     await expect(can).toBeFocused();
     expect(captured.saves).toHaveLength(0);
     const axe = await new AxeBuilder({ page }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
     expect(axe.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical").map((violation) => violation.id)).toEqual([]);
 
     await can.fill("95");
-    await page.getByLabel("Öğrenci 01 notu", { exact: true }).fill("7,5");
+    await page.getByLabel("Öğrenci Sıra 01 notu", { exact: true }).fill("7,5");
     await expect(can).not.toHaveAttribute("aria-invalid", "true");
     await expect(page.getByTestId("grade-unsaved-summary")).toHaveText("2 değişiklik kaydedilmedi");
     await page.getByRole("button", { name: "Taslağı kaydet" }).click();
@@ -192,13 +194,13 @@ test.describe("Not girişi tablosu", () => {
     // Without unsaved grades the switch needs no confirmation.
     await picker.selectOption("ga-1");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByLabel("Ada Kaya notu", { exact: true })).toHaveValue("75");
+    await expect(page.getByLabel("Ada Acar notu", { exact: true })).toHaveValue("75");
   });
 
   test("yönetici ekranı aynı tabloyu kullanır: ok tuşları, alt çubuk ve değişim onayı", async ({ page }) => {
     await open(page, "admin", "/kurum/not-defteri", { saves: [] });
     await page.getByRole("button", { name: "1. Yazılı notlarını aç" }).click();
-    const ada = page.getByLabel("Ada Kaya notu", { exact: true });
+    const ada = page.getByLabel("Ada Acar notu", { exact: true });
     await ada.focus();
     await ada.press("ArrowDown");
     await expect(page.getByLabel("Can Demir notu", { exact: true })).toBeFocused();
@@ -697,7 +699,7 @@ test.describe("Not girişi tablosu", () => {
     // WebKit keeps a focused field visible when the viewport resizes, so the resize settles before the focus.
     await page.waitForFunction(() => window.innerHeight === 600);
     await page.waitForTimeout(200);
-    const ada = page.getByLabel("Ada Kaya notu", { exact: true });
+    const ada = page.getByLabel("Ada Acar notu", { exact: true });
     await ada.focus();
     const scrollable = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
     expect(scrollable).toBeGreaterThan(300);
