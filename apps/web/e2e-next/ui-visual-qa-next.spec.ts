@@ -195,14 +195,15 @@ test.describe("Faz 9 UI görsel smoke", () => {
         const desktopTopBar = page.locator(".next-desktop-topbar");
         await expect(desktopTopBar).toContainText("Faz 9 Akademi");
         await expect(desktopTopBar).toContainText("Kurum yöneticisi");
-        await expect(page.locator(".next-sidebar .next-brand")).toContainText("Faz 9 Akademi");
+        await expect(page.locator(".next-campus-nav")).toBeVisible();
+        await expect(page.locator(".next-sidebar")).toBeHidden();
         await hideNextDevIndicator(page);
         await expectRouteFamilyGolden(
           page,
           page.getByRole("heading", { level: 1, name: "Faz 9 Akademi" }),
           "route-family-dashboard-1440.png",
         );
-        await expect.soft(page.locator(".next-sidebar")).toHaveScreenshot("institution-shell-rail-1440.png", {
+        await expect.soft(page.locator(".next-campus-header")).toHaveScreenshot("institution-shell-topnav-1440.png", {
           animations: "disabled",
           maxDiffPixelRatio: 0.005,
         });

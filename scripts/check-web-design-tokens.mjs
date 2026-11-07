@@ -159,6 +159,31 @@ requireTokens("apps/web/app/layout.tsx", files.layout, [
 ]);
 forbidRegex("apps/web/app/layout.tsx", files.layout, /Source_Serif_4|font-source-serif/g, "serif display fontu");
 forbidRegex("apps/web/app/layout.tsx", files.layout, /next\/font\/google/g, "build zamanı Google Fonts bağımlılığı");
+requireTokens("Campus local fonts", files.layout, [
+  'src: "./fonts/Manrope-Variable.ttf"',
+  'src: "./fonts/Fraunces-Variable.ttf"',
+  'variable: "--font-manrope"',
+  'variable: "--font-fraunces"',
+  "campusBodyFont.variable",
+  "campusDisplayFont.variable",
+]);
+if ((files.layout.match(/preload: false/g) ?? []).length !== 2) failures.push("Campus fonts must not preload on unrelated routes.");
+for (const family of ["Manrope", "Fraunces"]) {
+  requireTokens(`${family} font license`, read(`apps/web/app/fonts/${family}-OFL.txt`), ["SIL OPEN FONT LICENSE Version 1.1"]);
+}
+requireTokens("Campus scoped theme", read("apps/web/app/_styles/80-campus-shell.css"), [
+  "@media screen",
+  ".next-campus-shell {",
+  ':root[data-theme="dark"] .next-campus-shell',
+  "--font-body: var(--font-manrope)",
+  "--font-campus-display: var(--font-fraunces)",
+  ".next-campus-shell .next-karne-sheet",
+  "--font-body: var(--font-ibm-plex-sans)",
+  "--color-primary: var(--color-accent)",
+  "--color-surface: var(--color-paper-raised)",
+  "@media print",
+  ".next-campus-header {\n    display: none !important;\n  }",
+]);
 validateBerrakDarkTheme(files.tokens, files.darkTheme);
 validateKarnePins(files.tokens, read("apps/web/app/_styles/73-almanac-report.css"));
 
@@ -549,7 +574,7 @@ function readMarkedBlock(source, label) {
 function validateCustomPropertyGraph(source) {
   const definitions = new Set([...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
   const references = new Set([...source.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]));
-  const runtimeFontVariables = new Set(["--font-ibm-plex-sans"]);
+  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-manrope", "--font-fraunces"]);
   const missing = [...references].filter((name) => !definitions.has(name) && !runtimeFontVariables.has(name)).sort();
   if (missing.length > 0) failures.push(`Tanımsız CSS custom property referansları: ${missing.join(", ")}`);
 }

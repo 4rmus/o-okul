@@ -11,6 +11,29 @@ ile birlikte okunur.
 
 ## Visual Direction
 
+### Campus customer-workspace amendment (2026-11-07)
+
+DEC-20261107-01 approves Campus for institution, teacher, student and guardian workspaces.
+`design.md` and the scoped `80-campus-shell.css` govern its warm surfaces, petrol actions,
+local Manrope body text and roman Fraunces dashboard headings. This supersedes the older guardian
+design exclusion for this milestone. Root Berrak tokens, public/auth/system surfaces and report
+card/PDF/print appearance remain unchanged. No new UI library, API, data contract or permissions
+are introduced.
+
+Desktop top navigation is another presentation of the existing capability-filtered hub groups.
+All authorized links, command search, breadcrumbs, persona switching, notification-device
+settings, logout and the accessible mobile drawer remain available. A cancelled unsaved-work
+dialog restores focus to a visible menu trigger. Dashboard layouts may reorder existing content
+but must preserve loading, empty, error, partial-data and permission states. Guardian finance
+still requires a fresh child-specific permission check. Deneme success-rate comparisons remain
+separate from school grades; published grade and report values are unchanged.
+
+Campus acceptance adds scoped-theme tests for public/auth/system/karne/print exclusion, local font
+loading, desktop disclosure keyboard/focus behavior and unchanged role-specific navigation at
+320/375/414/768/1024/1440 widths. Existing behavior assertions must not be weakened to match the
+new layout. Updated customer visual baselines require explicit diff review; protected-surface
+baselines are not refreshed to hide unintended changes.
+
 - Ton: operasyonel, veri yogun, sessiz ve karar odakli.
 - Admin ekranlari: hizli taranabilir metrikler, yogun listeler, net aksiyonlar.
 - Portal ekranlari: hedefte ogrenci ve ogretmen icin sade gunluk durum ve aksiyon ozeti; mevcut
