@@ -1567,6 +1567,19 @@ Etkilenen ADR: Yok; ADR-0011 (yayınlanmış not satırı değişmez) ve ReportS
 Açık soru: Veli ödev görünümünde öğretmen kontrol notunun gösterilmesi istenirse ayrı DEC gerekir.
 Son kontrol: 2026-11-03
 
+### DEC-20261107-01 — Campus customer dashboards and workspace navigation
+
+Status: Approved by the product owner on 2026-11-07: "Kampüs modeliyle ilerle", following the request to plan and implement with parallel agents.
+Decision: Implement the Campus visual direction for the institution/operations/finance, teacher, student, and guardian workspaces. Use warm neutral surfaces, petrol accents, local Manrope body text, and local roman Fraunces dashboard headings. Desktop customer navigation uses the existing authorized navigation groups in a top navigation surface; mobile keeps the existing accessible drawer and role navigation. Routes, capability mappings, command search, breadcrumbs, persona switching, and unsaved-change protection remain authoritative.
+Scope: Presentation and existing-data composition only, as detailed in `docs/campus-dashboard-implementation-plan.md`. Public pages, authentication, system administration, report contents, report-card geometry, print/PDF, optical processing, and `ReportSnapshot` stay unchanged. Campus tokens are screen-only and scoped to customer shells. Report-card typography and palette must remain pinned to their existing foundation.
+Constraints: Keep tenant/campus isolation, self/assigned scopes, guardian consent and `canViewFinance`, partial-source errors, and no-data states. Never show draft grade scores/averages or mutate published grades (ADR-0011). Deneme charts use Başarı % with Net/Soru context; school grades remain separate. Prototype numbers are illustrative and must not enter runtime. Finance summaries cover only the fetched page, use the server's overdue status, and do not combine currencies; no new monthly/weekly aggregate endpoint or online payment capability is included.
+Delivery: Three disjoint worktree gates from one plan commit, one integration branch, and one PR. Refresh measurement evidence once after integration. UI libraries, API/DB contracts, provider configuration, deployment, and live-data mutations are outside this change.
+Source: Product-owner design selection and implementation request in the 2026-11-07 product discussion.
+Evidence: LOCAL_STATIC planning only at decision time; implementation and validation are recorded separately.
+Affected ADR: ADR-0005 navigation remains authoritative; ADR-0011 is unchanged.
+Open question: None blocking implementation. Real-user task-time improvement and staging acceptance remain UNPROVEN until measured.
+Last checked: 2026-11-07
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği
