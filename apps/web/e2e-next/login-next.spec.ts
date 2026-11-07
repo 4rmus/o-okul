@@ -17,6 +17,7 @@ function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
 }
 
 async function expandSidebarGroup(page: Page, name: string) {
+  await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
   const groupButton = page.getByRole("navigation", { name: "Ana menü" }).getByRole("button", { name, exact: true });
   if (await groupButton.count() && (await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
@@ -52,6 +53,7 @@ async function clickSidebarLink(page: Page, name: string, url: RegExp) {
     await palette.getByLabel("Komut ara").fill(route.label);
     await palette.getByRole("option", { name: new RegExp(`^${route.label}`) }).first().click();
   } else {
+    if (route) await expandSidebarGroup(page, route.group);
     const link = menu.getByRole("link", { name: route?.menuLabel ?? name, exact: true });
     await expect(link).toBeVisible();
     await link.click();
@@ -3994,25 +3996,26 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const institutionSummary = page.getByRole("region", { name: "Kurum başarı görünümü" });
   await expect(institutionSummary).toContainText("Aktif öğrenci");
   await expect(institutionSummary).toContainText("3");
-  await expect(institutionSummary).toContainText("Son sınav katılımı");
-  await expect(institutionSummary).toContainText("1/1");
+  await expect(page.getByRole("region", { name: "Son sınav ve rapor durumu" })).toContainText("Katılım");
+  await expect(page.getByRole("region", { name: "Son sınav ve rapor durumu" })).toContainText("1/1");
   const attention = page.getByRole("region", { name: "Bugün ilgilenmeniz gerekenler" });
   await expect(attention.getByRole("link", { name: /Öğrenci destek talepleri 1/ })).toBeVisible();
   await expect(attention.getByRole("link", { name: /Devamsızlık takibi 1/ })).toBeVisible();
   await expect(attention.getByRole("link", { name: /Sonuç kontrolü 1/ })).toBeVisible();
   await expect(page.getByRole("region", { name: "Son sınav ve rapor durumu" })).toContainText("Rapor hazır");
+  await page.getByLabel("Sınıf karşılaştırması").getByText("Ayrıntılı veriyi göster", { exact: true }).click();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("Sınıf başarı karşılaştırması")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("8-A")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("%91,5")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").locator("canvas")).toBeVisible();
   await expect(page.getByRole("region", { name: "Kurum duyuruları" })).toContainText("Haftalık toplantı");
   await expect(page.getByRole("region", { name: "Kurum duyuruları" }).getByRole("link", { name: "Tüm duyuruları aç" })).toHaveAttribute("href", "/kurum/duyurular");
-  await expect(page.getByText("Kişiler", { exact: true })).toBeVisible();
-  await expect(page.getByText("Akademik", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sınav", { exact: true })).toBeVisible();
-  await expect(page.getByText("İletişim", { exact: true })).toBeVisible();
-  await expect(page.getByText("Finans", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ayarlar", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kişiler", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Akademik", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sınav", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "İletişim", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ödeme planları", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ayarlar", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Denetim", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Güvenlik Denetimi" })).toHaveCount(0);
@@ -6552,8 +6555,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(mainNav.getByRole("button", { name: "Öğretmen Paneli" })).toBeHidden();
   await expect(mainNav.getByRole("button", { name: "Veli Paneli" })).toBeHidden();
   await expect(heading(page, { name: "Öğrenci Portalı" })).toBeVisible();
-  await expect(page.getByLabel("Günlük durum").getByText("Bugünün odağı")).toBeVisible();
-  await expect(page.getByLabel("Günlük durum").getByText("1 okunmamış")).toBeVisible();
+  await expect(page.getByLabel("Günlük durum").locator(".next-section-eyebrow")).toBeVisible();
+  await expect(page.getByLabel("Öğrenci günlük aksiyonları").getByText("1 okunmamış")).toBeVisible();
   await expect(page.getByLabel("Bildirim cihazı")).toHaveCount(0);
   expect(portalNotificationDevices).toHaveLength(0);
   await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Öğrenci duyurusu", exact: true })).toBeVisible();
@@ -6736,8 +6739,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(mainNav.getByRole("button", { name: "Öğretmen Paneli" })).toBeHidden();
   await expect(mainNav.getByRole("button", { name: "Öğrenci Paneli" })).toBeHidden();
   await expect(heading(page, { name: "Veli Portalı" })).toBeVisible();
-  await expect(page.getByLabel("Günlük durum").getByText("Bugünün odağı")).toBeVisible();
-  await expect(page.getByLabel("Günlük durum").getByText("500,00 TRY")).toBeVisible();
+  await expect(page.getByLabel("Günlük durum").locator(".next-section-eyebrow")).toBeVisible();
+  await expect(page.getByLabel("Veli günlük aksiyonları").getByText("500,00 TRY")).toBeVisible();
   await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Veli duyurusu", exact: true })).toBeVisible();
   await page.getByLabel("Duyurular").getByRole("button", { name: "Okundu işaretle" }).click();
   await expect(page.getByLabel("Duyurular").getByText("Okundu")).toBeVisible();
@@ -6774,7 +6777,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   });
   await expect(page).toHaveURL(/\/veli\?examId=exam-demo$/);
   await expect(guardianReportSummary.getByText("17,5").first()).toBeVisible();
-  await expect(page.getByLabel("Portal özeti").getByText("500,00 TRY")).toBeVisible();
+  await expect(page.getByLabel("Veli günlük aksiyonları").getByText("500,00 TRY")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("2026 Haziran ödeme planı")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("1. taksit / 500,00 TRY")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByRole("row", { name: /1\. taksit .* Bekliyor/ })).toBeVisible();
@@ -6786,9 +6789,10 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await mainNav.getByRole("link", { name: "Ödeme planları" }).click();
   await mainNav.getByRole("link", { name: "Özet", exact: true }).click();
   expect(portalGuardianClosedFinancePaymentPlanRequests).toBe(0);
-  await expect(page.getByLabel("Portal özeti").getByText("Kapalı").first()).toBeVisible();
+  await expect(page.getByLabel("Veli günlük aksiyonları").getByRole("link", { name: /^Ödeme durumunu gör: Ödeme izni kapalı/ })).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("Ödeme görünümü kapalı.")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("2026 Haziran ödeme planı")).toBeHidden();
+  await page.getByText("Öğrenci bilgileri ve diğer ayrıntılar", { exact: true }).click();
   await expect(page.getByLabel("Profil").getByText("*******0146")).toBeVisible();
   await expect(page.getByLabel("Profil").getByText("8-A")).toBeVisible();
   await expect(page.getByLabel("Profil").getByText("Merkez Kampüs")).toBeVisible();

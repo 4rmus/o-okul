@@ -131,6 +131,21 @@
   .next-campus-shell .campus-portal .next-portal-action-strip__item:first-child {
     border-top: 0;
   }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__copy {
+    display: contents;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__value {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__detail {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
 
   .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__context {
     display: none;
@@ -141,6 +156,8 @@
   }
 
   .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__meta {
+    grid-column: 2;
+    grid-row: 1 / span 2;
     align-items: end;
     justify-items: end;
   }
