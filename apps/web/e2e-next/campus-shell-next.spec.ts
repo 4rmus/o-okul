@@ -5,6 +5,27 @@ import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 const origin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const headers = { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", "access-control-allow-headers": "authorization,content-type,x-csrf-token", "access-control-allow-methods": "GET,POST,OPTIONS" };
 
+test("mobil çalışma alanı geçişi hatası açık çekmecede görünür, kapatınca ana içerikte kalır", async ({ page }) => {
+  await open(page, "TENANT_ADMIN", "/kurum", {
+    "/me/profile": { activePersona: "STAFF", availablePersonas: ["STAFF", "TEACHER"] },
+  });
+  await page.route("**/api/v1/auth/persona/switch", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    return route.fulfill({ status: 503, headers, contentType: "application/json", body: JSON.stringify({ error: { code: "UNAVAILABLE", message: "Unavailable" } }) });
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+  const drawer = page.locator("#next-sidebar");
+  await drawer.getByRole("button", { name: "Öğretmen alanına geç" }).click();
+  const message = "Çalışma alanı değiştirilemedi. Tekrar deneyin.";
+  await expect(drawer.getByRole("alert").filter({ hasText: message })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: message })).toHaveCount(1);
+  await expect(page).toHaveURL(/\/kurum$/);
+  await drawer.getByRole("button", { name: "Ana menüyü kapat" }).click();
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: message })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: message })).toHaveCount(1);
+});
+
 test("mobil portal Daha fazla menüsü kapanınca odağı kendi düğmesine döndürür", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
