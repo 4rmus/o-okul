@@ -383,7 +383,7 @@ export function FinancePage() {
   }
 
   return (
-    <>
+    <div className="campus-finance-workspace">
       <CrudPage
         actions={
           <>
@@ -416,14 +416,21 @@ export function FinancePage() {
         hasActiveFilters={Boolean(listQuery.q.trim()) || financeFilterKeys.some((key) => Boolean(filters[key]))}
         loading={plansQuery.isPending || (canLoadReferences && referencesQuery.isPending)}
         rows={rows}
-        summary={
-          <OperationSummary
-            actions={financeSummaryActions}
-            ariaLabel="Ödeme planları özeti"
-            badges={financeSummaryBadges}
-            items={financeSummaryItems}
-          />
-        }
+        summary={plansQuery.data ? (
+          <section className="campus-finance-summary" aria-label="Bu sayfadaki taksitler">
+            <h2>Bu sayfadaki taksitler</h2>
+            <p>
+              Özet yalnız bu sayfada listelenen taksitleri kapsar; kurum genelinin toplamı değildir.
+              {metrics.mixedCurrencies ? " Farklı para birimleri toplanmaz; özet taksit sayısını, liste her tutarın para birimini gösterir." : ""}
+            </p>
+            <OperationSummary
+              actions={financeSummaryActions}
+              ariaLabel="Ödeme planları özeti"
+              badges={financeSummaryBadges}
+              items={financeSummaryItems}
+            />
+          </section>
+        ) : undefined}
         tableCaption="Ödeme taksitleri"
         tableDescription="Bekleyen, geciken ve ödenen taksitler seçili akademik bağlama göre listelenir."
         hideTitle
@@ -467,7 +474,7 @@ export function FinancePage() {
         studentName={receiptRow ? formatPlanStudent(receiptRow.plan) : ""}
         transactions={transactionsQuery.data ?? []}
       />
-    </>
+    </div>
   );
 }
 
@@ -852,39 +859,47 @@ function flattenInstallments(plans: PaymentPlanListRecord[]): InstallmentRow[] {
 
 function calculateMetrics(plans: PaymentPlanWithInstallmentsRecord[]) {
   const installments = plans.flatMap((plan) => plan.installments);
+  const overdue = installments.filter((installment) => installment.overdue === true);
+  const paid = installments.filter((installment) => installment.status === "PAID");
+  const pending = installments.filter((installment) => installment.status === "PENDING");
+  const mixedCurrencies = new Set(plans.map((plan) => plan.currency)).size > 1;
   return {
     currency: plans[0]?.currency ?? "TRY",
-    overdueAmount: sumAmounts(installments.filter((installment) => installment.overdue === true)),
-    paidAmount: sumAmounts(installments.filter((installment) => installment.status === "PAID")),
-    pendingAmount: sumAmounts(installments.filter((installment) => installment.status === "PENDING")),
+    mixedCurrencies,
+    overdueAmount: mixedCurrencies ? 0 : sumAmounts(overdue),
+    paidAmount: mixedCurrencies ? 0 : sumAmounts(paid),
+    pendingAmount: mixedCurrencies ? 0 : sumAmounts(pending),
+    overdueCount: overdue.length,
+    paidCount: paid.length,
+    pendingCount: pending.length,
   };
 }
 
 function buildFinanceSummaryItems(metrics: ReturnType<typeof calculateMetrics>, rowCount: number): OperationSummaryItem[] {
   return [
     {
-      description: "Bekleyen ve geciken toplam tahsilat",
+      description: "Bu sayfadaki bekleyen taksitler",
       key: "pending",
       label: "Bekleyen ödeme",
-      tone: metrics.pendingAmount > 0 ? "warning" : "success",
-      value: formatMoney(metrics.pendingAmount, metrics.currency),
+      tone: metrics.pendingCount > 0 ? "warning" : "success",
+      value: metrics.mixedCurrencies ? `${metrics.pendingCount} taksit` : formatMoney(metrics.pendingAmount, metrics.currency),
     },
     {
-      description: "Öncelikli takip gerektiren toplam",
+      description: "Bu sayfadaki vadesi geçmiş taksitler",
       key: "overdue",
       label: "Gecikmiş",
-      tone: metrics.overdueAmount > 0 ? "danger" : "success",
-      value: formatMoney(metrics.overdueAmount, metrics.currency),
+      tone: metrics.overdueCount > 0 ? "danger" : "success",
+      value: metrics.mixedCurrencies ? `${metrics.overdueCount} taksit` : formatMoney(metrics.overdueAmount, metrics.currency),
     },
     {
-      description: "Seçili kapsamda tahsil edildi",
+      description: "Bu sayfadaki ödenmiş taksitler",
       key: "paid",
       label: "Ödenen",
-      tone: metrics.paidAmount > 0 ? "success" : "default",
-      value: formatMoney(metrics.paidAmount, metrics.currency),
+      tone: metrics.paidCount > 0 ? "success" : "default",
+      value: metrics.mixedCurrencies ? `${metrics.paidCount} taksit` : formatMoney(metrics.paidAmount, metrics.currency),
     },
     {
-      description: "Liste yoğun görünümde izlenir",
+      description: "Bu sayfada listelenen kayıtlar",
       key: "rows",
       label: "Taksit satırı",
       value: formatCount(rowCount),
@@ -902,7 +917,7 @@ function buildFinanceSummaryBadges(filters: FinanceFilters, listQuery: ListQuery
     },
     {
       key: "filters",
-      label: filterCount > 0 ? `${filterCount} filtre aktif` : "Tüm finans kapsamı",
+      label: filterCount > 0 ? `${filterCount} filtre aktif` : "Sayfadaki kayıtlar",
       tone: filterCount > 0 ? "info" : "neutral",
     },
     {
@@ -917,28 +932,28 @@ function buildFinanceSummaryActions(metrics: ReturnType<typeof calculateMetrics>
   const filterCount = countActiveFinanceFilters(filters);
   return [
     {
-      detail: "Gecikmiş taksitler öncelikli tahsilat listesinde kalır",
+      detail: "Bu sayfada öncelikle takip edilecek taksitler",
       key: "overdue-follow-up",
       label: "Geciken taksit",
-      status: metrics.overdueAmount > 0 ? "Takip" : "Temiz",
-      tone: metrics.overdueAmount > 0 ? "danger" : "success",
-      value: formatMoney(metrics.overdueAmount, metrics.currency),
+      status: metrics.overdueCount > 0 ? "Takip" : "Temiz",
+      tone: metrics.overdueCount > 0 ? "danger" : "success",
+      value: `${metrics.overdueCount} taksit`,
     },
     {
-      detail: "Bekleyen ve geciken tahsilat birlikte izlenir",
+      detail: "Bu sayfada henüz ödenmemiş taksitler",
       key: "pending-collection",
       label: "Bekleyen tahsilat",
-      status: metrics.pendingAmount > 0 ? "Açık" : "Kapalı",
-      tone: metrics.pendingAmount > 0 ? "warning" : "success",
-      value: formatMoney(metrics.pendingAmount, metrics.currency),
+      status: metrics.pendingCount > 0 ? "Açık" : "Kapalı",
+      tone: metrics.pendingCount > 0 ? "warning" : "success",
+      value: `${metrics.pendingCount} taksit`,
     },
     {
-      detail: filterCount > 0 ? "Öğrenci ve akademik bağlam filtreleri aktif" : "Kurum genel finans listesi",
+      detail: filterCount > 0 ? "Öğrenci ve akademik bağlam filtreleri aktif" : "Özet yalnız getirilen sayfayı kapsar",
       key: "reconciliation-scope",
       label: "Mutabakat kapsamı",
       status: filterCount > 0 ? "Odak" : "Genel",
       tone: filterCount > 0 ? "info" : "neutral",
-      value: filterCount > 0 ? `${filterCount} filtre` : "Tüm kayıtlar",
+      value: filterCount > 0 ? `${filterCount} filtre` : "Bu sayfa",
     },
   ];
 }

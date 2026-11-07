@@ -1,1 +1,194 @@
-/* CAMPUS-B owns institution and finance workspace styles. */
+/* Campus institution and finance workspaces. Shared primitives keep their other routes unchanged. */
+@media screen {
+  .next-campus-shell .campus-institution-workspace .uh-page-header h1,
+  .next-campus-shell .next-page-frame:has(.campus-finance-workspace) > .uh-page-header h1 {
+    font-family: var(--font-campus-display);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-page-frame__body {
+    gap: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__grid,
+  .next-campus-shell .campus-finance-workspace .next-operation-summary__grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: var(--space-sm);
+    border-block: 1px solid var(--color-rule);
+    padding-block: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__item,
+  .next-campus-shell .campus-finance-workspace .next-operation-summary__item {
+    border: 0;
+    border-left: 1px solid var(--color-rule);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 var(--space-sm);
+    min-width: 0;
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__item:first-child,
+  .next-campus-shell .campus-finance-workspace .next-operation-summary__item:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .next-campus-shell .campus-institution-workspace .uh-metric-card__value,
+  .next-campus-shell .campus-finance-workspace .uh-metric-card__value {
+    font-size: var(--text-xl);
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-campus-shell .campus-institution-agenda,
+  .next-campus-shell .campus-institution-report {
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-panel);
+    background: var(--color-paper-raised);
+    padding: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-agenda .next-attention-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .next-campus-shell .campus-institution-agenda .next-attention-item {
+    border: 0;
+    border-bottom: 1px solid var(--color-rule);
+    border-radius: 0;
+    background: transparent;
+    padding: var(--space-md) 0;
+  }
+
+  .next-campus-shell .campus-institution-agenda .next-attention-item:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .next-campus-shell .campus-institution-agenda .uh-action-card__copy {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2xs) var(--space-sm);
+    align-items: center;
+  }
+
+  .next-campus-shell .campus-institution-agenda .uh-action-card__value {
+    grid-column: 2;
+    grid-row: 1;
+    color: var(--color-accent);
+    font-size: var(--text-xl);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-campus-shell .campus-institution-agenda .uh-action-card__detail {
+    grid-column: 1 / -1;
+  }
+
+  .next-campus-shell .campus-institution-report .next-institution-growth-primary {
+    gap: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-report .uh-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .next-campus-shell .campus-institution-report .next-student-growth-chart {
+    border-top: 1px solid var(--color-rule);
+    padding-top: var(--space-md);
+  }
+
+  .next-campus-shell .campus-institution-report .next-dashboard-exam-summary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .next-campus-shell .campus-institution-report .next-dashboard-exam-summary dl div:last-child {
+    background: var(--color-accent-soft);
+    padding: var(--space-xs);
+    border: 0;
+    border-radius: var(--radius-control);
+  }
+
+  .next-campus-shell .campus-exam-context {
+    grid-column: 1 / -1;
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    margin: 0;
+  }
+
+  .next-campus-shell .campus-institution-announcements {
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .next-campus-shell .campus-institution-announcements .next-attention-item {
+    background: var(--color-paper-raised);
+    border-color: var(--color-rule);
+    padding: var(--space-sm);
+  }
+
+  .next-campus-shell .campus-finance-summary h2 {
+    margin: 0 0 var(--space-2xs);
+    font-size: var(--text-lg);
+  }
+
+  .next-campus-shell .campus-finance-summary > p {
+    margin: 0 0 var(--space-sm);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+  }
+
+  .next-campus-shell .campus-finance-workspace .uh-crud-page__summary {
+    order: -1;
+    border: 0;
+    padding: 0;
+  }
+
+  .next-campus-shell .campus-finance-workspace .uh-crud-page__table-shell {
+    background: var(--color-paper-raised);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-panel);
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  .next-campus-shell .campus-institution-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media screen and (max-width: 600px) {
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__grid,
+  .next-campus-shell .campus-finance-workspace .next-operation-summary__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__item:nth-child(odd),
+  .next-campus-shell .campus-finance-workspace .next-operation-summary__item:nth-child(odd) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .next-campus-shell .campus-institution-agenda,
+  .next-campus-shell .campus-institution-report {
+    padding: var(--space-sm);
+  }
+
+  .next-campus-shell .campus-institution-workspace .next-operation-summary__item:only-child {
+    grid-column: 1 / -1;
+  }
+}

@@ -42,6 +42,37 @@ test.describe("UAT F-33 finans listesi öğrenci etiketi", () => {
     expect(state.forbiddenRequests).toEqual([]);
   });
 
+  test("finans özeti yalnız getirilen sayfayı toplar ve sunucunun gecikme bilgisini kullanır", async ({ page }) => {
+    const plans = createPaymentPlans();
+    plans[0]!.installments[0] = { ...plans[0]!.installments[0]!, overdue: true };
+    await openFinanceAsFinanceStaff(page, { plans, total: 30 });
+
+    const scope = page.getByRole("region", { exact: true, name: "Bu sayfadaki taksitler" });
+    const metrics = scope.getByRole("group", { name: "Ödeme planları özeti metrikleri" });
+    await expect(scope).toContainText("kurum genelinin toplamı değildir");
+    await expect(metrics.getByText("₺1.500,00", { exact: true })).toBeVisible();
+    // Other past due dates are not treated as overdue without the server flag.
+    await expect(metrics.getByText("₺500,00", { exact: true })).toBeVisible();
+    await expect(metrics.getByText("3", { exact: true })).toBeVisible();
+    await expect(scope).not.toContainText("₺15.000,00");
+  });
+
+  test("farklı para birimlerini toplamaz; taksit sayıları ve satır tutarlarını korur", async ({ page }) => {
+    const plans = createPaymentPlans();
+    plans[1]!.currency = "EUR";
+    const state = await openFinanceAsFinanceStaff(page, { plans });
+
+    const scope = page.getByRole("region", { exact: true, name: "Bu sayfadaki taksitler" });
+    const metrics = scope.getByRole("group", { name: "Ödeme planları özeti metrikleri" });
+    await expect(scope).toContainText("Farklı para birimleri toplanmaz");
+    await expect(metrics.getByText("3 taksit", { exact: true })).toBeVisible();
+    await expect(metrics).not.toContainText("₺");
+    await expect(metrics).not.toContainText("€");
+    const table = page.getByRole("table", { name: "Ödeme taksitleri" });
+    await expect(table.getByRole("row").filter({ hasText: "Eski kayıt ödeme planı" })).toContainText("€500,00");
+    expect(state.forbiddenRequests).toEqual([]);
+  });
+
   test("öğrenci adına göre sıralama ve arama liste isteğine yansır", async ({ page }) => {
     const state = await openFinanceAsFinanceStaff(page);
     const controls = page.getByRole("group", { name: "Liste kontrolleri" });
@@ -56,7 +87,7 @@ test.describe("UAT F-33 finans listesi öğrenci etiketi", () => {
   });
 });
 
-async function openFinanceAsFinanceStaff(page: Page): Promise<FinanceMockState> {
+async function openFinanceAsFinanceStaff(page: Page, options: { plans?: ReturnType<typeof createPaymentPlans>; total?: number } = {}): Promise<FinanceMockState> {
   const state: FinanceMockState = { forbiddenRequests: [], paymentPlanQueries: [], requestedPaths: [] };
 
   await page.route("**/api/v1/**", async (route) => {
@@ -81,7 +112,7 @@ async function openFinanceAsFinanceStaff(page: Page): Promise<FinanceMockState> 
     if (path === "/auth/refresh") return fulfillData(route, createFinanceStaffAuth());
     if (path === "/payment-plans" && request.method() === "GET") {
       state.paymentPlanQueries.push(url.searchParams);
-      return fulfillList(route, createPaymentPlans());
+      return fulfillList(route, options.plans ?? createPaymentPlans(), options.total);
     }
     return fulfillData(route, []);
   });
@@ -151,6 +182,7 @@ function createPaymentPlans() {
 function createInstallment(planId: string, id: string, dueDate: string) {
   return {
     amount: 50000,
+    overdue: false,
     createdAt: "2026-06-05T09:00:00.000Z",
     dueDate,
     id,
@@ -161,9 +193,9 @@ function createInstallment(planId: string, id: string, dueDate: string) {
   };
 }
 
-async function fulfillList(route: Route, data: unknown[]) {
+async function fulfillList(route: Route, data: unknown[], total = data.length) {
   await route.fulfill({
-    body: JSON.stringify({ data, meta: { limit: 10, page: 1, total: data.length, totalPages: 1 } }),
+    body: JSON.stringify({ data, meta: { limit: 10, page: 1, total, totalPages: Math.max(1, Math.ceil(total / 10)) } }),
     headers: { ...corsHeadersFor(route), "content-type": "application/json" },
     status: 200,
   });
