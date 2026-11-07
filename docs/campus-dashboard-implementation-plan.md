@@ -52,8 +52,8 @@ All three gates start from the same plan commit and own separate paths. Each own
 
 ## Evidence ledger
 
-- LOCAL_STATIC: UI/Web typechecks, design-token, architecture, route-manifest, agent-contract and diff checks passed. The UX baseline checker also passed after the reviewed Linux screenshots were imported.
-- LOCAL_TEST: integrated focused suite 79/79; full UI contract suite 408/408; Chromium/WebKit release-candidate suite 86/86. Visual QA satisfied all 32 scenarios after the targeted optical-layout rerun; the 21-test accessibility suite passed. The full route-family scan passed 102/102 and auth/session contracts passed 37/37. Gate B is collected from the clean integrated source before final review readiness.
+- LOCAL_STATIC: the full `pnpm ci:static` chain passed, including type/build, design-token, architecture, route, agent, OpenAPI, idempotency, role and sample-PII checks. The UX baseline checker passed after the reviewed Linux screenshots were imported.
+- LOCAL_TEST: integrated focused suite 79/79; full UI contract suite 408/408; Chromium/WebKit release-candidate suite 86/86. Visual QA satisfied all 32 scenarios after the targeted optical-layout rerun; the 21-test accessibility suite passed. The full route-family scan passed 102/102 and auth/session contracts passed 37/37. Gate B was collected once from clean integrated source: three tasks, five samples each; `web:measurement-baseline:check` passed. This is LOCAL_SYNTHETIC evidence, not a real-user performance claim.
 - CI: Linux visual workflow [42410599166](https://github.com/4rmus/o-okul/actions/runs/42410599166) passed 32/32 visual tests at `1c0c567786abdb7f7d3e846872caf9fa2fde9a84`. Its reviewed screenshot artifact has SHA-256 `b4008d72413bf89baec4b8189f482b45c589bc2fe969364ec0cfa4492944b904`; public/auth/report-card goldens are byte-identical. Full CI is tracked on [PR #240](https://github.com/4rmus/o-okul/pull/240), separately from this visual-helper evidence.
 - STAGING: not run.
 - PRODUCTION: not run.
@@ -68,4 +68,4 @@ The Campus font exposed a narrow optical-layout/button overflow. The scoped grid
 
 Gate commits: CAMPUS-A `f1172589cd1363d60459fdef22824d522b2d5dc1`, CAMPUS-B `6cd9e08acfbebfe17c0a49a804064d7e52b05811`, CAMPUS-C `5fff10a9a567cbf247fc4166aca760ded626b851`. Integration and regression fixes: `4ed9f1f43371c084a2014cc22b619e14b09526e5`.
 
-The final route scan also verified 320px portal action text and tablet optical controls after scoped spacing adjustments. Legacy login navigation tests now open the appropriate disclosure or existing drawer and inspect relocated summaries/details without removing their permission or data assertions.
+The final 102/102 route scan also verified 320px portal action text and tablet optical controls after scoped spacing adjustments. Legacy login navigation tests now open the appropriate disclosure or existing drawer and inspect relocated summaries/details without removing their permission or data assertions.
