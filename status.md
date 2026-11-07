@@ -244,6 +244,8 @@ Korunan aktif sözleşmeler:
 
 ## Açık İşler
 
+- 2026-11-07 — **CAMPUS-A/B/C** (DEC-20261107-01): customer dashboard implementation completed locally on `feat/kampus-dashboard`; gate SHAs `f1172589c`, `6cd9e08ac`, `5fff10a9a`, integrated regression commit `4ed9f1f43`. LOCAL_STATIC: type/design-token/architecture/route/agent checks passed. LOCAL_TEST: 408 UI-contract tests, 86 Chromium/WebKit release-candidate tests, 79 focused regression tests; intentional customer visual updates, original report-card golden retained. CI and Linux visual evidence follow the milestone PR; measurement evidence is refreshed before review readiness. STAGING/PRODUCTION: not run. EXTERNAL_NOT_RUN: live accounts/providers; UNPROVEN: real-user usability improvement. Plan: `docs/campus-dashboard-implementation-plan.md`.
+
 Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, onaylı) içindedir.
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 

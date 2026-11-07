@@ -52,10 +52,18 @@ All three gates start from the same plan commit and own separate paths. Each own
 
 ## Evidence ledger
 
-- LOCAL_STATIC: initial source, scope and contract review complete; code checks pending.
-- LOCAL_TEST: implementation tests pending.
-- CI: not run for this milestone yet.
+- LOCAL_STATIC: UI/Web typechecks, design-token, architecture, route-manifest, agent-contract and diff checks passed. The UX baseline checker awaits the Linux top-navigation golden only.
+- LOCAL_TEST: integrated focused suite 79/79; full UI contract suite 408/408; Chromium/WebKit release-candidate suite 86/86. Visual QA satisfied all 32 scenarios after the targeted optical-layout rerun; the 21-test accessibility suite passed. Full route-family/auth scans and the Gate B collection are being recorded before final review readiness.
+- CI: tracked on the milestone PR; a draft is used while the existing Linux golden workflow prepares the matching screenshots.
 - STAGING: not run.
 - PRODUCTION: not run.
 - EXTERNAL_NOT_RUN: live accounts, providers and real-device UAT.
 - UNPROVEN: real-user usability improvement and staging acceptance.
+
+## Integration review
+
+Three independent read-only reviews found four P2 issues, all fixed with behavior tests or existing regression coverage: the portal bottom-menu opener must be a button (not a click event); failed persona changes need a visible alert; the guardian homework action must preserve the selected child; the teacher focus action must target the lesson named by the card. No new P0/P1 was identified in those source reviews.
+
+The Campus font exposed a narrow optical-layout/button overflow. The scoped grid and 320px panel spacing were corrected without changing optical processing. The frozen report-card screenshot is captured after fonts settle and its test-only position is aligned to whole pixels; no report-card golden, paper style, dimensions, data or tolerance was changed. The temporary alignment is removed before print checks.
+
+Gate commits: CAMPUS-A `f1172589cd1363d60459fdef22824d522b2d5dc1`, CAMPUS-B `6cd9e08acfbebfe17c0a49a804064d7e52b05811`, CAMPUS-C `5fff10a9a567cbf247fc4166aca760ded626b851`. Integration and regression fixes: `4ed9f1f43371c084a2014cc22b619e14b09526e5`.
