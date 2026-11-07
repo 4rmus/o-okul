@@ -180,7 +180,7 @@ if (rawButtonTotal !== 15) {
 
 const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
 const targetedVisualGoldens = [
-  "institution-shell-rail-1440",
+  "institution-shell-topnav-1440",
   "login-panel-414",
   "report-status-1440",
   "student-portal-actions-414",
@@ -5309,7 +5309,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "const landingViewports",
   "genel giriş kartı 414px deterministik görsel sözleşmesini korur",
   'toHaveScreenshot("login-panel-414.png"',
-  'toHaveScreenshot("institution-shell-rail-1440.png"',
+  'toHaveScreenshot("institution-shell-topnav-1440.png"',
   'toHaveScreenshot("student-portal-actions-414.png"',
   'toHaveScreenshot("report-status-1440.png"',
   "hideNextDevIndicator",
@@ -5483,7 +5483,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   '"route-family-student-detail-768.png"',
   '"route-family-student-portal-414.png"',
   '"route-family-report-1440.png"',
-  'toHaveScreenshot("institution-shell-rail-1440.png"',
+  'toHaveScreenshot("institution-shell-topnav-1440.png"',
 ]);
 requireNoTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "alignFrozenReportRasterPhase",

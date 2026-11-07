@@ -23,6 +23,31 @@ görünür kılan sade bir çalışma alanıdır. Karar kaydı: DEC-20260930-01.
 
 ## Theme — Berrak
 
+### Campus customer workspaces (DEC-20261107-01)
+
+The approved Campus theme applies only to `.next-app-shell.next-campus-shell` on institution,
+teacher, student and guardian routes. Its canonical scoped tokens and semantic aliases live in
+`apps/web/app/_styles/80-campus-shell.css`. Root `tokens.css` remains the Berrak system for public,
+auth, system and print surfaces. The existing `html[data-theme]` preference controls both systems.
+
+Campus uses warm cream surfaces and petrol actions, with Manrope for body and section headings.
+Only `.campus-dashboard-title` uses the roman Fraunces family through `--font-campus-display`.
+Both fonts are bundled locally, include Turkish glyphs and retain their SIL OFL licenses in
+`apps/web/app/fonts/`; their preload is disabled so unrelated surfaces retain the existing font
+request behavior. Report cards explicitly retain IBM Plex Sans and their pinned Berrak palette.
+
+Desktop navigation groups the existing authorized hub links above the workspace. It consumes the
+same filtered manifest as the mobile drawer; it never supplies a second permissions list. Search,
+breadcrumbs, persona switching, theme, sessions, support, notification-device settings and logout
+remain available. The drawer remains the mobile navigation and is also available from the desktop
+Menu button. Disclosure menus close with Escape and return focus; unsaved-work dialogs retain a
+visible focus return target. No campus/term shell filter is reintroduced.
+
+Customer dashboards use existing real data and role scopes. The Campus prototype supplies only
+layout and visual direction; its sample data and abbreviated menu labels are not production
+contracts. The remaining Berrak specifications below continue to govern excluded surfaces and
+unchanged behavior.
+
 Kanonik açık tema değerleri bu dosyanın `### tokens.css` ihracındadır; kökteki
 `tokens.css` bu bloğun birebir üretim kopyasıdır. Token adları (`paper`, `ink`,
 `rule`, `accent`) Almanac'tan korunur; yalnız değerler değişir.
