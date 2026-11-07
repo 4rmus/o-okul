@@ -19,6 +19,10 @@ function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
 async function expandSidebarGroup(page: Page, name: string) {
   await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
   const groupButton = page.getByRole("navigation", { name: "Ana menü" }).getByRole("button", { name, exact: true });
+  if (await groupButton.count() === 0 && institutionRoutes.some((route) => route.group === name)) {
+    await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+    await expect(page.locator("#next-sidebar")).toHaveAttribute("data-mobile-open", "true");
+  }
   if (await groupButton.count() && (await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
@@ -5128,6 +5132,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   expect(page.url()).not.toContain("preview-token");
   await expect(heading(page, { name: "Veli Portalı" })).toBeVisible();
   await expect(page.getByLabel("Rol önizleme bilgisi").getByText("Yalnızca Görüntüleme")).toBeVisible();
+  await page.getByText("Öğrenci bilgileri ve diğer ayrıntılar", { exact: true }).click();
   await expect(page.getByLabel("Profil").getByText("Ada A")).toBeVisible();
   await expect(page.getByLabel("Bildirim tercihleri").getByText("Yalnızca görüntüleme sırasında bildirim tercihleri değiştirilemez.")).toBeVisible();
   await expect(page.getByLabel("Destek talepleri").getByText("Yalnızca görüntüleme sırasında destek talebi açılamaz.")).toBeVisible();
