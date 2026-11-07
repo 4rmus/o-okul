@@ -10,12 +10,14 @@ interface PortalFrameProps {
   actions?: ReactNode;
   children: ReactNode;
   context?: PortalFrameContext;
+  dashboard?: "teacher" | "student" | "guardian";
 }
 
 interface PortalWorkspaceProps {
   ariaLabel: string;
   main: ReactNode;
   side: ReactNode;
+  collapseDetails?: boolean;
 }
 
 interface PortalFrameContext {
@@ -31,13 +33,14 @@ interface PortalMetricItem {
   value: number | string;
 }
 
-export function PortalFrame({ actions, children, context, subtitle, title }: PortalFrameProps) {
-  return (
+export function PortalFrame({ actions, children, context, dashboard, subtitle, title }: PortalFrameProps) {
+  const page = (
     <PageFrame title={title} subtitle={subtitle} actions={actions}>
       {context ? <PortalContextStrip context={context} /> : null}
       <div className="next-portal-stack">{children}</div>
     </PageFrame>
   );
+  return dashboard ? <div className={`campus-portal campus-portal--${dashboard}`}>{page}</div> : page;
 }
 
 function PortalContextStrip({ context }: { context: PortalFrameContext }) {
@@ -83,12 +86,17 @@ export function PortalMetricGrid({ items }: { items: PortalMetricItem[] }) {
   );
 }
 
-export function PortalWorkspace({ ariaLabel, main, side }: PortalWorkspaceProps) {
+export function PortalWorkspace({ ariaLabel, collapseDetails = false, main, side }: PortalWorkspaceProps) {
   return (
     <section className="next-portal-workspace" aria-label={ariaLabel}>
       <div className="next-portal-workspace__main">{main}</div>
       <section className="next-portal-workspace__side" aria-label={`${ariaLabel} ayrıntıları`}>
-        {side}
+        {collapseDetails ? (
+          <details className="campus-portal-details">
+            <summary>Öğrenci bilgileri ve diğer ayrıntılar</summary>
+            <div>{side}</div>
+          </details>
+        ) : side}
       </section>
     </section>
   );
@@ -175,11 +183,13 @@ export function PortalDailyBrief({
   scope,
   summary,
   title = "Günlük durum",
+  primaryAction,
 }: {
   items: PortalDailyBriefItem[];
   scope?: PortalDailyBriefScope;
   summary: string;
   title?: string;
+  primaryAction?: { href: string; label: string };
 }) {
   return (
     <Panel
@@ -194,6 +204,7 @@ export function PortalDailyBrief({
           <span>{scope.label}</span>
           <strong>{scope.value}</strong>
           {scope.detail ? <small>{scope.detail}</small> : null}
+          {primaryAction ? <a className="uh-button uh-button--primary campus-portal-primary-action" href={primaryAction.href}>{primaryAction.label}</a> : null}
         </div>
       ) : null}
       <MetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">

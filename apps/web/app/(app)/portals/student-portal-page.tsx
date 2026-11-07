@@ -55,7 +55,7 @@ import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistory
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { formatAttendanceSummary } from "../_shared/attendance-summary.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
-import { formatPercentNumber, formatStudentProgressSummary, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export type StudentPortalView = "announcements" | "attendance" | "homework" | "overview" | "profile" | "reports" | "support";
 
@@ -195,7 +195,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const homeworkPartial = !homeworkLoading && (homeworkAssignmentsQuery.isError || classHomeworkQuery.isError);
   const reportLoading = reportQuery.isLoading;
   const announcementsLoading = announcementsQuery.isLoading;
-  const progressSummary = formatStudentProgressSummary(data.progress);
   function selectReportExam(examId: string) {
     const nextSearchParams = new URLSearchParams(searchParams.toString());
     if (examId) nextSearchParams.set("examId", examId);
@@ -286,6 +285,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     .filter((item): item is PortalActionItem => Boolean(item));
   return (
     <PortalFrame
+      dashboard={view === "overview" ? "student" : undefined}
       title="Öğrenci Portalı"
       subtitle={portalSubtitle}
       context={studentPortalContext(view, portalSubtitle, isRolePreview)}
@@ -293,30 +293,19 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       {view === "overview" ? (
         <>
           <PortalDailyBrief
-            summary="Bugün teslim edilecek ödevler, son sınav Başarı % ve okunmamış duyurular tek bakışta."
+            primaryAction={{ href: studentPortalHref("/ogrenci/odevler", isRolePreview), label: "Ödevlerimi aç" }}
+            summary="Bugün teslim edilecek ödevler ve sıradaki çalışmanız."
             scope={{
               detail: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
-              label: "Öğrenci",
-              value: "Kişisel görünüm",
+              label: "Bugünün odağı",
+              value: homeworkLoading ? panelLoadingValue : openHomework.find((item) => studentHomeworkFeedGroup(item, now) === "today")?.title ?? openHomework[0]?.title ?? "Bugünün çalışmaları",
             }}
             items={[
               {
                 label: "Bugün teslim",
-                value: homeworkLoading ? panelLoadingValue : `${dueTodayCount} ödev`,
-                detail: `${openHomeworkCount} atama içinde`,
-                tone: dueTodayCount > 0 ? "warning" : "neutral",
-              },
-              {
-                label: "Son sınav",
-                value: reportLoading ? panelLoadingValue : reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
-                detail: `${progressSummary} · ${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
-                tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
-              },
-              {
-                label: "Duyuru",
-                value: announcementsLoading ? panelLoadingValue : unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
-                detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
-                tone: unreadAnnouncements > 0 ? "warning" : "success",
+                value: homeworkLoading ? panelLoadingValue : homeworkPartial ? (dueTodayCount > 0 ? `en az ${dueTodayCount} ödev` : "Alınamadı") : `${dueTodayCount} ödev`,
+                detail: homeworkPartial ? "Ödevlerin bir kısmı alınamadı" : `${openHomeworkCount} atama içinde`,
+                tone: homeworkPartial || dueTodayCount > 0 ? "warning" : "neutral",
               },
             ]}
           />
@@ -369,6 +358,19 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
                 termNames={termNameById}
               />}
             </div> : null}
+            {view === "overview" || view === "announcements" ? <div id="portal-announcements">
+              <PortalPanelGate label="Duyurular" queries={[announcementsQuery]} subject="Duyurular" title="Duyurular">
+                <AnnouncementsPanel
+                  announcements={data.announcements}
+                  limit={view === "overview" ? 3 : undefined}
+                  moreHref={view === "overview" ? studentPortalHref("/ogrenci/duyurular", isRolePreview) : undefined}
+                  readOnly={isRolePreview}
+                  onMarkRead={(announcement) =>
+                    auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => announcementsQuery.refetch()) : undefined
+                  }
+                />
+              </PortalPanelGate>
+            </div> : null}
             {view === "overview" ? <div id="portal-progress-series">
               {overviewQuery.isLoading ? <PanelLoading label="Gelişimim" title="Gelişimim" /> : <ProgressSeriesPanel
                 ariaLabel="Gelişimim"
@@ -396,19 +398,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
                   progress={data.progress}
                   report={data.report}
                   termNames={termNameById}
-                />
-              </PortalPanelGate>
-            </div> : null}
-            {view === "overview" || view === "announcements" ? <div id="portal-announcements">
-              <PortalPanelGate label="Duyurular" queries={[announcementsQuery]} subject="Duyurular" title="Duyurular">
-                <AnnouncementsPanel
-                  announcements={data.announcements}
-                  limit={view === "overview" ? 3 : undefined}
-                  moreHref={view === "overview" ? studentPortalHref("/ogrenci/duyurular", isRolePreview) : undefined}
-                  readOnly={isRolePreview}
-                  onMarkRead={(announcement) =>
-                    auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => announcementsQuery.refetch()) : undefined
-                  }
                 />
               </PortalPanelGate>
             </div> : null}
