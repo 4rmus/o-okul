@@ -830,7 +830,7 @@ async function openTeacherPortal(
 async function clickSidebarRoute(page: Page, groupName: string, linkName: string, expectedPath: string) {
   const navigation = page.getByRole("navigation", { name: "Ana menü" });
   const groupButton = navigation.getByRole("button", { exact: true, name: groupName });
-  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+  if (await groupButton.count() && (await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
   const link = navigation.getByRole("link", { exact: true, name: linkName });

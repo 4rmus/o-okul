@@ -246,34 +246,37 @@ export function TeacherTodayPage() {
   ];
 
   return (
-    <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
+    <PortalFrame dashboard="teacher" title="Öğretmen Portalı" subtitle="Bugün">
       {isRolePreview ? <RolePreviewNotice /> : null}
-      <PortalDailyBrief
-        items={[
-          { label: "Bugünkü ders", value: `${lessons.length} ders`, detail: todayLabel, tone: lessons.length > 0 ? "info" : "neutral" },
-          {
-            label: "Yoklama",
-            value: !attendanceKnown || lessons.length === 0 ? "-" : lessonsWithoutAttendance.length > 0 ? `${lessonsWithoutAttendance.length} ders bekliyor` : "Tamam",
-            detail: !attendanceKnown || lessons.length === 0
-              ? (lessons.length > 0 ? "Ders akışında görülür" : "Bugün planlı ders yok")
-              : `${lessons.length - lessonsWithoutAttendance.length}/${lessons.length} ders alındı`,
-            tone: !attendanceKnown || lessons.length === 0 ? "neutral" : overdueAttendance ? "warning" : lessonsWithoutAttendance.length > 0 ? "info" : "success",
-          },
-          {
-            label: "Bekleyen iş",
-            value: pendingWork.length > 0 ? `${pendingWork.length} iş` : "Tamam",
-            detail: pendingWork.length > 0 ? pendingWork.join(" · ") : "Bekleyen iş yok",
-            tone: pendingWork.length > 0 ? "warning" : "success",
-          },
-        ]}
-        scope={focusLesson && focusLabel ? { label: focusLabel, value: focusLesson.title, detail: lessonDetail(focusLesson, now, { withAttendance: true }) } : undefined}
-        summary="Şimdiki veya sıradaki ders, yoklama durumu ve bekleyen işler."
-        title="Bugün"
-      />
-      <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" eyebrow="Bugün yapılacaklar" items={inbox} title="Bekleyen işler" />
-      <Panel aria-label="Bugünkü dersler" description={`${todayLabel} tarihli dersler.`} title="Bugünkü dersler">
-        <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={lessons} />
-      </Panel>
+      <div className="campus-teacher-board">
+        <PortalDailyBrief
+          primaryAction={{ href: attendanceAction.href, label: isRolePreview ? "Ders akışını incele" : attendanceAction.actionLabel }}
+          items={[
+            { label: "Bugünkü ders", value: `${lessons.length} ders`, detail: todayLabel, tone: lessons.length > 0 ? "info" : "neutral" },
+            {
+              label: "Yoklama",
+              value: !attendanceKnown || lessons.length === 0 ? "-" : lessonsWithoutAttendance.length > 0 ? `${lessonsWithoutAttendance.length} ders bekliyor` : "Tamam",
+              detail: !attendanceKnown || lessons.length === 0
+                ? (lessons.length > 0 ? "Ders akışında görülür" : "Bugün planlı ders yok")
+                : `${lessons.length - lessonsWithoutAttendance.length}/${lessons.length} ders alındı`,
+              tone: !attendanceKnown || lessons.length === 0 ? "neutral" : overdueAttendance ? "warning" : lessonsWithoutAttendance.length > 0 ? "info" : "success",
+            },
+            {
+              label: "Bekleyen iş",
+              value: pendingWork.length > 0 ? `${pendingWork.length} iş` : "Tamam",
+              detail: pendingWork.length > 0 ? pendingWork.join(" · ") : "Bekleyen iş yok",
+              tone: pendingWork.length > 0 ? "warning" : "success",
+            },
+          ]}
+          scope={focusLesson && focusLabel ? { label: focusLabel, value: focusLesson.title, detail: lessonDetail(focusLesson, now, { withAttendance: true }) } : undefined}
+          summary="Şimdiki veya sıradaki ders, yoklama durumu ve bekleyen işler."
+          title="Bugün"
+        />
+        <Panel className="campus-teacher-timetable" aria-label="Bugünkü dersler" description={`${todayLabel} tarihli dersler.`} title="Bugünkü dersler">
+          <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={lessons} />
+        </Panel>
+        <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" eyebrow="Bugün yapılacaklar" items={inbox} title="Bekleyen işler" />
+      </div>
     </PortalFrame>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 import {
   ArcElement,
   BarElement,
@@ -67,19 +67,20 @@ const defaultChartColors: ChartColors = {
 };
 
 function useChartColors() {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [colors, setColors] = useState(defaultChartColors);
 
   useEffect(() => {
     const readColors = () => setColors({
-      accent: chartToken("--chart-accent"),
-      danger: chartToken("--chart-danger"),
-      grid: chartToken("--chart-grid"),
-      neutral: chartToken("--chart-neutral"),
-      primary: chartToken("--chart-primary"),
-      primarySoft: chartToken("--chart-primary-soft"),
-      success: chartToken("--chart-success"),
-      surface: chartToken("--chart-surface"),
-      text: chartToken("--chart-text"),
+      accent: chartToken("--chart-accent", containerRef.current),
+      danger: chartToken("--chart-danger", containerRef.current),
+      grid: chartToken("--chart-grid", containerRef.current),
+      neutral: chartToken("--chart-neutral", containerRef.current),
+      primary: chartToken("--chart-primary", containerRef.current),
+      primarySoft: chartToken("--chart-primary-soft", containerRef.current),
+      success: chartToken("--chart-success", containerRef.current),
+      surface: chartToken("--chart-surface", containerRef.current),
+      text: chartToken("--chart-text", containerRef.current),
     });
     readColors();
     // Tema değişince (html[data-theme]) token'lar yeniden okunur; grafik yeni renklerle çizilir.
@@ -88,12 +89,12 @@ function useChartColors() {
     return () => observer.disconnect();
   }, []);
 
-  return colors;
+  return { colors, containerRef };
 }
 
-function chartToken(name: string) {
+function chartToken(name: string, container: HTMLElement | null) {
   if (typeof document === "undefined") return "currentColor";
-  const token = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const token = getComputedStyle(container ?? document.documentElement).getPropertyValue(name).trim();
   if (!token) return "currentColor";
 
   const canvas = document.createElement("canvas");
@@ -204,7 +205,7 @@ export interface ExamResultDonutProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function ExamResultDonut({ className, result, tableMode = "visible", ...props }: ExamResultDonutProps) {
-  const colors = useChartColors();
+  const { colors, containerRef } = useChartColors();
   const correct = result.correct ?? 0;
   const wrong = result.wrong ?? 0;
   const blank = result.blank ?? 0;
@@ -251,7 +252,7 @@ export function ExamResultDonut({ className, result, tableMode = "visible", ...p
   };
 
   return (
-    <div {...props} className={classNames("uh-exam-result-donut", className)}>
+    <div {...props} ref={containerRef} className={classNames("uh-exam-result-donut", className)}>
       {total > 0 ? (
         <div className="uh-chart-canvas-shell uh-chart-canvas-shell--donut">
           <Doughnut data={data} options={options} />
@@ -321,7 +322,7 @@ export function ClassCompareBar({
   valueLabel = "Başarı %",
   ...props
 }: ClassCompareBarProps) {
-  const colors = useChartColors();
+  const { colors, containerRef } = useChartColors();
   const rows = classes.map((record) => ({
     chartLabel: record.chartLabel ?? record.className ?? "Sınıfsız",
     id: record.classId ?? record.className ?? "no-class",
@@ -392,7 +393,7 @@ export function ClassCompareBar({
   };
 
   return (
-    <div {...props} className={classNames("uh-class-compare-bar", className)}>
+    <div {...props} ref={containerRef} className={classNames("uh-class-compare-bar", className)}>
       {rows.length > 0 ? <Bar data={data} options={options} /> : <ChartEmptyState label={emptyLabel} />}
       <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
@@ -442,7 +443,7 @@ export function PracticeScoreBar({
   tableMode = "visible",
   ...props
 }: PracticeScoreBarProps) {
-  const colors = useChartColors();
+  const { colors, containerRef } = useChartColors();
   const rows = scores.filter((score) => Number.isFinite(score.practiceScore));
   const data: ChartData<"bar", number[], string> = {
     labels: rows.map((score) => score.type === "SAY" ? "Sayısal" : score.type === "SOZ" ? "Sözel" : score.type),
@@ -481,7 +482,7 @@ export function PracticeScoreBar({
   };
 
   return (
-    <div {...props} className={classNames("uh-practice-score-bar", className)}>
+    <div {...props} ref={containerRef} className={classNames("uh-practice-score-bar", className)}>
       {rows.length > 0 ? <Bar data={data} options={options} /> : <ChartEmptyState label="Hesaplanmış puan yok" />}
       <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
@@ -527,6 +528,8 @@ export interface ProgressLineChartProps extends HTMLAttributes<HTMLDivElement> {
   caption?: string;
   emptyLabel?: string;
   points: ProgressLineChartPoint[];
+  fillArea?: boolean;
+  xAxisLabel?: string;
   tableMode?: ChartTableMode;
 }
 
@@ -535,10 +538,12 @@ export function ProgressLineChart({
   className,
   emptyLabel = "Gelişim verisi yok",
   points,
+  fillArea = false,
+  xAxisLabel,
   tableMode = "visible",
   ...props
 }: ProgressLineChartProps) {
-  const colors = useChartColors();
+  const { colors, containerRef } = useChartColors();
   // Ölçüm etiketi sınav adıdır; ad yoksa sınav tarihi (saklanmamışsa rapor tarihi), o da yoksa sıra numarası kullanılır.
   const rows = points.map((point, index) => {
     const examTitle = point.examTitle?.trim() || undefined;
@@ -548,18 +553,19 @@ export function ProgressLineChart({
       dateLabel: examTitle ? dateLabel : undefined,
       id: point.snapshotId ?? point.generatedAt ?? String(index),
       label: examTitle ?? dateLabel ?? `Ölçüm ${index + 1}`,
-      net: point.total.net ?? 0,
+      net: point.total.net,
       questionCount: scoreQuestionCount(point.total),
       standardScore: point.total.standardScore ?? 0,
       successRate: scoreSuccessRate(point.total),
     };
   });
-  const data: ChartData<"line", number[], string> = {
+  const data: ChartData<"line", (number | null)[], string> = {
     labels: rows.map((point) => point.label),
     datasets: [
       {
         label: "Başarı %",
-        data: rows.map((point) => clampPercent(point.successRate)),
+        data: rows.map((point) => point.successRate === undefined ? null : clampPercent(point.successRate)),
+        fill: fillArea,
         borderColor: colors.primary,
         backgroundColor: colors.primarySoft,
         pointBackgroundColor: colors.primary,
@@ -593,6 +599,7 @@ export function ProgressLineChart({
     },
     scales: {
       x: {
+        ...(xAxisLabel ? { title: { display: true, text: xAxisLabel } } : {}),
         grid: {
           display: false,
         },
@@ -621,7 +628,7 @@ export function ProgressLineChart({
   };
 
   return (
-    <div {...props} className={classNames("uh-progress-line-chart", className)}>
+    <div {...props} ref={containerRef} className={classNames("uh-progress-line-chart", className)}>
       {rows.length > 0 ? <Line data={data} options={options} /> : <ChartEmptyState label={emptyLabel} />}
       <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
@@ -679,7 +686,7 @@ export function TopicRadarChart({
   tableMode = "visible",
   ...props
 }: TopicRadarChartProps) {
-  const colors = useChartColors();
+  const { colors, containerRef } = useChartColors();
   const rows = branches.map((branch) => ({
     chartLabel: branch.chartLabel ?? branch.branch,
     name: branch.branch,
@@ -745,7 +752,7 @@ export function TopicRadarChart({
   };
 
   return (
-    <div {...props} className={classNames("uh-topic-radar-chart", className)}>
+    <div {...props} ref={containerRef} className={classNames("uh-topic-radar-chart", className)}>
       {rows.length > 0 ? <Bar data={barData} options={barOptions} /> : <ChartEmptyState label={emptyLabel} />}
       <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>

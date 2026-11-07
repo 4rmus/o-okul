@@ -106,7 +106,7 @@ test.describe("Portal panel yalıtımı", () => {
     await expect(homeworkAction).toHaveAttribute("aria-label", /Eksik/);
     await expect(homeworkAction).not.toHaveAttribute("aria-label", /Tamam/);
     await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toContainText("en az 1 açık ödev");
-    const metric = page.getByRole("region", { exact: true, name: "Portal özeti" }).locator(".uh-metric-card").filter({ hasText: "Açık ödev" });
+    const metric = page.getByRole("group", { exact: true, name: "Günlük durum özeti" }).locator(".uh-metric-card").filter({ hasText: "Ödev" });
     await expect(metric).toContainText("en az 1");
     await expect(metric).toHaveClass(/uh-metric-card--warning/);
     await expect(metric).not.toHaveClass(/uh-metric-card--success/);
