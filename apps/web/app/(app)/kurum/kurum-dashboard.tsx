@@ -152,6 +152,7 @@ export function KurumDashboard() {
                     href={item.href}
                     key={item.title}
                     label={item.title}
+                  state="İncele →"
                     tone="warning"
                     value={item.value}
                   />
@@ -222,6 +223,7 @@ export function KurumDashboard() {
                   caption="Son sınav sınıf başarı karşılaştırması"
                   classes={classCompare}
                   emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
+                  tableMode="details"
                 />
               </ReportChartPanel>
             </div>

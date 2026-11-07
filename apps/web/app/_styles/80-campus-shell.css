@@ -144,6 +144,10 @@
     --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
     --font-display: var(--font-body);
   }
+  .next-campus-shell .uh-button {
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
   .next-campus-header {
     min-width: 0;
   }
@@ -320,6 +324,14 @@
   }
 
   @media (max-width: 1023px) {
+    .next-campus-shell .next-optical-quarantine-panel {
+      padding: var(--space-sm);
+    }
+    .next-campus-shell .next-optical-format-grid,
+    .next-campus-shell .next-optical-upload-grid,
+    .next-campus-shell .next-optical-report-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
     .next-campus-header {
       display: none;
     }
@@ -345,5 +357,11 @@
 @media print {
   .next-campus-header {
     display: none !important;
+  }
+}
+
+@media screen and (max-width: 20rem) {
+  .next-campus-shell .next-optical-quarantine-panel {
+    padding: var(--space-2xs);
   }
 }

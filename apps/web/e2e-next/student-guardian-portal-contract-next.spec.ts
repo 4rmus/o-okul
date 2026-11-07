@@ -14,6 +14,16 @@ const corsHeaders = {
 };
 
 test.describe("Öğrenci veli portalı sözleşmesi", () => {
+  test("veli günlük ödev düğmesi seçili ikinci çocuğu hedef sayfada korur", async ({ page }) => {
+    await openGuardianPortal(page, { height: 900, width: 1280 });
+    await page.getByRole("button", { name: "Bora Yilmaz" }).click();
+    const action = page.getByRole("region", { exact: true, name: "Günlük durum" }).getByRole("link", { name: "Ödevleri incele" });
+    await expect(action).toHaveAttribute("href", "/veli/odevler?studentId=student-b");
+    await action.click();
+    await expect(page).toHaveURL(/\/veli\/odevler\?studentId=student-b$/);
+    await expect(page.getByRole("button", { name: "Bora Yilmaz" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Ada Kaya" })).toHaveAttribute("aria-pressed", "false");
+  });
   for (const viewport of [
     { height: 812, width: 320 },
     { height: 812, width: 375 },

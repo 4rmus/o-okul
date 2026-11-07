@@ -3,6 +3,7 @@
   .next-campus-shell .campus-institution-workspace .uh-page-header h1,
   .next-campus-shell .next-page-frame:has(.campus-finance-workspace) > .uh-page-header h1 {
     font-family: var(--font-campus-display);
+    font-size: var(--campus-title-size);
     font-weight: 500;
     letter-spacing: -0.03em;
   }
@@ -13,7 +14,7 @@
 
   .next-campus-shell .campus-institution-board {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
     align-items: start;
     gap: var(--space-md);
   }
@@ -58,17 +59,36 @@
     padding: var(--space-md);
   }
 
+  .next-campus-shell .campus-institution-agenda {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .next-campus-shell .campus-institution-report {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .next-campus-shell .campus-institution-agenda .next-attention-list {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
 
   .next-campus-shell .campus-institution-agenda .next-attention-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-xs);
     border: 0;
     border-bottom: 1px solid var(--color-rule);
     border-radius: 0;
     background: transparent;
     padding: var(--space-md) 0;
+  }
+
+  .next-campus-shell .campus-institution-agenda .uh-action-card__state {
+    color: var(--color-accent);
+    white-space: nowrap;
   }
 
   .next-campus-shell .campus-institution-agenda .next-attention-item:last-child {
@@ -107,6 +127,8 @@
   }
 
   .next-campus-shell .campus-institution-report .next-student-growth-chart {
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 0;
     border-top: 1px solid var(--color-rule);
     padding-top: var(--space-md);
   }
@@ -168,6 +190,11 @@
 @media screen and (max-width: 1024px) {
   .next-campus-shell .campus-institution-board {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .next-campus-shell .campus-institution-agenda,
+  .next-campus-shell .campus-institution-report {
+    grid-area: auto;
   }
 }
 

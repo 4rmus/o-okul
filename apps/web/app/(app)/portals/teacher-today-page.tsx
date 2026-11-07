@@ -250,7 +250,10 @@ export function TeacherTodayPage() {
       {isRolePreview ? <RolePreviewNotice /> : null}
       <div className="campus-teacher-board">
         <PortalDailyBrief
-          primaryAction={{ href: attendanceAction.href, label: isRolePreview ? "Ders akışını incele" : attendanceAction.actionLabel }}
+          primaryAction={{
+            href: focusLesson ? attendanceHref(focusLesson) : href("/ogretmen/ders-akisi"),
+            label: isRolePreview || !focusLesson ? "Ders akışını incele" : focusLesson.attendanceTaken ? "Yoklamayı gör" : "Yoklama al",
+          }}
           items={[
             { label: "Bugünkü ders", value: `${lessons.length} ders`, detail: todayLabel, tone: lessons.length > 0 ? "info" : "neutral" },
             {

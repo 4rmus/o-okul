@@ -18,7 +18,7 @@ function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
 
 async function expandSidebarGroup(page: Page, name: string) {
   const groupButton = page.getByRole("navigation", { name: "Ana menü" }).getByRole("button", { name, exact: true });
-  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+  if (await groupButton.count() && (await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
 }

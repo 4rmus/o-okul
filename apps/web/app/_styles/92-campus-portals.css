@@ -2,7 +2,7 @@
 @media screen {
   .next-campus-shell .campus-portal > .next-page-frame > .uh-page-header h1 {
     font-family: var(--font-campus-display);
-    font-size: clamp(1.75rem, 3vw, 2.375rem);
+    font-size: var(--campus-title-size);
     font-weight: 500;
     line-height: 1.2;
   }

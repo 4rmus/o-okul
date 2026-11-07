@@ -285,12 +285,12 @@ requireTokens("packages/ui/src/components/button.tsx", files.button, [
 ]);
 
 requireTokens("packages/ui/src/components/charts.tsx", files.charts, [
-  'chartToken("--chart-primary")',
-  'chartToken("--chart-accent")',
-  'chartToken("--chart-success")',
-  'chartToken("--chart-danger")',
-  'chartToken("--chart-neutral")',
-  'chartToken("--chart-grid")',
+  'chartToken("--chart-primary", containerRef.current)',
+  'chartToken("--chart-accent", containerRef.current)',
+  'chartToken("--chart-success", containerRef.current)',
+  'chartToken("--chart-danger", containerRef.current)',
+  'chartToken("--chart-neutral", containerRef.current)',
+  'chartToken("--chart-grid", containerRef.current)',
   "getImageData(0, 0, 1, 1)",
   'padStart(2, "0")',
   "animation: false",

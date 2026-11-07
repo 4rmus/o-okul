@@ -5,6 +5,22 @@ import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 const origin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const headers = { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", "access-control-allow-headers": "authorization,content-type,x-csrf-token", "access-control-allow-methods": "GET,POST,OPTIONS" };
 
+test("mobil portal Daha fazla menüsü kapanınca odağı kendi düğmesine döndürür", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await open(page, "STUDENT", "/ogrenci/duyurular");
+  await page.setViewportSize({ width: 375, height: 812 });
+  const more = page.getByRole("button", { name: "Daha fazla" });
+  await more.click();
+  await expect(page.getByRole("button", { name: "Ana menüyü kapat" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  await more.click();
+  await page.getByRole("button", { name: "Ana menüyü kapat" }).click();
+  await expect(more).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
 test("Kampüs üst menüsü mevcut hub bağlantılarını, klavyeyi ve odak dönüşünü korur", async ({ page }) => {
   await open(page, "TENANT_ADMIN", "/kurum");
   const nav = page.locator(".next-campus-nav");

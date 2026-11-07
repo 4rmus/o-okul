@@ -399,7 +399,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       {view === "overview" ? (
         <>
           <PortalDailyBrief
-            primaryAction={{ href: guardianPortalHref("/veli/odevler", isRolePreview), label: "Ödevleri incele" }}
+            primaryAction={{ href: guardianPortalHref("/veli/odevler", isRolePreview, resolvedStudentId), label: "Ödevleri incele" }}
             summary="Seçili öğrencinin ödevleri, okuldan haberler ve destek takibi."
             scope={{
               detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "Finans görünürlüğü açık" : "Finans görünürlüğü kapalı",
@@ -761,8 +761,11 @@ function isOpenSupportTicket(ticket: SupportTicketRecord) {
   return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
 }
 
-function guardianPortalHref(path: string, isRolePreview: boolean) {
-  return isRolePreview ? `${path}?rolePreview=1` : path;
+function guardianPortalHref(path: string, isRolePreview: boolean, studentId?: string) {
+  const params = new URLSearchParams();
+  if (isRolePreview) params.set("rolePreview", "1");
+  if (studentId) params.set("studentId", studentId);
+  return params.size ? `${path}?${params}` : path;
 }
 
 function guardianPortalSubtitle(view: GuardianPortalView, fallback: string) {

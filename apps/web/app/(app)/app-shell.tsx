@@ -456,7 +456,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               {personaSwitchLabel(target, isPersonaSwitching)}
             </Button>
           ))}
-          {personaSwitchError ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
           <Link className="next-sidebar-link" href="/hesap/oturumlar" aria-current={navCurrent("/hesap/oturumlar")}>
             <ShieldCheck className="next-sidebar-link-icon" size={16} aria-hidden="true" />
             <span>Oturumlar</span>
@@ -487,6 +486,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {!isCampusShell ? desktopTopBar : null}
         <RouteBreadcrumb pathname={pathname} />
+        {personaSwitchError ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
         {children}
       </main>
       {portalBottomNavRoot ? <PortalBottomNav isActive={isActive} onMore={openMobileNav} root={portalBottomNavRoot} /> : null}
