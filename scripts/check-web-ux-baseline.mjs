@@ -180,7 +180,7 @@ if (rawButtonTotal !== 15) {
 
 const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
 const targetedVisualGoldens = [
-  "institution-shell-rail-1440",
+  "institution-shell-topnav-1440",
   "login-panel-414",
   "report-status-1440",
   "student-portal-actions-414",
@@ -293,7 +293,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts e2e-next/term-transition-wizard-next.spec.ts e2e-next/list-export-next.spec.ts e2e-next/level-analytics-next.spec.ts e2e-next/teacher-today-counts-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts e2e-next/format-next.spec.ts e2e-next/portal-panel-isolation-next.spec.ts e2e-next/development-assessment-next.spec.ts e2e-next/portal-announcement-bell-next.spec.ts e2e-next/term-transition-wizard-next.spec.ts e2e-next/list-export-next.spec.ts e2e-next/level-analytics-next.spec.ts e2e-next/teacher-today-counts-next.spec.ts e2e-next/campus-shell-next.spec.ts e2e-next/campus-institution-next.spec.ts e2e-next/finance-student-label-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -342,7 +342,7 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Kurum başarı görünümü" })',
   'getByRole("group", { name: "Kurum başarı görünümü metrikleri" })',
   'dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/)',
-  'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
+  'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(1)',
   'getByRole("region", { exact: true, name: "Bugün ilgilenmeniz gerekenler" })',
   'getByRole("region", { exact: true, name: "Son sınav ve rapor durumu" })',
   "shell komut paleti yüksek etkili axe ihlali olmadan klavye akışını korur",
@@ -472,7 +472,7 @@ requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   'className="next-dashboard-onboarding"',
   'title="Kurumunuzu kurmaya başlayın"',
   "Kuruluma git",
-  'className="next-attention-panel"',
+  'className="next-attention-panel campus-institution-agenda"',
   'title="Bugün ilgilenmeniz gerekenler"',
   '<ActionCard',
   'as="a"',
@@ -1525,10 +1525,10 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "/me/guardian/students/student-a/homework/material-assignments",
   "/me/guardian/students/student-b/homework/material-assignments",
   "/me/guardian/homework/material-assignments",
-  "Başarı % ana metrik",
-  "Finans görünürlüğü izin kapsamına bağlıdır",
+  'getByRole("region", { name: "Portal rapor özeti" })).toContainText("Başarı %")',
+  'expect(paymentPlanRequests).not.toContain("/me/guardian/students/student-b/payment-plans")',
   'getByRole("group", { exact: true, name: "Günlük durum özeti" })',
-  '["Bugün teslim", "Son sınav", "Duyuru"]',
+  '["Bugün teslim"]',
   "next-portal-focus-target",
   "expectNoClippedVisibleText",
   'getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })',
@@ -4336,8 +4336,8 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "Ödeme izni kapalı",
   "Finans görünürlüğü kapalı",
   "selectedStudentDetail",
-  'label: "Ödeme planı"',
-  'value: financeLoading ? panelLoadingValue : canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı"',
+  '<PaymentPlansPanel canViewFinance={canViewFinance}',
+  'const canViewFinance = permissionFresh && preferencesQuery.data?.canViewFinance === true;',
   "StudentFocusPanel",
   '<div id="portal-focus">\n        <StudentFocusPanel',
   "PortalWorkspace",
@@ -5309,7 +5309,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "const landingViewports",
   "genel giriş kartı 414px deterministik görsel sözleşmesini korur",
   'toHaveScreenshot("login-panel-414.png"',
-  'toHaveScreenshot("institution-shell-rail-1440.png"',
+  'toHaveScreenshot("institution-shell-topnav-1440.png"',
   'toHaveScreenshot("student-portal-actions-414.png"',
   'toHaveScreenshot("report-status-1440.png"',
   "hideNextDevIndicator",
@@ -5331,7 +5331,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Kurum başarı görünümü" })',
   'getByRole("group", { name: "Kurum başarı görünümü metrikleri" })',
   'dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/)',
-  'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
+  'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(1)',
   'getByRole("region", { exact: true, name: "Son sınav ve rapor durumu" })',
   'getByRole("heading", { name: "Sınıf karşılaştırması" })',
   'getByRole("region", { name: "Diğer kurum işlemleri" })).toHaveCount(0)',
@@ -5483,7 +5483,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   '"route-family-student-detail-768.png"',
   '"route-family-student-portal-414.png"',
   '"route-family-report-1440.png"',
-  'toHaveScreenshot("institution-shell-rail-1440.png"',
+  'toHaveScreenshot("institution-shell-topnav-1440.png"',
 ]);
 requireNoTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "alignFrozenReportRasterPhase",

@@ -37,7 +37,6 @@ import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, Payment
 import { GuardianHomeworkPanel, countOpenGuardianHomework } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
-  PortalMetricGrid,
   PortalActionStrip,
   PortalDailyBrief,
   PortalFrame,
@@ -268,7 +267,6 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const homeworkSourceQueries = [homeworkQuery, classHomeworkQuery];
   // A failed source makes the count a lower bound, never a definite (success-toned) number.
   const homeworkPartial = !homeworkLoading && homeworkSourceQueries.some((query) => query.isError);
-  const homeworkPartialValue = openHomeworkCount > 0 ? `en az ${openHomeworkCount}` : "Alınamadı";
   const homeworkStatus = homeworkPartial
     ? openHomeworkCount > 0 ? `en az ${openHomeworkCount} açık ödev` : "Alınamadı"
     : `${openHomeworkCount} açık ödev`;
@@ -381,6 +379,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   ];
   return (
     <PortalFrame
+      dashboard={view === "overview" ? "guardian" : undefined}
       title="Veli Portalı"
       subtitle={portalSubtitle}
       context={guardianPortalContext(view, portalSubtitle, selectedStudentLabel, canViewFinance, financeLoading, isRolePreview)}
@@ -400,19 +399,14 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       {view === "overview" ? (
         <>
           <PortalDailyBrief
-            summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
+            primaryAction={{ href: guardianPortalHref("/veli/odevler", isRolePreview, resolvedStudentId), label: "Ödevleri incele" }}
+            summary="Seçili öğrencinin ödevleri, okuldan haberler ve destek takibi."
             scope={{
               detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "Finans görünürlüğü açık" : "Finans görünürlüğü kapalı",
               label: "Bağlı öğrenci",
               value: selectedStudentLabel,
             }}
             items={[
-              {
-                label: "Öğrenci",
-                value: selectedStudentLabel,
-                detail: selectedStudentDetail,
-                tone: selectedStudent ? "info" : "neutral",
-              },
               {
                 label: "Duyuru",
                 value: announcementsQuery.isLoading ? panelLoadingValue : unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
@@ -426,22 +420,10 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
                 tone: homeworkPartial ? "warning" : openHomeworkCount > 0 ? "info" : "neutral",
               },
               {
-                label: "Ödeme",
-                value: financeLoading ? panelLoadingValue : canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Ödeme izni kapalı",
-                detail: financeLoading ? permissionLoadingDetail : canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
-                tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
-              },
-              {
                 label: "Destek",
                 value: supportStatus,
                 detail: supportLoading ? permissionLoadingDetail : canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
                 tone: canOpenSupportTickets && openSupportTickets > 0 ? "warning" : "success",
-              },
-              {
-                label: "Son sınav",
-                value: reportQuery.isLoading ? panelLoadingValue : reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
-                detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
-                tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },
             ]}
           />
@@ -452,20 +434,6 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               ? ["preview", "support", "student"]
               : ["student", "finance", "report"]}
           />
-          <PortalMetricGrid
-            items={[
-              { label: "Devamsızlık", value: attendanceStatus },
-              { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
-              homeworkPartial
-                ? { label: "Açık ödev", value: homeworkPartialValue, description: "Ödevlerin bir kısmı alınamadı", tone: "warning" }
-                : { label: "Açık ödev", value: homeworkLoading ? panelLoadingValue : openHomeworkCount },
-              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
-              { label: "Net", value: formatNetNumber(reportTotal?.net) },
-              { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
-              { label: "Ödeme planı", value: financeLoading ? panelLoadingValue : canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
-              { label: "Bekleyen ödeme", value: financeStatus },
-            ]}
-          />
         </>
       ) : null}
       {isRolePreview ? (
@@ -473,7 +441,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           <RolePreviewNotice />
         </div>
       ) : null}
-      {view === "overview" || view === "student" ? <div id="portal-focus">
+      {view === "student" ? <div id="portal-focus">
         <StudentFocusPanel
           announcementStatus={announcementStatus}
           attendanceStatus={attendanceStatus}
@@ -490,40 +458,9 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       </div> : null}
       <PortalWorkspace
         ariaLabel="Veli portal çalışma alanı"
+        collapseDetails={view === "overview"}
         main={
           <>
-            {view === "overview" || view === "reports" ? <div id="portal-report">
-              <PortalPanelGate label="Portal rapor özeti" queries={[reportQuery]} subject="Sınav raporu" title="Sınav Raporu">
-                {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
-                  <Field label="Sınav raporu">
-                    <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
-                      {(data?.reportIndex ?? []).map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
-                    </Select>
-                  </Field>
-                ) : null}
-                <ReportPanel
-                  context={data?.report ?? undefined}
-                  courseNames={courseNameById}
-                  errorBooklet={data?.errorBooklet ?? null}
-                  progress={data?.progress ?? null}
-                  report={data?.report ?? null}
-                  termNames={termNameById}
-                />
-              </PortalPanelGate>
-            </div> : null}
-            {view === "overview" ? <div id="portal-progress-series">
-              {overviewQuery.isLoading ? <PanelLoading label="Deneme ve okul notu serileri" title="Deneme ve Okul Notları" /> : <ProgressSeriesPanel
-                examSeries={data?.overview?.examSeries ?? []}
-                onRetry={overviewQuery.isError ? () => void overviewQuery.refetch() : undefined}
-                schoolGrades={data?.overview?.schoolGrades ?? []}
-                unavailable={!data?.overview}
-              />}
-            </div> : null}
-            {view === "overview" || view === "payments" ? <div id="portal-payments">
-              <PortalPanelGate label="Ödeme planları" queries={[preferencesQuery, paymentPlansQuery]} subject="Ödeme planları" title="Ödeme Planları">
-                <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
-              </PortalPanelGate>
-            </div> : null}
             {view === "overview" || view === "homework" ? <div id="portal-homework">
               {/* İki kaynak da düşerse tek hata paneli; biri düşerse tablo diğerini gösterir ve eksik kaynağı yazar. */}
               <PortalPanelGate
@@ -563,6 +500,19 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
                 />
               </PortalPanelGate>
             </div> : null}
+            {view === "overview" ? <div id="portal-progress-series">
+              {overviewQuery.isLoading ? <PanelLoading label="Deneme ve okul notu serileri" title="Deneme ve Okul Notları" /> : <ProgressSeriesPanel
+                examSeries={data?.overview?.examSeries ?? []}
+                onRetry={overviewQuery.isError ? () => void overviewQuery.refetch() : undefined}
+                schoolGrades={data?.overview?.schoolGrades ?? []}
+                unavailable={!data?.overview}
+              />}
+            </div> : null}
+            {view === "overview" || view === "payments" ? <div id="portal-payments">
+              <PortalPanelGate label="Ödeme planları" queries={[preferencesQuery, paymentPlansQuery]} subject="Ödeme planları" title="Ödeme Planları">
+                <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
+              </PortalPanelGate>
+            </div> : null}
             {view === "overview" || view === "support" ? <div id="portal-support">
               {/* Talep açma izni okunmadan form açılmaz: izin yüklenirken panel yükleniyor, okunamazsa "Tekrar dene"li hata gösterir. */}
               <PortalPanelGate label="Destek talepleri" queries={[preferencesQuery, supportTicketsQuery]} subject="Destek talepleri" title="Destek Talepleri">
@@ -579,6 +529,25 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
                         ).then(() => supportTicketsQuery.refetch())
                       : undefined
                   }
+                />
+              </PortalPanelGate>
+            </div> : null}
+            {view === "overview" || view === "reports" ? <div id="portal-report">
+              <PortalPanelGate label="Portal rapor özeti" queries={[reportQuery]} subject="Sınav raporu" title="Sınav Raporu">
+                {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
+                  <Field label="Sınav raporu">
+                    <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
+                      {(data?.reportIndex ?? []).map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
+                    </Select>
+                  </Field>
+                ) : null}
+                <ReportPanel
+                  context={data?.report ?? undefined}
+                  courseNames={courseNameById}
+                  errorBooklet={data?.errorBooklet ?? null}
+                  progress={data?.progress ?? null}
+                  report={data?.report ?? null}
+                  termNames={termNameById}
                 />
               </PortalPanelGate>
             </div> : null}
@@ -792,8 +761,11 @@ function isOpenSupportTicket(ticket: SupportTicketRecord) {
   return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
 }
 
-function guardianPortalHref(path: string, isRolePreview: boolean) {
-  return isRolePreview ? `${path}?rolePreview=1` : path;
+function guardianPortalHref(path: string, isRolePreview: boolean, studentId?: string) {
+  const params = new URLSearchParams();
+  if (isRolePreview) params.set("rolePreview", "1");
+  if (studentId) params.set("studentId", studentId);
+  return params.size ? `${path}?${params}` : path;
 }
 
 function guardianPortalSubtitle(view: GuardianPortalView, fallback: string) {

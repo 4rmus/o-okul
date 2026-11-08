@@ -25,6 +25,16 @@ const baseToday = {
 };
 
 test.describe("Öğretmen Bugün iş sayacı", () => {
+  test("odak kartı mevcut dersi açarken eski eksik yoklama ayrı iş olarak kalır", async ({ page }) => {
+    await openTeacherToday(page, { ...baseToday, todayLessons: [
+      { id: "past-lesson", classId: "class-past", className: "8-A", title: "Önceki ders", startsAt: "2026-06-17T06:00:00Z", endsAt: "2026-06-17T07:00:00Z", attendanceTaken: false },
+      { id: "current-lesson", classId: "class-current", className: "8-B", title: "Şimdiki ders", startsAt: "2026-06-17T07:40:00Z", endsAt: "2026-06-17T08:20:00Z", attendanceTaken: true },
+    ] });
+    const brief = page.getByRole("region", { exact: true, name: "Bugün" });
+    await expect(brief).toContainText("Şimdiki ders");
+    await expect(brief.getByRole("link", { name: "Yoklamayı gör", exact: true })).toHaveAttribute("href", "/ogretmen/ders-akisi?classId=class-current&date=2026-06-17#portal-teacher-attendance");
+    await expect(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }).getByRole("link", { name: /^Yoklama al:/ })).toHaveAttribute("href", "/ogretmen/ders-akisi?classId=class-past&date=2026-06-17#portal-teacher-attendance");
+  });
   test("ders yokken yoklama iş sayılmaz; kart ve başlık aynı sayıyı gösterir", async ({ page }) => {
     await openTeacherToday(page, { ...baseToday, pendingSubmissionCount: 2 });
 

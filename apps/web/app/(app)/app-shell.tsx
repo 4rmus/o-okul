@@ -18,6 +18,7 @@ import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpen
 import { confirmInAppNavigation, hasInAppNavigationGuard, rearmInAppNavigationGuard } from "./_shell/navigation-guard.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
+import { CampusNavigation } from "./_shell/campus-navigation.js";
 import { ThemeToggle } from "./_shell/theme-toggle.js";
 import { PortalAnnouncementBell } from "./_shell/portal-announcement-bell.js";
 import { PortalBottomNav } from "./_shell/portal-bottom-nav.js";
@@ -41,6 +42,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
+  const isCampusShell = ["/kurum", "/ogretmen", "/ogrenci", "/veli"].some((root) => pathname === root || pathname.startsWith(`${root}/`));
+  const isInstitutionWorkspace = pathname === "/kurum" || pathname.startsWith("/kurum/");
   const visiblePortalNavGroups = useMemo(
     () => auth?.session ? rolePortalNavGroups.filter((group) => hasSubjectPortalAccess(auth.session, group.role, group.subjectType)) : [],
     [auth],
@@ -298,7 +301,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     setIsCommandOpen(true);
   }
 
-  function openMobileNav() {
+  function openMobileNav(opener?: HTMLButtonElement) {
+    if (opener) mobileNavTriggerRef.current = opener;
     setIsMobileNavOpen(true);
   }
 
@@ -334,8 +338,28 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   }
 
+  const desktopTopBar = (
+    <DesktopTopBar
+      campus={isCampusShell}
+      onOpenMenu={isCampusShell ? openMobileNav : undefined}
+      onOpenCommand={isCampusShell ? openCommandPalette : undefined}
+      menuOpen={isMobileNavOpen}
+      canUseShellSearch={canUseShellSearch}
+      onLogout={() => void handleLogout()}
+      personaSwitches={personaSwitchTargets.map((target) => ({
+        label: personaSwitchLabel(target, isPersonaSwitching),
+        onSelect: () => void handlePersonaSwitch(target),
+        target,
+      }))}
+      personaSwitching={isPersonaSwitching}
+      onSearch={openCommandSearch}
+      session={auth.session}
+      tenantBrand={tenantBrand}
+    />
+  );
+
   return (
-    <div className="next-app-shell" data-shell-version="v3">
+    <div className={`next-app-shell${isCampusShell ? " next-campus-shell" : ""}`} data-shell-version="v3">
       <a className="next-skip-link" href="#next-content" onClick={skipToContent}>
         İçeriğe geç
       </a>
@@ -345,7 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-expanded={isMobileNavOpen}
           aria-label="Ana menüyü aç"
           className="next-mobile-nav-toggle"
-          onClick={openMobileNav}
+          onClick={(event) => openMobileNav(event.currentTarget)}
           ref={mobileNavTriggerRef}
           type="button"
         >
@@ -360,6 +384,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+      {isCampusShell ? (
+        <div className="next-campus-header" aria-hidden={isMobileNavOpen ? "true" : undefined}>
+          {desktopTopBar}
+          <CampusNavigation
+            groups={isInstitutionWorkspace ? institutionRailNavGroups : visiblePortalNavGroups}
+            grouped={isInstitutionWorkspace}
+            navCurrent={navCurrent}
+            pathname={pathname}
+          />
+        </div>
+      ) : null}
       <aside
         className="next-sidebar"
         data-mobile-open={isMobileNavOpen ? "true" : "false"}
@@ -421,7 +456,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {personaSwitchLabel(target, isPersonaSwitching)}
             </Button>
           ))}
-          {personaSwitchError ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
+          {personaSwitchError && isMobileNavOpen ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
           <Link className="next-sidebar-link" href="/hesap/oturumlar" aria-current={navCurrent("/hesap/oturumlar")}>
             <ShieldCheck className="next-sidebar-link-icon" size={16} aria-hidden="true" />
             <span>Oturumlar</span>
@@ -450,20 +485,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={-1}
         aria-hidden={isMobileNavOpen ? "true" : undefined}
       >
-        <DesktopTopBar
-          canUseShellSearch={canUseShellSearch}
-          onLogout={() => void handleLogout()}
-          personaSwitches={personaSwitchTargets.map((target) => ({
-            label: personaSwitchLabel(target, isPersonaSwitching),
-            onSelect: () => void handlePersonaSwitch(target),
-            target,
-          }))}
-          personaSwitching={isPersonaSwitching}
-          onSearch={openCommandSearch}
-          session={auth.session}
-          tenantBrand={tenantBrand}
-        />
+        {!isCampusShell ? desktopTopBar : null}
         <RouteBreadcrumb pathname={pathname} />
+        {personaSwitchError && !isMobileNavOpen ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
         {children}
       </main>
       {portalBottomNavRoot ? <PortalBottomNav isActive={isActive} onMore={openMobileNav} root={portalBottomNavRoot} /> : null}

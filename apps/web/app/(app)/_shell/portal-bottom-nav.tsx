@@ -8,7 +8,7 @@ type PortalRoot = "/ogretmen" | "/ogrenci";
 
 // <1024 px alt sekme çubuğu (§2): Özet · Ödevler · Raporlar · Duyurular · Daha fazla.
 // "Daha fazla" menüdeki diğer portal öğelerini (mobil çekmece) açar; yeni route eklenmez.
-export function PortalBottomNav({ isActive, onMore, root }: { isActive(href: string): boolean; onMore(): void; root: PortalRoot }) {
+export function PortalBottomNav({ isActive, onMore, root }: { isActive(href: string): boolean; onMore(opener: HTMLButtonElement): void; root: PortalRoot }) {
   const items = [
     { href: root, icon: LayoutDashboard, label: "Özet" },
     { href: `${root}/odevler`, icon: NotebookTabs, label: "Ödevler" },
@@ -24,7 +24,7 @@ export function PortalBottomNav({ isActive, onMore, root }: { isActive(href: str
           <span>{label}</span>
         </Link>
       ))}
-      <Button className="next-portal-bottom-nav__link" onClick={onMore} variant="ghost">
+      <Button className="next-portal-bottom-nav__link" onClick={(event) => onMore(event.currentTarget)} variant="ghost">
         <MoreHorizontal aria-hidden="true" size={18} />
         <span>Daha fazla</span>
       </Button>

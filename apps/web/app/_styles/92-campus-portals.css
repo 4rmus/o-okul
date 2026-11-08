@@ -1,0 +1,283 @@
+/* Campus home screens keep detailed portal routes and their data gates unchanged. */
+@media screen {
+  .next-campus-shell .campus-portal > .next-page-frame > .uh-page-header h1 {
+    font-family: var(--font-campus-display);
+    font-size: var(--campus-title-size);
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-stack,
+  .next-campus-shell .campus-portal .next-portal-workspace__main,
+  .next-campus-shell .campus-teacher-board {
+    gap: var(--space-md);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-stack {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-context-strip {
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-stack > :is(.next-segmented, .next-portal-workspace, #portal-preview),
+  .next-campus-shell .campus-teacher-board {
+    grid-column: 1 / -1;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief {
+    background: var(--color-paper-raised);
+    border-color: var(--color-rule);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief > .uh-panel__header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2xs);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__scope {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-xs);
+    min-width: 0;
+    border: 0;
+    border-radius: var(--radius-panel);
+    background: var(--campus-deep);
+    color: var(--campus-deep-ink);
+    padding: var(--space-md);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__scope > strong {
+    color: var(--campus-deep-ink);
+    font-family: var(--font-campus-display);
+    font-size: var(--text-xl);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__scope > :is(span, small) {
+    color: var(--campus-deep-muted);
+  }
+
+  .next-campus-shell .campus-portal .campus-portal-primary-action {
+    min-height: 2.75rem;
+    border-color: var(--campus-lime);
+    background: var(--campus-lime);
+    color: var(--campus-lime-ink);
+    margin-top: var(--space-2xs);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .next-campus-shell .campus-portal .campus-portal-primary-action:focus-visible {
+    outline: 2px solid var(--campus-lime);
+    outline-offset: 3px;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin-top: var(--space-xs);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    border: 0;
+    border-top: 1px solid var(--color-rule);
+    border-radius: 0;
+    background: transparent;
+    padding: var(--space-xs) 0;
+    box-shadow: none;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__item .uh-metric-card__value {
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-brief__item .uh-metric-card__description {
+    grid-column: 1 / -1;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip {
+    border-color: var(--color-rule);
+    background: var(--color-paper-raised);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-xs);
+    min-height: 0;
+    border: 0;
+    border-top: 1px solid var(--color-rule);
+    border-radius: 0;
+    background: transparent;
+    padding: var(--space-sm) 0;
+    box-shadow: none;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__item:first-child {
+    border-top: 0;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__copy {
+    display: contents;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__value {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__detail {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__context {
+    display: none;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__value {
+    font-size: var(--text-base);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-action-strip__item .uh-action-card__meta {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-items: end;
+    justify-items: end;
+  }
+
+  .next-campus-shell .campus-portal .next-portal-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+
+  .next-campus-shell .campus-portal .next-portal-workspace__main {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .next-campus-shell .campus-portal #portal-homework {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .next-campus-shell .campus-portal #portal-progress-series {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .next-campus-shell .campus-portal #portal-announcements {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .next-campus-shell .campus-portal #portal-report {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+
+  .next-campus-shell .campus-portal #portal-payments,
+  .next-campus-shell .campus-portal #portal-support {
+    grid-row: 3;
+  }
+
+  .next-campus-shell .campus-portal #portal-payments { grid-column: 2; }
+  .next-campus-shell .campus-portal #portal-support { grid-column: 1; }
+
+  .next-campus-shell .campus-portal #portal-report .next-portal-karne-detail {
+    overflow: auto;
+  }
+
+  .next-campus-shell .campus-portal-details {
+    border-top: 1px solid var(--color-rule);
+    padding-top: var(--space-sm);
+  }
+
+  .next-campus-shell .campus-portal-details > summary {
+    padding: var(--space-xs) 0;
+    min-height: 2.75rem;
+    color: var(--color-accent-strong);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .next-campus-shell .campus-portal-details > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+    padding-top: var(--space-sm);
+  }
+
+  .next-campus-shell .campus-teacher-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .next-campus-shell .campus-teacher-board > .next-portal-brief {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .next-campus-shell .campus-teacher-board > .next-portal-action-strip {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .next-campus-shell .campus-teacher-timetable {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .next-campus-shell .campus-portal-progress-chart .uh-progress-line-chart {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  @media (max-width: 64rem) {
+    .next-campus-shell .campus-portal .next-portal-stack,
+    .next-campus-shell .campus-portal .next-portal-workspace__main,
+    .next-campus-shell .campus-teacher-board,
+    .next-campus-shell .campus-portal-details > div {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-campus-shell .campus-portal .next-portal-workspace__main > :is(#portal-homework, #portal-progress-series, #portal-announcements, #portal-report, #portal-payments, #portal-support),
+    .next-campus-shell .campus-teacher-board > :is(.next-portal-brief, .next-portal-action-strip, .campus-teacher-timetable) {
+      grid-area: auto;
+    }
+
+    .next-campus-shell .campus-teacher-timetable {
+      order: 2;
+    }
+
+    .next-campus-shell .campus-teacher-board > .next-portal-action-strip {
+      order: 3;
+    }
+
+    .next-campus-shell .campus-portal #portal-homework { order: 1; }
+    .next-campus-shell .campus-portal #portal-announcements { order: 2; }
+    .next-campus-shell .campus-portal #portal-progress-series { order: 3; }
+    .next-campus-shell .campus-portal #portal-payments { order: 4; }
+    .next-campus-shell .campus-portal #portal-support { order: 5; }
+    .next-campus-shell .campus-portal #portal-report { order: 6; }
+  }
+}

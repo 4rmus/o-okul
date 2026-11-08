@@ -4,6 +4,7 @@ import { Button, DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import type { GuardianExamSeriesPoint, GuardianSchoolGradeItem } from "@o-okul/shared-types";
 import { formatDate as formatInstantDate } from "../../_shared/format.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { ProgressLineChart } from "../../_shared/lazy-report-charts.js";
 
 /**
  * KV-4: optical exam Başarı % (0-100) and published school grades (each assessment's own scale) are two
@@ -54,6 +55,19 @@ export function ProgressSeriesPanel({
           <Button onClick={onRetry} variant="secondary">Tekrar dene</Button>
         </div>
       ) : unavailable ? <p className="next-status-note">Özet şu an alınamadı; seriler daha sonra görünecek.</p> : null}
+      {!unavailable && examSeries.length > 0 ? (
+        <div className="campus-portal-progress-chart" aria-label="Deneme gelişimi: sınav sırasına göre Başarı %">
+          <ProgressLineChart
+            aria-label="Deneme gelişim grafiği"
+            caption="Deneme gelişim grafiği verileri"
+            fillArea
+            points={examSeries.map((point) => ({ ...point, total: point }))}
+            tableMode="details"
+            xAxisLabel="Sınav sırası"
+          />
+          <p className="next-status-note">Sınav sırasına göre Başarı %; tarih, Net ve Soru bilgileri aşağıdaki tabloda.</p>
+        </div>
+      ) : null}
       <DataTable
         caption="Deneme sınavları: Başarı %"
         columns={examColumns}

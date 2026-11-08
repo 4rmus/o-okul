@@ -179,7 +179,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(dashboardSummary).toBeVisible();
     const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum başarı görünümü metrikleri" });
     await expect(dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/);
-    await expect(dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4);
+    await expect(dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(1);
     await expect(page.getByRole("region", { exact: true, name: "Bugün ilgilenmeniz gerekenler" })).toBeVisible();
     await expect(page.getByRole("region", { exact: true, name: "Son sınav ve rapor durumu" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");

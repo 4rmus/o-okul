@@ -16,6 +16,45 @@ const rawInternalValues = ["student-a", "homework-overdue", "assignment-week", "
 type Failures = Set<string>;
 
 test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
+  test("gelişim grafiği kendi kapsayıcı rengini okur ve eksik başarıyı sıfır noktası çizmez", async ({ page }) => {
+    await page.addInitScript(() => {
+      const state = window as Window & { campusPointXs?: number[] };
+      state.campusPointXs = [];
+      const arc = CanvasRenderingContext2D.prototype.arc;
+      CanvasRenderingContext2D.prototype.arc = function (...args) {
+        if (this.canvas.closest(".campus-portal-progress-chart") && args[2] === 4) {
+          state.campusPointXs?.push(Math.round(args[0]));
+        }
+        return arc.apply(this, args);
+      };
+    });
+    await openStudentPortal(page, "/ogrenci", { missingSuccess: true });
+    const graph = page.getByLabel("Deneme gelişim grafiği", { exact: true });
+    await expect(graph.locator("canvas")).toBeVisible();
+    await expect(page.getByText("Sınav sırasına göre Başarı %; tarih, Net ve Soru bilgileri aşağıdaki tabloda.")).toBeVisible();
+    await graph.evaluate((element) => {
+      element.style.setProperty("--chart-primary", "rgb(19, 93, 70)");
+      document.documentElement.style.setProperty("--chart-primary", "rgb(177, 60, 22)");
+      (window as Window & { campusPointXs?: number[] }).campusPointXs = [];
+      document.documentElement.setAttribute("data-theme", "dark");
+    });
+    await expect.poll(() => page.evaluate(() => new Set((window as Window & { campusPointXs?: number[] }).campusPointXs).size)).toBe(2);
+    await expect.poll(() => graph.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+      const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let localColorPixels = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index] === 19 && pixels[index + 1] === 93 && pixels[index + 2] === 70 && pixels[index + 3] === 255) localColorPixels += 1;
+      }
+      return localColorPixels;
+    })).toBeGreaterThan(0);
+    const missingRow = page.getByRole("table", { name: "Deneme sınavları: Başarı %" }).getByRole("row").filter({ hasText: "Eksik sonuç" });
+    await expect(missingRow).toContainText("-");
+    await expect(missingRow).not.toContainText("%0");
+    await graph.getByText("Ayrıntılı veriyi göster", { exact: true }).click();
+    const missingChartRow = graph.getByRole("row").filter({ hasText: "Eksik sonuç" });
+    await expect(missingChartRow.getByRole("cell")).toHaveText(["-", "-", "-"]);
+  });
+
   test("Özet bugün teslimi iki kaynaktan sayar, Gelişimim serilerini ayrı ölçekle gösterir", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openStudentPortal(page, "/ogrenci", { requestedPaths });
@@ -128,7 +167,7 @@ test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
   });
 });
 
-async function openStudentPortal(page: Page, path: string, options: { failures?: Failures; requestedPaths?: string[] } = {}) {
+async function openStudentPortal(page: Page, path: string, options: { failures?: Failures; requestedPaths?: string[]; missingSuccess?: boolean } = {}) {
   await page.setViewportSize({ height: 900, width: 1280 });
   await page.clock.setFixedTime(fixedNow);
   await page.route("**/api/v1/**", async (route) => {
@@ -142,7 +181,12 @@ async function openStudentPortal(page: Page, path: string, options: { failures?:
       await route.fulfill({ body: JSON.stringify({ code: "INTERNAL_ERROR" }), headers: { ...corsHeaders, "content-type": "application/json" }, status: 500 });
       return;
     }
-    await fulfillData(route, studentApiResponse(pathName));
+    const response = studentApiResponse(pathName);
+    if (options.missingSuccess && pathName === "/me/student/overview") {
+      const overview = response as { examSeries: unknown[] };
+      overview.examSeries.splice(1, 0, { examTitle: "Eksik sonuç", generatedAt: "2026-06-01T10:00:00.000Z", snapshotId: "snapshot-missing" });
+    }
+    await fulfillData(route, response);
   });
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";

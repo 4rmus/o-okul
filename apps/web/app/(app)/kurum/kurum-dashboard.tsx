@@ -45,7 +45,6 @@ export function KurumDashboard() {
   const attentionItems = buildAttentionItems(dashboard)
     .filter((item) => canAccessHref(auth?.session.roles ?? [], item.href, auth?.session.activePersona))
     .slice(0, 3);
-  const attentionTotal = totalAttention(dashboard);
   const [isSetupDismissed, setIsSetupDismissed] = useState(false);
   const setupDismissedCookieName = `uh_setup_${encodeURIComponent(tenantId)}_dismissed`;
   const classCompare = (latestReport?.classes ?? []).map((record) => ({
@@ -95,209 +94,195 @@ export function KurumDashboard() {
   }
 
   return (
-    <PageFrame
-      title={dashboard.institution.name}
-      subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
-    >
-      {dashboardQuery.isPending ? <LoadingState label="Kurum başarı görünümü yükleniyor…" /> : null}
-      <TrialStatusBanner />
-
-      <Panel
-        aria-label="Bugün ilgilenmeniz gerekenler"
-        className="next-attention-panel"
-        description="Önce takip edilmesi gereken en fazla üç kurum işi."
-        title="Bugün ilgilenmeniz gerekenler"
-        tone={attentionItems.length > 0 ? "warning" : "default"}
+    <div className="campus-institution-workspace">
+      <PageFrame
+        title={dashboard.institution.name}
+        subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
       >
-        {attentionItems.length > 0 ? (
-          <div className="next-attention-list">
-            {attentionItems.map((item) => (
-              <ActionCard
-                as="a"
-                aria-label={`${item.title} ${item.value}: ${item.description}`}
-                className="next-attention-item"
-                detail={item.description}
-                href={item.href}
-                key={item.title}
-                label={item.title}
-                tone="warning"
-                value={item.value}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="next-attention-empty">Bugün için açık destek sinyali görünmüyor.</p>
-        )}
-      </Panel>
+        {dashboardQuery.isPending ? <LoadingState label="Kurum başarı görünümü yükleniyor…" /> : null}
+        <TrialStatusBanner />
 
-      <OperationSummary
-        ariaLabel="Kurum başarı görünümü"
-        items={buildMetrics(dashboard, attentionTotal)}
-      />
-
-      {dashboard.activeStudentCount === 0 && !isSetupDismissed ? (
-        <Panel
-          actions={
-            <div className="next-dashboard-onboarding__actions">
-              <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
-                Kuruluma git
-              </Link>
-              {/* KF-6: the two first steps of a trial, shown only when the user can open them. */}
-              {firstStepLinks.filter((link) => canAccessHref(auth?.session.roles ?? [], link.href, auth?.session.activePersona)).map((link) => (
-                <Link className="uh-button uh-button--secondary uh-button--md" href={link.href} key={link.href}>
-                  {link.label}
-                </Link>
-              ))}
-              <Button onClick={dismissSetupCard} type="button" variant="secondary">
-                Daha sonra
-              </Button>
-            </div>
-          }
-          aria-label="Kurum kurulum başlangıcı"
-          className="next-dashboard-onboarding"
-          description="Öğrenci ve öğretmen kayıtlarını tamamlayarak başarı takibini başlatın."
-          title="Kurumunuzu kurmaya başlayın"
-          tone="muted"
+        <OperationSummary
+          ariaLabel="Kurum başarı görünümü"
+          items={buildMetrics(dashboard)}
         />
-      ) : null}
 
-      {/* Günlük özet (Berrak §5): dikkat → metrikler → son sınav/rapor → duyurular. Diğer ekranlara komut paleti ve hub menüsü götürür. */}
-      <div className="next-institution-growth-layout">
-        <div className="next-institution-growth-primary">
+        {dashboard.activeStudentCount === 0 && !isSetupDismissed ? (
           <Panel
             actions={
-              <Link href="/kurum/raporlar">
-                Raporları aç
-              </Link>
+              <div className="next-dashboard-onboarding__actions">
+                <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
+                  Kuruluma git
+                </Link>
+                {/* KF-6: the two first steps of a trial, shown only when the user can open them. */}
+                {firstStepLinks.filter((link) => canAccessHref(auth?.session.roles ?? [], link.href, auth?.session.activePersona)).map((link) => (
+                  <Link className="uh-button uh-button--secondary uh-button--md" href={link.href} key={link.href}>
+                    {link.label}
+                  </Link>
+                ))}
+                <Button onClick={dismissSetupCard} type="button" variant="secondary">
+                  Daha sonra
+                </Button>
+              </div>
             }
-            aria-label="Son sınav ve rapor durumu"
-            className="next-dashboard-exam-panel"
-            description={latestExam ? "Katılım ve başarı özetinin karşılaştırılabilir son görünümü." : "Henüz yayınlanmış sınav yok."}
-            title="Son sınav ve rapor durumu"
+            aria-label="Kurum kurulum başlangıcı"
+            className="next-dashboard-onboarding"
+            description="Öğrenci ve öğretmen kayıtlarını tamamlayarak başarı takibini başlatın."
+            title="Kurumunuzu kurmaya başlayın"
+            tone="muted"
+          />
+        ) : null}
+
+        <div className="campus-institution-board">
+          <Panel
+            aria-label="Bugün ilgilenmeniz gerekenler"
+            className="next-attention-panel campus-institution-agenda"
+            description="Önce takip edilmesi gereken en fazla üç kurum işi."
+            title="Bugün ilgilenmeniz gerekenler"
+            tone={attentionItems.length > 0 ? "warning" : "default"}
           >
-            {latestExam ? (
-              <div className="next-dashboard-exam-summary">
-                <div>
-                  <strong>{latestExam.title}</strong>
-                  <span>{latestExam.startsAt ? formatDate(latestExam.startsAt) : "Sınav tarihi belirtilmemiş"}</span>
-                </div>
-                <StatusBadge tone={latestExam.reportStatus === "READY" ? "success" : "warning"}>
-                  {latestExam.reportStatus === "READY" ? "Rapor hazır" : "Rapor bekliyor"}
-                </StatusBadge>
-                <dl>
-                  <div>
-                    <dt>Katılım</dt>
-                    <dd>{latestExam.attendedParticipantCount}/{latestExam.registeredParticipantCount}</dd>
-                  </div>
-                  <div>
-                    <dt>Devamsız</dt>
-                    <dd>{latestExam.absentParticipantCount}</dd>
-                  </div>
-                  <div>
-                    <dt>Sonuç</dt>
-                    <dd>{latestReport?.resultCount ?? 0}</dd>
-                  </div>
-                  <div>
-                    <dt>Başarı %</dt>
-                    <dd>{formatPercent(latestReport?.successRate)}</dd>
-                  </div>
-                </dl>
+            {attentionItems.length > 0 ? (
+              <div className="next-attention-list">
+                {attentionItems.map((item) => (
+                  <ActionCard
+                    as="a"
+                    aria-label={`${item.title} ${item.value}: ${item.description}`}
+                    className="next-attention-item"
+                    detail={item.description}
+                    href={item.href}
+                    key={item.title}
+                    label={item.title}
+                  state="İncele →"
+                    tone="warning"
+                    value={item.value}
+                  />
+                ))}
               </div>
             ) : (
-              <p className="next-attention-empty">İlk yayınlanan sınavdan sonra katılım ve rapor durumu burada görünecek.</p>
+              <p className="next-attention-empty">Bugün için açık destek sinyali görünmüyor.</p>
             )}
           </Panel>
 
-          <ReportChartPanel
-            className="next-student-growth-chart next-student-growth-chart--institution"
-            description={classCompare.length > 0
-              ? `${latestExam?.title ?? "Son sınav"} · Başarı % ana, Net/Soru bağlamsal metriktir.`
-              : "Karşılaştırılabilir sınıf sonucu bekleniyor."}
-            title="Sınıf karşılaştırması"
-          >
-            <ClassCompareBar
-              caption="Son sınav sınıf başarı karşılaştırması"
-              classes={classCompare}
-              emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
-            />
-          </ReportChartPanel>
+          <div className="next-institution-growth-layout campus-institution-report">
+            <div className="next-institution-growth-primary">
+              <Panel
+                actions={
+                  <Link href="/kurum/raporlar">
+                    Raporları aç
+                  </Link>
+                }
+                aria-label="Son sınav ve rapor durumu"
+                className="next-dashboard-exam-panel"
+                description={latestExam ? "Katılım ve başarı özetinin karşılaştırılabilir son görünümü." : "Henüz yayınlanmış sınav yok."}
+                title="Son sınav ve rapor durumu"
+              >
+                {latestExam ? (
+                  <div className="next-dashboard-exam-summary">
+                    <div>
+                      <strong>{latestExam.title}</strong>
+                      <span>{latestExam.startsAt ? formatDate(latestExam.startsAt) : "Sınav tarihi belirtilmemiş"}</span>
+                    </div>
+                    <StatusBadge tone={latestExam.reportStatus === "READY" ? "success" : "warning"}>
+                      {latestExam.reportStatus === "READY" ? "Rapor hazır" : "Rapor bekliyor"}
+                    </StatusBadge>
+                    <dl>
+                      <div>
+                        <dt>Katılım</dt>
+                        <dd>{latestExam.attendedParticipantCount}/{latestExam.registeredParticipantCount}</dd>
+                      </div>
+                      <div>
+                        <dt>Devamsız</dt>
+                        <dd>{latestExam.absentParticipantCount}</dd>
+                      </div>
+                      <div>
+                        <dt>Sonuç</dt>
+                        <dd>{latestReport?.resultCount ?? "Rapor bekliyor"}</dd>
+                      </div>
+                      <div>
+                        <dt>Başarı %</dt>
+                        <dd>{formatPercent(latestReport?.successRate)}</dd>
+                      </div>
+                    </dl>
+                    {latestReport?.net !== undefined && latestReport.questionCount !== undefined ? (
+                      <p className="campus-exam-context">{formatNumber(latestReport.net)} net / {formatNumber(latestReport.questionCount)} soru</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="next-attention-empty">İlk yayınlanan sınavdan sonra katılım ve rapor durumu burada görünecek.</p>
+                )}
+              </Panel>
+
+              <ReportChartPanel
+                className="next-student-growth-chart next-student-growth-chart--institution"
+                description={classCompare.length > 0
+                  ? `${latestExam?.title ?? "Son sınav"} · Başarı % ana, Net/Soru bağlamsal metriktir.`
+                  : "Karşılaştırılabilir sınıf sonucu bekleniyor."}
+                title="Sınıf karşılaştırması"
+              >
+                <ClassCompareBar
+                  caption="Son sınav sınıf başarı karşılaştırması"
+                  classes={classCompare}
+                  emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
+                  tableMode="details"
+                />
+              </ReportChartPanel>
+            </div>
+
+          </div>
         </div>
 
-      </div>
+        <Panel
+          actions={<Link href="/kurum/duyurular">Tüm duyuruları aç</Link>}
+          aria-label="Kurum duyuruları"
+          className="next-attention-panel campus-institution-announcements"
+          description="Kurum genelinde yayımlanan son bilgilendirmeler."
+          title="Kurum duyuruları"
+        >
+          {announcementsQuery.isPending ? (
+            <LoadingState label="Duyurular yükleniyor…" />
+          ) : announcementsQuery.isError ? (
+            <p className="next-attention-empty">Duyurular şu anda alınamadı.</p>
+          ) : announcements.length > 0 ? (
+            <div className="next-attention-list">
+              {announcements.map((announcement) => (
+                <ActionCard
+                  as="a"
+                  className="next-attention-item"
+                  detail={announcement.body}
+                  href="/kurum/duyurular"
+                  key={announcement.id}
+                  label={announcement.title}
+                  value={formatDate(announcement.publishedAt)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="next-attention-empty">Henüz yayımlanmış duyuru yok.</p>
+          )}
+        </Panel>
 
-
-      <Panel
-        actions={<Link href="/kurum/duyurular">Tüm duyuruları aç</Link>}
-        aria-label="Kurum duyuruları"
-        className="next-attention-panel"
-        description="Kurum genelinde yayımlanan son bilgilendirmeler."
-        title="Kurum duyuruları"
-      >
-        {announcementsQuery.isPending ? (
-          <LoadingState label="Duyurular yükleniyor…" />
-        ) : announcementsQuery.isError ? (
-          <p className="next-attention-empty">Duyurular şu anda alınamadı.</p>
-        ) : announcements.length > 0 ? (
-          <div className="next-attention-list">
-            {announcements.map((announcement) => (
-              <ActionCard
-                as="a"
-                className="next-attention-item"
-                detail={announcement.body}
-                href="/kurum/duyurular"
-                key={announcement.id}
-                label={announcement.title}
-                value={formatDate(announcement.publishedAt)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="next-attention-empty">Henüz yayımlanmış duyuru yok.</p>
-        )}
-      </Panel>
-
-      {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
-    </PageFrame>
+        {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
+      </PageFrame>
+    </div>
   );
 }
 
-function buildMetrics(dashboard: InstitutionDashboardSummary, attentionTotal: number): OperationSummaryItem[] {
-  const latestExam = dashboard.latestExam;
-  const report = latestExam?.report;
-  return [
-    {
-      key: "students",
-      label: "Aktif öğrenci",
-      value: dashboard.activeStudentCount,
-      description: "Başarı takibine dahil",
-      tone: dashboard.activeStudentCount > 0 ? "success" : "default",
-    },
-    {
-      key: "attendance",
-      label: "Son sınav katılımı",
-      value: latestExam
-        ? `${latestExam.attendedParticipantCount}/${latestExam.registeredParticipantCount}`
-        : "Veri yok",
-      description: latestExam ? `${latestExam.absentParticipantCount} devamsız` : "Yayınlanmış sınav bekleniyor",
-      tone: latestExam ? "info" : "default",
-    },
-    {
-      key: "success",
-      label: "Son sınav başarı yüzdesi",
-      value: formatPercent(report?.successRate),
-      description: report?.questionCount !== undefined && report.net !== undefined
-        ? `${formatNumber(report.net)} net / ${formatNumber(report.questionCount)} soru`
-        : "Karşılaştırılabilir rapor bekleniyor",
-      tone: report?.successRate !== undefined ? "success" : "default",
-    },
-    {
-      key: "attention",
-      label: "Destek bekleyen iş",
-      value: attentionTotal,
-      description: attentionTotal > 0 ? "Önceliklendirme gerekiyor" : "Açık sinyal yok",
-      tone: attentionTotal > 0 ? "warning" : "success",
-    },
-  ];
+function buildMetrics(dashboard: InstitutionDashboardSummary): OperationSummaryItem[] {
+  const items: OperationSummaryItem[] = [{
+    key: "students",
+    label: "Aktif öğrenci",
+    value: dashboard.activeStudentCount,
+    description: "Yetkili olduğunuz kapsam",
+  }];
+  const academicOps = dashboard.academicOps;
+  if (academicOps) {
+    items.push(
+      { key: "rollCall", label: "Yoklaması eksik sınıf", value: academicOps.rollCallMissingClassCount, description: "Bugünkü dersler" },
+      { key: "grades", label: "Eksik not girişi", value: academicOps.missingGradeEntryAssessmentCount, description: "Bu dönemdeki değerlendirmeler" },
+      { key: "drafts", label: "Yayınlanmamış notlar", value: academicOps.unpublishedDraftAssessmentCount, description: "Taslak içeren değerlendirmeler" },
+    );
+  }
+  return items;
 }
 
 function buildAttentionItems(dashboard: InstitutionDashboardSummary): DashboardAttentionItem[] {
@@ -352,14 +337,6 @@ function buildAttentionItems(dashboard: InstitutionDashboardSummary): DashboardA
   }
 
   return items;
-}
-
-function totalAttention(dashboard: InstitutionDashboardSummary): number {
-  const reportAttention = dashboard.latestExam?.reportStatus === "MISSING" ? 1 : 0;
-  return dashboard.attention.attendanceAlertCount
-    + dashboard.attention.openImportQuarantineCount
-    + dashboard.attention.openSupportTicketCount
-    + reportAttention;
 }
 
 function formatPercent(value: number | undefined): string {

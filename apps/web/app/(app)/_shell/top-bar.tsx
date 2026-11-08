@@ -25,6 +25,10 @@ const breadcrumbLabelByPath = {
 };
 
 export function DesktopTopBar({
+  campus = false,
+  onOpenMenu,
+  onOpenCommand,
+  menuOpen = false,
   canUseShellSearch,
   onLogout,
   personaSwitches = [],
@@ -33,6 +37,10 @@ export function DesktopTopBar({
   session,
   tenantBrand,
 }: {
+  campus?: boolean;
+  onOpenMenu?(opener: HTMLButtonElement): void;
+  onOpenCommand?(opener: HTMLButtonElement): void;
+  menuOpen?: boolean;
   canUseShellSearch: boolean;
   onLogout(): void;
   personaSwitches?: Array<{ label: string; onSelect(): void; target: string }>;
@@ -47,8 +55,9 @@ export function DesktopTopBar({
 
   return (
     <header className="next-desktop-topbar" aria-label="Üst gezinme">
+      {campus ? <span className="next-campus-wordmark">{appBrand.name}</span> : null}
       <div className="next-desktop-topbar__search">
-        {canUseShellSearch ? <ShellSearchBar onSearch={onSearch} /> : <span className="next-desktop-topbar__brand">{appBrand.name}</span>}
+        {canUseShellSearch ? <ShellSearchBar onSearch={onSearch} /> : !campus ? <span className="next-desktop-topbar__brand">{appBrand.name}</span> : null}
       </div>
       <div className="next-desktop-topbar__context" aria-label="Seçili kurum veya çalışma alanı">
         <Building2 size={16} aria-hidden="true" />
@@ -64,6 +73,8 @@ export function DesktopTopBar({
         ))}
         <PortalAnnouncementBell />
         <ThemeToggle />
+        {onOpenCommand ? <Button type="button" variant="secondary" size="icon" aria-label="Komut paleti" onClick={(event) => onOpenCommand(event.currentTarget)}><Search size={16} aria-hidden="true" /></Button> : null}
+        {onOpenMenu ? <Button type="button" variant="secondary" aria-label="Ana menüyü aç" aria-controls="next-sidebar" aria-expanded={menuOpen} onClick={(event) => onOpenMenu(event.currentTarget)}>Menü</Button> : null}
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />
           Çıkış
