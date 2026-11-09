@@ -102,3 +102,10 @@ deployment and live data. Fonts are vendored with source and license records.
 - 2026-11-09 / TAHTA-2 / LOCAL_STATIC: web/API production compilation and OpenAPI output
   checks passed. Published grades share the existing timeline query; attendance uses one
   authorized recent-date request and client-side pagination, without guessed holidays.
+- 2026-11-09 / TAHTA-3 / LOCAL_TEST: 12 public-content/pricing tests, 32 visual route checks
+  and 86 Chromium/WebKit release-candidate checks passed. The final public wordmark change
+  also passed both-browser public accessibility and the seven-width landing check.
+  Updated Darwin application goldens were reviewed; both report-card golden hashes stayed
+  unchanged. Linux references and the final Gate B/CI evidence are still pending.
+- Three independent read-only reviews found no remaining P0/P1/P2 after the mobile header,
+  frozen-level comparison and mixed-day attendance count fixes (LOCAL_STATIC review only).

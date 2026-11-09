@@ -23,6 +23,9 @@ This section supersedes the older screen tone, font and default-theme paragraphs
   notification controls occupy their own row below the institution identity.
 - The mark is two equal circles and a short bridge; uploaded institution logos remain separate.
   Installed-app icons use the same vector geometry.
+- `97-tahta-marketing.css` applies the approved headline and record-category illustration
+  to the public landing. It contains no invented student records or product screenshots;
+  existing demo, pricing and sign-in destinations and the student-week/optical section order remain.
 - Student overview net charts read stored values. A previous-result delta requires
   matching exam/course scope and active question distribution. Different-size comparisons
   retain Başarı %; school grades are not part of a deneme series.

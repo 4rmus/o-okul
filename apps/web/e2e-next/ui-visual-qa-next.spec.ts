@@ -104,17 +104,17 @@ test.describe("Faz 9 UI görsel smoke", () => {
     for (const viewport of landingViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: /İyi bir okul, her öğrenciyi görür/ })).toBeVisible();
       await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" })).toBeVisible();
       await expect(page.locator(".next-marketing-product")).toHaveCount(0);
       await expectUiStable(page, `aurora-ops-landing-${viewport.width}`, consoleErrors);
       if (viewport.width === 1280) {
-        await expect(page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ })).toBeInViewport();
+        await expect(page.getByRole("heading", { level: 1, name: /İyi bir okul, her öğrenciyi görür/ })).toBeInViewport();
         await expect(page.getByRole("link", { name: "Demo talep et" }).first()).toBeInViewport();
         await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" })).toBeInViewport();
         await expectRouteFamilyGolden(
           page,
-          page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ }),
+          page.getByRole("heading", { level: 1, name: /İyi bir okul, her öğrenciyi görür/ }),
           "route-family-landing-1280.png",
         );
       }
@@ -639,20 +639,13 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(page.getByText("+905551110002")).toHaveCount(0);
     const studentDashboard = page.getByLabel("Öğrenci özeti");
     const studentSummary = studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay özeti" });
-    await expect(studentSummary).toContainText("Devamsızlık");
-    await expect(studentSummary).toContainText("1 yok · 1 geç");
-    await expect(studentSummary).toContainText("Son sınav Başarı %");
-    await expect(studentSummary).toContainText("%81,7");
-    await expect(studentSummary).toContainText("Net 24,50 / Soru 30");
+    await expect(studentDashboard.getByRole("region", { name: "Öğrenci devam günleri" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Son deneme neti" })).toContainText("24,50 / 30");
     await expect(studentSummary).toContainText("Açık ödev");
     await expect(studentSummary).toContainText("Öğretmen notu");
     await expect(studentSummary).toContainText("Kişisel bilgiler maskeli");
     await expect(studentSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toHaveCount(0);
-    const studentProfile = studentDashboard.getByLabel("Öğrenci profil kartı");
-    await expect(studentProfile).toContainText("Aktif");
-    const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
-    await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
-    await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
+    await expect(page.locator(".next-student-identity-meta")).toContainText("Aktif");
     await expect(studentDashboard.getByLabel("Öğrenci karar kartları")).toHaveCount(0);
     await expect(studentDashboard.getByRole("tabpanel", { name: "Genel bakış" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sınav detayları" })).toHaveAttribute("href", "/kurum/ogrenciler/student-a/sinavlar");
@@ -673,6 +666,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
     await studentDashboard.getByRole("tab", { name: "İlişkiler ve kayıtlar" }).click();
     await expect(studentDashboard.getByRole("tabpanel", { name: "İlişkiler ve kayıtlar" })).toBeVisible();
+    const studentProfile = studentDashboard.getByLabel("Öğrenci profil kartı");
+    await expect(studentProfile).toContainText("Aktif");
+    const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
+    await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
+    await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
     await Promise.all([
       page.waitForURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/),
       page.getByRole("link", { name: "Sınav detayları" }).click(),

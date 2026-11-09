@@ -35,7 +35,7 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expectFirstFocusableElement(page, "İçeriğe geç");
-    await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "İyi bir okul, her öğrenciyi görür." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/fiyatlar");
@@ -79,7 +79,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     for (const viewport of hallmarkResponsiveViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "İyi bir okul, her öğrenciyi görür." })).toBeVisible();
       await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
       await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
       await page.goto("/fiyatlar");

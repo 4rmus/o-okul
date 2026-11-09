@@ -9,7 +9,11 @@ durumu `docs/product-journeys-v1.md`, canlılık kanıtı `docs/phase-6-producti
 
 **Üst satır:** Özel okullar ve eğitim kurumları için
 
-**Başlık:** Öğrenci takibini tek platformda toplayın.
+**Başlık:** İyi bir okul, her öğrenciyi görür.
+
+DEC-20261109-01 approves this headline as the brand statement. The supporting copy and
+capability boundaries below remain factual and unchanged. The abstract student-record
+illustration contains categories only, not a real student, metric or product screenshot.
 
 **Destek metni:** Deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planı aynı öğrenci kaydında.
 Yönetici, öğretmen ve öğrenci yalnızca yetkili olduğu bilgiyi görür.
