@@ -74,11 +74,6 @@
     min-width: 0;
   }
 
-  .next-student-growth-workspace > .next-operation-summary .next-operation-summary__item:nth-child(2) {
-    border-color: color-mix(in oklch, var(--color-accent) 38%, var(--color-rule));
-    background: var(--color-accent-soft);
-  }
-
   .next-student-growth-tabpanel:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;

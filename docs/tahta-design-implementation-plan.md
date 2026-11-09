@@ -22,8 +22,10 @@ marketing capability boundaries. No prototype fixture is shipped as a real schoo
 One write owner: the main agent. Review agents are read-only.
 Owned paths: `apps/web`, relevant shared chart-theme code in `packages/ui`,
 `design.md`, `docs/DECISIONS.md`, this plan, the UI/marketing contracts, `status.md`,
-and their directly coupled checkers, visual fixtures and measurement baseline.
-Forbidden mutations: API/DB/domain contracts, optical/report calculations, worker PDF,
+and their directly coupled checkers, visual fixtures and measurement baseline. TAHTA-2
+also owns the optional progress-provenance read projection in the shared type, existing
+report service/OpenAPI schema and their tests; it reads already frozen values and adds no endpoint.
+Forbidden mutations: DB contracts and stored report data, optical/report calculations, worker PDF,
 published grades, unrelated worktrees and user files, provider/configuration/secrets,
 deployment and live data. Fonts are vendored with source and license records.
 
@@ -44,6 +46,14 @@ deployment and live data. Fonts are vendored with source and license records.
 - Use the stored latest report total; match subject data by snapshot identity.
 - Compare only equivalent exam/course scope, scoring context and active question
   distribution. Use the last two eligible results for the previous-result delta.
+- Current exam/class grade metadata can change after publication. Add optional frozen
+  exam type/year/scoring profile and academic scope to the existing progress read DTO;
+  never substitute current mutable metadata when a legacy snapshot lacks provenance.
+- A matching nonempty frozen grade level is required for a directional net comparison;
+  a class identifier alone is not evidence of the historical level. Missing context
+  keeps the stored result visible but disables the previous-result delta.
+- Keep the additive shared type, OpenAPI schema/output checks and report-service tests
+  in the same gate. No database migration or snapshot rewrite is needed.
 - Keep negative nets, no result, partial loading/error and incompatible-result states.
 - Place recent authorized attendance below identity; preserve day aggregation and
   distinguish no record, present, absent, late and excused without guessed holidays.
@@ -84,3 +94,11 @@ deployment and live data. Fonts are vendored with source and license records.
   persistence/legacy migration/storage denial, and the existing 320–1440px report-workspace
   test including its unchanged report-card golden and print geometry.
 - These are local tests with synthetic API responses; no deployment or live-data smoke ran.
+- 2026-11-09 / TAHTA-2 / LOCAL_TEST: all 30 student relationship/profile browser checks
+  passed, including preserved PII/finance/version/form flows and 320px layout. The API
+  suite passed 1,738 tests; 160 opt-in PostgreSQL/environment tests were skipped because
+  no disposable database endpoints were configured. The additive read projection keeps
+  stored snapshots unchanged and does not backfill unknown legacy context.
+- 2026-11-09 / TAHTA-2 / LOCAL_STATIC: web/API production compilation and OpenAPI output
+  checks passed. Published grades share the existing timeline query; attendance uses one
+  authorized recent-date request and client-side pagination, without guessed holidays.

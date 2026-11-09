@@ -521,6 +521,7 @@ describe("ReportGenerationController", () => {
         {
           snapshotId: "snapshot-a",
           examId: "exam-a",
+          gradeLevelId: "grade-8",
           courseId: "course-math",
           generatedAt: "2026-06-06T09:00:00.000Z",
           termId: "term-2026-spring",

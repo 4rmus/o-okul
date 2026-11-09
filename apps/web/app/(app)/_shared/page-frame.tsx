@@ -10,19 +10,20 @@ import { useAuth } from "../../providers.js";
 import { canAccessNavigationItem } from "./access.js";
 
 interface PageFrameProps {
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  className?: string;
   actions?: ReactNode;
   children: ReactNode;
   context?: ReactNode;
 }
 
 // Sayfa anatomisi (§3): PageHeader → HubTabs (varsa) → içerik.
-export function PageFrame({ actions, children, context, subtitle, title }: PageFrameProps) {
+export function PageFrame({ actions, children, className, context, subtitle, title }: PageFrameProps) {
   const hubTabs = useHubTabs();
 
   return (
-    <section className="next-page-frame">
+    <section className={["next-page-frame", className].filter(Boolean).join(" ")}>
       <PageHeader actions={actions} subtitle={subtitle} title={title} />
       {hubTabs ? <HubTabs className="next-page-frame__hub-tabs" items={hubTabs.items} label={hubTabs.label} linkComponent={Link} /> : null}
       {context ? <div className="next-page-frame__context" aria-label="Sayfa bilgileri">{context}</div> : null}
