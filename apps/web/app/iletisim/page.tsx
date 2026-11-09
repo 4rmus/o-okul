@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppearanceSelect } from "../../src/appearance-select.js";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, demoRequestHref, platformSupportHref, privacyRequestHref, quoteRequestHref, trialOfferPublished } from "../../src/brand.js";
 import { DemoActions } from "./demo-actions.js";
@@ -17,7 +18,7 @@ export default function ContactPage() {
       <header className="next-marketing-header">
         <nav className="next-marketing-nav" aria-label="İletişim navigasyonu">
           <Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link>
-          <div className="next-marketing-nav__actions"><Link className="next-marketing-login" href="/login">Giriş yap</Link><Link className="next-marketing-text-link" href="/fiyatlar">Fiyatlar</Link></div>
+          <div className="next-marketing-nav__actions"><AppearanceSelect /><Link className="next-marketing-login" href="/login">Giriş yap</Link><Link className="next-marketing-text-link" href="/fiyatlar">Fiyatlar</Link></div>
         </nav>
       </header>
 

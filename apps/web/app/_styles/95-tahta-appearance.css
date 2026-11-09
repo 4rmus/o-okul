@@ -1,0 +1,263 @@
+/* DEC-20261109-01: screen appearance only; the Berrak print/report-card foundation is frozen. */
+@media screen {
+  :root[data-appearance],
+  :root[data-appearance] .next-campus-shell {
+    --color-paper: oklch(96.403% 0.00824 91.48);
+    --color-paper-raised: oklch(99.668% 0.00537 95.10);
+    --color-paper-muted: oklch(94.669% 0.00804 114.22);
+    --color-ink: oklch(29.554% 0.02693 219.72);
+    --color-ink-secondary: oklch(43.916% 0.02480 215.56);
+    --color-ink-muted: oklch(52.374% 0.02508 214.58);
+    --color-ink-chart-soft: oklch(43.916% 0.02480 215.56 / 18%);
+    --color-rule: oklch(89.869% 0.00549 117.93);
+    --color-rule-strong: oklch(70% 0.018 214);
+    --color-rule-faint: oklch(94.318% 0.00697 124.45);
+    --color-accent: oklch(54.761% 0.16577 32.27);
+    --color-accent-hover: oklch(50.362% 0.15816 31.46);
+    --color-accent-strong: oklch(44.417% 0.13938 30.54);
+    --color-accent-soft: oklch(95.388% 0.02439 43.18);
+    --color-accent-secondary: oklch(49.021% 0.06316 219.37);
+    --color-accent-chart-soft: oklch(49.021% 0.06316 219.37 / 16%);
+    --color-accent-ink: oklch(98.650% 0.01302 82.40);
+    --color-focus: var(--color-accent);
+    --color-success-token: oklch(40% 0.090 150);
+    --color-success-soft-token: oklch(95% 0.036 150);
+    --color-warning-token: oklch(44% 0.090 65);
+    --color-warning-soft-token: oklch(95% 0.052 85);
+    --color-danger-token: oklch(46% 0.140 30);
+    --color-danger-soft-token: oklch(95% 0.022 35);
+    --color-overlay-token: oklch(16% 0.020 219 / 45%);
+    --color-shadow-soft: oklch(24% 0.026 219 / 5%);
+    --color-shadow-medium: oklch(24% 0.026 219 / 10%);
+    --color-shadow-strong: oklch(24% 0.026 219 / 18%);
+    --color-chart-grid: oklch(24% 0.026 219 / 10%);
+    --font-body: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    --font-display: var(--font-body);
+    --font-campus-display: var(--font-display);
+    --radius-control: 0.375rem;
+    --radius-panel: 0.625rem;
+    --radius-dialog: 0.75rem;
+    --campus-deep: oklch(29.554% 0.02693 219.72);
+    --campus-deep-ink: oklch(98.650% 0.01302 82.40);
+    --campus-deep-muted: oklch(80.179% 0.01757 196.81);
+    --campus-deep-rule: oklch(48.630% 0.01952 196.53);
+    --campus-lime: var(--color-accent-soft);
+    --campus-lime-ink: var(--color-accent);
+
+    /* Rebind aliases in both scopes: Campus defines its own resolved aliases. */
+    --color-text: var(--color-ink);
+    --color-text-secondary: var(--color-ink-secondary);
+    --color-text-muted: var(--color-ink-muted);
+    --color-primary: var(--color-accent);
+    --color-primary-hover: var(--color-accent-hover);
+    --color-primary-strong: var(--color-accent-strong);
+    --color-primary-subtle: var(--color-accent-soft);
+    --color-success: var(--color-success-token);
+    --color-success-subtle: var(--color-success-soft-token);
+    --color-warning: var(--color-warning-token);
+    --color-warning-subtle: var(--color-warning-soft-token);
+    --color-info: var(--color-accent-secondary);
+    --color-info-subtle: var(--color-paper-muted);
+    --color-border: var(--color-rule);
+    --color-border-strong: var(--color-rule-strong);
+    --color-border-input: var(--color-rule-strong);
+    --color-border-faint: var(--color-rule-faint);
+    --color-surface: var(--color-paper-raised);
+    --color-surface-muted: var(--color-paper);
+    --color-surface-elevated: var(--color-paper-muted);
+    --color-bg: var(--color-paper);
+    --color-danger: var(--color-danger-token);
+    --color-danger-subtle: var(--color-danger-soft-token);
+    --color-overlay: var(--color-overlay-token);
+    --color-brand: var(--color-accent);
+    --color-focus-ring: var(--color-focus);
+    --radius: var(--radius-control);
+    --radius-lg: var(--radius-panel);
+    --chart-primary: var(--color-accent-secondary);
+    --chart-primary-soft: var(--color-accent-chart-soft);
+    --chart-accent: var(--color-accent);
+    --chart-success: var(--color-success-token);
+    --chart-warning: var(--color-warning-token);
+    --chart-danger: var(--color-danger-token);
+    --chart-neutral: var(--color-ink-muted);
+    --chart-grid: var(--color-chart-grid);
+    --chart-text: var(--color-ink-muted);
+    --chart-surface: var(--color-paper-raised);
+  }
+
+  :root[data-appearance="whiteboard"],
+  :root[data-appearance="whiteboard"] .next-campus-shell {
+    color-scheme: light;
+    --color-paper: oklch(100% 0 0);
+    --color-paper-raised: oklch(100% 0 0);
+    --color-paper-muted: oklch(96.384% 0.00445 179.73);
+    --color-ink: oklch(31.113% 0.02855 221.94);
+    --color-ink-muted: oklch(52.374% 0.02508 214.58);
+    --color-rule: oklch(82.817% 0.01098 196.94);
+    --color-rule-faint: oklch(93% 0.008 197);
+    --color-accent: oklch(55.036% 0.15102 32.92);
+    --color-accent-soft: oklch(95.167% 0.02082 43.85);
+  }
+
+  :root[data-appearance="blackboard"],
+  :root[data-appearance="blackboard"] .next-campus-shell {
+    color-scheme: dark;
+    --color-paper: oklch(21.835% 0.00636 214.43);
+    --color-paper-raised: oklch(21.835% 0.00636 214.43);
+    --color-paper-muted: oklch(31.180% 0.01358 196.48);
+    --color-ink: oklch(95.491% 0.01196 111.76);
+    --color-ink-secondary: oklch(87% 0.014 197);
+    --color-ink-muted: oklch(80.179% 0.01757 196.81);
+    --color-ink-chart-soft: oklch(87% 0.014 197 / 18%);
+    --color-rule: oklch(48.630% 0.01952 196.53);
+    --color-rule-strong: oklch(65% 0.018 197);
+    --color-rule-faint: oklch(35% 0.014 197);
+    --color-accent: oklch(82.860% 0.09873 39.21);
+    --color-accent-hover: oklch(88% 0.070 39.21);
+    --color-accent-strong: oklch(92% 0.045 39.21);
+    --color-accent-soft: oklch(33.613% 0.02349 39.25);
+    --color-accent-secondary: oklch(84.439% 0.05049 205.73);
+    --color-accent-chart-soft: oklch(84.439% 0.05049 205.73 / 18%);
+    --color-accent-ink: oklch(21.835% 0.00636 214.43);
+    --color-success-token: oklch(80% 0.100 150);
+    --color-success-soft-token: oklch(27% 0.040 150);
+    --color-warning-token: oklch(85% 0.110 80);
+    --color-warning-soft-token: oklch(28% 0.045 65);
+    --color-danger-token: oklch(79% 0.120 30);
+    --color-danger-soft-token: oklch(27% 0.038 30);
+    --color-overlay-token: oklch(8% 0.010 219 / 70%);
+    --color-shadow-soft: oklch(5% 0.010 219 / 30%);
+    --color-shadow-medium: oklch(5% 0.010 219 / 40%);
+    --color-shadow-strong: oklch(5% 0.010 219 / 55%);
+    --color-chart-grid: oklch(95.491% 0.01196 111.76 / 12%);
+  }
+
+  :root[data-appearance="whiteboard"],
+  :root[data-appearance="blackboard"],
+  :root[data-appearance="whiteboard"] .next-campus-shell,
+  :root[data-appearance="blackboard"] .next-campus-shell {
+    --font-body: var(--font-shantell-sans), ui-sans-serif, system-ui, sans-serif;
+    --font-display: var(--font-kalam), ui-sans-serif, system-ui, sans-serif;
+    --font-campus-display: var(--font-display);
+    --radius-panel: 0.3125rem 0.75rem 0.4375rem 0.625rem / 0.625rem 0.375rem 0.75rem 0.25rem;
+    --radius-control: 0.25rem 0.5625rem 0.3125rem 0.4375rem / 0.4375rem 0.25rem 0.5rem 0.1875rem;
+    --campus-deep: var(--color-paper);
+    --campus-deep-ink: var(--color-ink);
+    --campus-deep-muted: var(--color-ink-muted);
+    --campus-deep-rule: var(--color-rule-strong);
+  }
+
+  :root[data-appearance] .next-campus-shell .next-karne-sheet,
+  :root[data-appearance] .next-karne-sheet {
+    --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
+    --font-display: var(--font-body);
+    font-family: var(--font-body), Arial, sans-serif;
+  }
+
+  :root[data-appearance] h1,
+  :root[data-appearance] h2,
+  :root[data-appearance] h3,
+  :root[data-appearance] .uh-panel__title {
+    font-family: var(--font-display);
+  }
+  :root[data-appearance] .next-campus-shell .campus-dashboard-title {
+    font-family: var(--font-display);
+  }
+  :root[data-appearance] .next-campus-shell .next-desktop-topbar,
+  :root[data-appearance] .next-campus-shell .next-mobile-topbar {
+    border-bottom: 1px solid var(--campus-deep-rule);
+  }
+  .next-campus-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  :root[data-appearance] .next-brand-mark {
+    position: relative;
+    display: inline-block;
+    flex: none;
+    width: 2.6875rem;
+    height: 1.125rem;
+    min-width: 2.6875rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    color: inherit;
+    font-size: 0;
+    background: linear-gradient(currentColor, currentColor) center 45% / 0.5625rem 2px no-repeat;
+  }
+  :root[data-appearance] .next-brand-mark::before,
+  :root[data-appearance] .next-brand-mark::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+  }
+  :root[data-appearance] .next-brand-mark::before { left: 0; }
+  :root[data-appearance] .next-brand-mark::after { right: 0; }
+
+  .next-appearance-select {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    color: inherit;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .next-appearance-select .uh-select {
+    min-width: 9rem;
+    min-height: 44px;
+    width: auto;
+    background: var(--color-paper-raised);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+  }
+  .next-auth-layout {
+    position: relative;
+    padding-block-start: var(--space-2xl);
+  }
+  .next-auth-appearance {
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+  }
+  .next-marketing-nav__actions {
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .next-appearance-select > span { display: none; }
+    :root[data-appearance] .uh-button,
+    :root[data-appearance] .uh-button__content,
+    :root[data-appearance] .uh-button__loading {
+      white-space: normal;
+      min-width: 0;
+    }
+    .next-marketing-nav__actions .next-appearance-select {
+      margin-left: auto;
+    }
+  }
+  @media (max-width: 1023px) {
+    :root[data-appearance] .next-mobile-topbar {
+      grid-template-columns: 44px minmax(0, 1fr);
+    }
+    :root[data-appearance] .next-mobile-topbar__actions {
+      grid-column: 1 / -1;
+      width: 100%;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      padding-top: var(--space-2xs);
+      border-top: 1px solid var(--color-rule);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root[data-appearance] .next-brand-mark,
+    .next-appearance-select { transition: none; }
+  }
+}

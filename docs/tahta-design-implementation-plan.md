@@ -73,3 +73,14 @@ deployment and live data. Fonts are vendored with source and license records.
 - Print/PDF and report-card contracts are unchanged.
 - LOCAL_STATIC/LOCAL_TEST and CI are reported independently of staging/production.
   Deployment and real-user task-time improvement remain unproven until separately tested.
+
+## Evidence log
+
+- 2026-11-09 / TAHTA-1 / LOCAL_STATIC: agent contract, web architecture, design-token,
+  display-storage and route-manifest checks passed. New handwriting font assets were
+  subset locally from verified upstream blobs and include Turkish glyph/license checks.
+- 2026-11-09 / TAHTA-1 / LOCAL_TEST: production web build passed. Twelve targeted browser
+  checks passed on private port 3037: all customer roles at 320/375px, three appearances,
+  persistence/legacy migration/storage denial, and the existing 320–1440px report-workspace
+  test including its unchanged report-card golden and print geometry.
+- These are local tests with synthetic API responses; no deployment or live-data smoke ran.

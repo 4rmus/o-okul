@@ -4564,8 +4564,8 @@ for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "ap
   if (!existsSync(`apps/web/public/icons/${icon}`)) failures.push(`apps/web/public/icons/${icon} missing`);
 }
 requireNoTokens("apps/web/public/push-sw.js", ["caches.", "addEventListener(\"fetch\"", "addEventListener('fetch'"]);
-// S2: PWA theme colour follows the Berrak accent (oklch(51% 0.230 277) in sRGB).
-requireTokens("apps/web/app/manifest.ts", ['theme_color: "#4f46e5"']);
+// DEC-20261109-01: installed-app chrome uses the whiteboard ink.
+requireTokens("apps/web/app/manifest.ts", ['theme_color: "#20343b"']);
 requireNoTokens("apps/web/app/manifest.ts", ['theme_color: "#155eef"']);
 
 // S2: command palette is a combobox/listbox (arrow keys, Enter, active descendant, polite result count, no 10-row cap).

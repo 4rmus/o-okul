@@ -10,7 +10,7 @@ import { hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "../_shared/navigation.js";
 import { type ShellTenantBrand } from "./nav-sidebar.js";
 import { PortalAnnouncementBell } from "./portal-announcement-bell.js";
-import { ThemeToggle } from "./theme-toggle.js";
+import { AppearanceSelect } from "../../../src/appearance-select.js";
 import { examWorkspaceSegments } from "../../../src/route-manifest.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
@@ -55,7 +55,7 @@ export function DesktopTopBar({
 
   return (
     <header className="next-desktop-topbar" aria-label="Üst gezinme">
-      {campus ? <span className="next-campus-wordmark">{appBrand.name}</span> : null}
+      {campus ? <span className="next-campus-wordmark"><span className="next-brand-mark" aria-hidden="true">{appBrand.mark}</span><span>{appBrand.name}</span></span> : null}
       <div className="next-desktop-topbar__search">
         {canUseShellSearch ? <ShellSearchBar onSearch={onSearch} /> : !campus ? <span className="next-desktop-topbar__brand">{appBrand.name}</span> : null}
       </div>
@@ -72,7 +72,7 @@ export function DesktopTopBar({
           </Button>
         ))}
         <PortalAnnouncementBell />
-        <ThemeToggle />
+        <AppearanceSelect />
         {onOpenCommand ? <Button type="button" variant="secondary" size="icon" aria-label="Komut paleti" onClick={(event) => onOpenCommand(event.currentTarget)}><Search size={16} aria-hidden="true" /></Button> : null}
         {onOpenMenu ? <Button type="button" variant="secondary" aria-label="Ana menüyü aç" aria-controls="next-sidebar" aria-expanded={menuOpen} onClick={(event) => onOpenMenu(event.currentTarget)}>Menü</Button> : null}
         <Button type="button" variant="secondary" onClick={onLogout}>

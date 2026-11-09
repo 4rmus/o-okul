@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../src/brand.js";
+import { AppearanceSelect } from "../src/appearance-select.js";
 
 const optikSteps = [
   ["01", "Dosyayı alın", "TXT veya DAT optik verisini sınav kaydına aktarın."],
@@ -143,6 +144,7 @@ export default function HomePage() {
           </Link>
           <p className="next-marketing-nav__statement">Özel okullar için bütüncül öğrenci takibi.</p>
           <div className="next-marketing-nav__actions">
+            <AppearanceSelect />
             <Link className="next-marketing-login next-marketing-nav__wide-link" href="/fiyatlar">Fiyatlar</Link>
             <Link className="next-marketing-login" href="/login">Giriş yap</Link>
             <Link className="uh-button uh-button--primary uh-button--md" href="/iletisim#demo">Demo talep et</Link>

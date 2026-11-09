@@ -19,7 +19,7 @@ import { confirmInAppNavigation, hasInAppNavigationGuard, rearmInAppNavigationGu
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
 import { CampusNavigation } from "./_shell/campus-navigation.js";
-import { ThemeToggle } from "./_shell/theme-toggle.js";
+import { AppearanceSelect } from "../../src/appearance-select.js";
 import { PortalAnnouncementBell } from "./_shell/portal-announcement-bell.js";
 import { PortalBottomNav } from "./_shell/portal-bottom-nav.js";
 import { isWebPushCapabilityEnabled, PushDevicePanel } from "./_shell/push-devices.js";
@@ -378,7 +378,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <ShellBrand tenantBrand={tenantBrand} />
         <div className="next-mobile-topbar__actions">
           <PortalAnnouncementBell />
-          <ThemeToggle />
+          <AppearanceSelect />
           <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
             <Search size={16} aria-hidden="true" />
           </button>

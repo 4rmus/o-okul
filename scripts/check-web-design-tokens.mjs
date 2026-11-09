@@ -8,6 +8,9 @@ const files = {
   globals: readCssWithLocalImports("apps/web/app/globals.css"),
   layout: read("apps/web/app/layout.tsx"),
   darkTheme: read("apps/web/app/_styles/01-theme-dark.css"),
+  appearance: read("apps/web/app/_styles/95-tahta-appearance.css"),
+  appearanceBootstrap: read("apps/web/src/appearance.ts"),
+  appearanceSelect: read("apps/web/src/appearance-select.tsx"),
   log: read(".hallmark/log.json"),
   package: read("package.json"),
   reportRoute: read("apps/web/app/(app)/kurum/raporlar/reports-page.tsx"),
@@ -18,6 +21,7 @@ const failures = [];
 
 requireTokens("design.md", files.design, [
   "# Design — O-Okul",
+  "## Screen appearances — Tahta (DEC-20261109-01)",
   "## Genre",
   "## Macrostructure family",
   "## Theme — Berrak",
@@ -151,11 +155,15 @@ requireTokens("apps/web/app/layout.tsx", files.layout, [
   '"./fonts/IBMPlexSans-SemiBold.woff2"',
   "bodyFont.variable",
   'data-theme="light"',
+  'data-appearance="whiteboard"',
   "suppressHydrationWarning",
-  'localStorage.getItem("o-okul-theme")',
-  "(prefers-color-scheme: dark)",
-  "d.dataset.theme=t",
-  "<script dangerouslySetInnerHTML={{ __html: themeScript }} />",
+  'import { appearanceBootstrapScript } from "../src/appearance.js";',
+  "<script dangerouslySetInnerHTML={{ __html: appearanceBootstrapScript }} />",
+  'variable: "--font-shantell-sans"',
+  'variable: "--font-kalam"',
+  '"./fonts/ShantellSans-Variable.woff2"',
+  '"./fonts/Kalam-Regular.woff2"',
+  '"./fonts/Kalam-Bold.woff2"',
 ]);
 forbidRegex("apps/web/app/layout.tsx", files.layout, /Source_Serif_4|font-source-serif/g, "serif display fontu");
 forbidRegex("apps/web/app/layout.tsx", files.layout, /next\/font\/google/g, "build zamanı Google Fonts bağımlılığı");
@@ -167,10 +175,42 @@ requireTokens("Campus local fonts", files.layout, [
   "campusBodyFont.variable",
   "campusDisplayFont.variable",
 ]);
-if ((files.layout.match(/preload: false/g) ?? []).length !== 2) failures.push("Campus fonts must not preload on unrelated routes.");
-for (const family of ["Manrope", "Fraunces"]) {
+if ((files.layout.match(/preload: false/g) ?? []).length !== 4) failures.push("Optional screen fonts must not preload on unrelated appearances.");
+for (const family of ["Manrope", "Fraunces", "Kalam", "ShantellSans"]) {
   requireTokens(`${family} font license`, read(`apps/web/app/fonts/${family}-OFL.txt`), ["SIL OPEN FONT LICENSE Version 1.1"]);
 }
+requireTokens("Tahta appearance bootstrap", files.appearanceBootstrap, [
+  'localStorage.getItem("o-okul-appearance")',
+  'localStorage.getItem("o-okul-theme") === "dark" ? "blackboard" : "whiteboard"',
+  'appearance = "whiteboard"',
+  'appearance !== "plain" && appearance !== "whiteboard" && appearance !== "blackboard"',
+  'appearance === "blackboard" ? "dark" : "light"',
+  "document.documentElement.dataset.appearance = appearance",
+  "document.documentElement.dataset.theme = theme",
+  "applyAppearance.toString()",
+]);
+requireTokens("Tahta appearance selector", files.appearanceSelect, [
+  'aria-label="Görünüm"',
+  '<option value="plain">Sade</option>',
+  '<option value="whiteboard">Beyaz tahta</option>',
+  '<option value="blackboard">Kara tahta</option>',
+  'attributeFilter: ["data-appearance", "data-theme"]',
+  "applyAppearance(event.currentTarget.value)",
+]);
+requireTokens("Tahta screen layer", files.appearance, [
+  "@media screen {",
+  ':root[data-appearance] .next-campus-shell',
+  ':root[data-appearance="whiteboard"]',
+  ':root[data-appearance="blackboard"]',
+  "--color-accent: oklch(54.761% 0.16577 32.27)",
+  "--font-body: var(--font-shantell-sans)",
+  "--font-display: var(--font-kalam)",
+  ":root[data-appearance] .next-karne-sheet",
+  "--font-body: var(--font-ibm-plex-sans)",
+  ".next-brand-mark::before",
+  ".next-brand-mark::after",
+]);
+forbidRegex("Tahta screen layer", files.appearance, /@media\s+print\b/gi, "print override");
 requireTokens("Campus scoped theme", read("apps/web/app/_styles/80-campus-shell.css"), [
   "@media screen",
   ".next-campus-shell {",
@@ -294,7 +334,7 @@ requireTokens("packages/ui/src/components/charts.tsx", files.charts, [
   "getImageData(0, 0, 1, 1)",
   'padStart(2, "0")',
   "animation: false",
-  'attributeFilter: ["data-theme"]',
+  'attributeFilter: ["data-theme", "data-appearance"]',
   "observer.disconnect()",
 ]);
 forbidRegex("packages/ui/src/components/charts.tsx", files.charts, /#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/gi, "ham renk");
@@ -574,7 +614,7 @@ function readMarkedBlock(source, label) {
 function validateCustomPropertyGraph(source) {
   const definitions = new Set([...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
   const references = new Set([...source.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]));
-  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-manrope", "--font-fraunces"]);
+  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-manrope", "--font-fraunces", "--font-shantell-sans", "--font-kalam"]);
   const missing = [...references].filter((name) => !definitions.has(name) && !runtimeFontVariables.has(name)).sort();
   if (missing.length > 0) failures.push(`Tanımsız CSS custom property referansları: ${missing.join(", ")}`);
 }

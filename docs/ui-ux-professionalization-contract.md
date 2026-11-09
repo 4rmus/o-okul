@@ -1,5 +1,24 @@
 # UI/UX Professionalization Contract
 
+## Tahta screen update (DEC-20261109-01)
+
+The approved o-o identity and three appearances (Sade, Beyaz tahta, Kara tahta) replace
+the older screen palette/font/default-theme rules. Whiteboard is the default; existing
+stored dark preferences migrate to blackboard. The shared first-paint initializer and
+selector must agree, including storage-denied cases. Fonts are locally served.
+Campus navigation, roles and real-data compositions stay authoritative.
+
+The institution student overview uses stored Net / Soru and compact net charts only
+for verified equivalent exam/course scope, scoring context and question distribution.
+The previous-result delta uses the last two eligible results, not the API's first-to-last
+series delta. Other report comparisons retain Başarı %, and school grades stay separate.
+Recent authorized attendance moves below identity as a chronological day strip;
+missing records, future days and guessed holidays never become absences.
+
+The Berrak light report-card palette, IBM Plex typography, print/PDF geometry,
+ReportSnapshot and published-grade immutability remain unchanged. This update does
+not authorize deployment, live-data changes or any wider data-access scope.
+
 Tarih: 2026-06-17
 
 Bu sozlesme o-okul arayuzunu operasyonel egitim SaaS'i olarak profesyonellestirmek icin
