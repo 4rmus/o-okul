@@ -234,7 +234,7 @@
   @media (max-width: 768px) {
     .next-appearance-select > span { display: none; }
     .uh-page-header { flex-wrap: wrap; }
-    :is(.next-report-export-grid, .next-optical-format-grid) :is(.uh-button, .uh-button__content, .uh-button__loading) {
+    :is(.next-report-export-grid, .next-optical-workspace) :is(.uh-button, .uh-button__content, .uh-button__loading) {
       white-space: normal;
       min-width: 0;
     }
