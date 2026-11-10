@@ -1,5 +1,41 @@
 # Design — O-Okul
 
+## Screen appearances — Tahta (DEC-20261109-01)
+
+The approved screen identity is the o-o glasses mark with coral, ink and teal.
+`apps/web/app/_styles/95-tahta-appearance.css` owns its screen-only palette and
+typography overrides, following the existing Campus overlay pattern. The base
+exports in `tokens.css` below remain the frozen Berrak print/report-card foundation.
+This section supersedes the older screen tone, font and default-theme paragraphs.
+
+- **Beyaz tahta** is the default: white surface, ink text, local Shantell Sans body
+  and local Kalam headings. **Kara tahta** uses the same composition on charcoal,
+  with chalk-colored text and readable coral/teal accents. **Sade** retains a plain
+  Manrope treatment in the same identity. Both handwriting fonts include Turkish.
+- `data-appearance="plain|whiteboard|blackboard"` is the display source of truth.
+  `data-theme="light|dark"` remains synchronized for existing chart/appearance consumers.
+  `o-okul-appearance` persists the choice; a legacy stored dark preference becomes
+  blackboard. A missing/invalid preference becomes whiteboard even when system mode is dark.
+  The same self-contained initializer runs before paint and for explicit selections.
+- Appearance does not alter navigation, permissions, data scope or report calculations.
+  The shared selector appears on public/auth/application surfaces and supports keyboard use.
+- At widths up to 768px, action labels can use at most two lines inside their control;
+  wider screens keep one line. Text must remain unclipped. Mobile appearance and
+  notification controls occupy their own row below the institution identity.
+- The mark is two equal circles and a short bridge; uploaded institution logos remain separate.
+  Installed-app icons use the same vector geometry.
+- `97-tahta-marketing.css` applies the approved headline and record-category illustration
+  to the public landing. It contains no invented student records or product screenshots;
+  existing demo, pricing and sign-in destinations and the student-week/optical section order remain.
+- Student overview net charts read stored values. A previous-result delta requires
+  matching exam/course scope and active question distribution. Different-size comparisons
+  retain Başarı %; school grades are not part of a deneme series.
+- Recent attendance is a chronological day strip below identity. Multiple records on a day
+  retain their existing aggregation semantics. Missing records are not absences and no
+  holiday or half-day status is guessed from the date.
+- All Tahta typography, color and shape overrides are screen-only. Web report cards keep
+  their frozen light palette and IBM Plex; print/PDF, A4 geometry and golden tolerance do not change.
+
 O-Okul için kilitli, çok sayfalı tasarım sistemi. Her yeni web yüzeyi bu
 dosyayı ve `tokens.css` değişkenlerini kullanır; route, yetki ve veri
 sözleşmeleri görsel sistemden bağımsızdır.

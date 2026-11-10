@@ -2820,6 +2820,10 @@ const reportSnapshotPdfExportResultSchema = objectSchema({
 const reportStudentProgressPointSchema = objectSchema({
   snapshotId: stringSchema(),
   examId: stringSchema(),
+  examType: stringSchema(),
+  examYear: integerSchema(),
+  scoringProfileId: stringSchema(),
+  gradeLevelId: stringSchema(),
   courseId: stringSchema(),
   examTitle: stringSchema(),
   examStartsAt: stringSchema({ format: "date-time" }),

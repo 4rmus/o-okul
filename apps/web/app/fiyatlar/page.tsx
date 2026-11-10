@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppearanceSelect } from "../../src/appearance-select.js";
 import { ArrowRight, BarChart3, BookOpen, CalendarDays, ScanLine, ShieldCheck, Wallet } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../../src/brand.js";
 import { PriceCalculator } from "./price-calculator.js";
@@ -45,6 +46,7 @@ export default function PricingPage() {
           <Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link>
           <p className="next-marketing-nav__statement">Özel okullar için bütüncül öğrenci takibi.</p>
           <div className="next-marketing-nav__actions">
+            <AppearanceSelect />
             <Link className="next-marketing-login" href="/login">Giriş yap</Link>
             <Link className="uh-button uh-button--primary uh-button--md" href="/iletisim#demo">Demo talep et</Link>
           </div>

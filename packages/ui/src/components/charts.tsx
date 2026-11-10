@@ -83,9 +83,9 @@ function useChartColors() {
       text: chartToken("--chart-text", containerRef.current),
     });
     readColors();
-    // Tema değişince (html[data-theme]) token'lar yeniden okunur; grafik yeni renklerle çizilir.
+    // Appearance can change palette without changing the light/dark mode.
     const observer = new MutationObserver(readColors);
-    observer.observe(document.documentElement, { attributeFilter: ["data-theme"], attributes: true });
+    observer.observe(document.documentElement, { attributeFilter: ["data-theme", "data-appearance"], attributes: true });
     return () => observer.disconnect();
   }, []);
 

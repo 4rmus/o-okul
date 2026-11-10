@@ -100,6 +100,7 @@ export function StudentTimelinePanel({
     queryFn: () => apiRequest<StudentPublishedGradeItem[]>(accessToken, `${apiBaseUrl}/grade-assessments/students/${encodedStudentId}/published`),
     enabled: Boolean(auth) && canReadAcademic,
     refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
   const homeworkQuery = useQuery({
     queryKey: ["next-student-timeline-homework", tenantKey, studentId],

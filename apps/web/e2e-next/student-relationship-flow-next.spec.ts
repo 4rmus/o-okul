@@ -7,6 +7,8 @@ import {
   shiftMonth,
 } from "../app/(app)/portals/_shared/attendance-calendar-model.js";
 import { buildStudentTimeline } from "../app/(app)/kurum/ogrenciler/student-timeline-model.js";
+import { buildAttendanceStripDays, buildStudentNetOverview, studentNetDomain } from "../app/(app)/kurum/ogrenciler/student-profile-model.js";
+import type { ReportStudentProgressPoint } from "@o-okul/shared-types";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
@@ -27,33 +29,142 @@ const rawStudentDetailPiiValues = [
 ] as const;
 
 test.describe("Öğrenci ilişki haritası", () => {
+  test("net comparison uses frozen matching scope and the last two results", () => {
+    const first = netPoint("exam-first", "snapshot-first", 5, "2026-09-01T07:00:00Z");
+    const previous = netPoint("exam-a", "snapshot-a1", 12, "2026-10-05T07:00:00Z");
+    const current = netPoint("exam-b", "snapshot-b2", 15, "2026-10-15T07:00:00Z");
+    const latest = { examId: "exam-b", snapshotId: "snapshot-b2", total: { net: 15, questionCount: 20 } };
+    const history = { tenantId: "tenant-flow", studentId: "student-a", examId: "exam-b", points: [current, first, previous], netDelta: 99 };
+    const model = buildStudentNetOverview(latest, history);
+    expect(model.points.map((point) => point.net)).toEqual([5, 12, 15]);
+    expect(model.previousDelta).toBe(3);
+    expect(model.seriesDelta).toBe(10);
+    expect(model.net).toBe(15);
+    expect(studentNetDomain(model.points)).toEqual({ low: 0, high: 20 });
+
+    for (const mismatch of [
+      { examType: "LGS" }, { examYear: 2025 }, { scoringProfileId: "another-profile" },
+      { gradeLevelId: "grade-12" }, { gradeLevelId: undefined },
+      { courseId: "course-turkish" }, { termId: "another-term" },
+      { total: { net: 12, questionCount: 30 }, branches: [{ branch: "Matematik", net: 12, questionCount: 30 }] },
+      { branches: [{ branch: "Türkçe", net: 12, questionCount: 20 }] },
+      { scoringProfileId: undefined }, { branches: undefined },
+    ]) {
+      const result = buildStudentNetOverview(latest, { ...history, points: [{ ...previous, ...mismatch }, current] });
+      expect(result.previousDelta).toBeUndefined();
+      expect(result.points).toHaveLength(1);
+    }
+    const otherVersion = buildStudentNetOverview({ ...latest, snapshotId: "not-loaded" }, history);
+    expect(otherVersion.branches).toEqual([]);
+    expect(otherVersion.previousDelta).toBeUndefined();
+    expect(buildStudentNetOverview(undefined, history).hasLatestReport).toBe(false);
+  });
+
+  test("net overview retains negative/missing stored nets and excludes later exams", () => {
+    const previous = netPoint("exam-a", "snapshot-a1", -5, "2026-10-05T07:00:00Z");
+    const current = netPoint("exam-b", "snapshot-b2", -2, "2026-10-15T07:00:00Z");
+    const later = netPoint("exam-c", "snapshot-c", 18, "2026-11-05T07:00:00Z");
+    const history = { tenantId: "tenant-flow", studentId: "student-a", examId: "exam-b", points: [previous, current, later] };
+    const latest = { examId: "exam-b", snapshotId: "snapshot-b2", total: { net: -2, questionCount: 20 } };
+    const result = buildStudentNetOverview(latest, history);
+    expect(result.net).toBe(-2);
+    expect(result.previousDelta).toBe(3);
+    expect(result.points.map((point) => point.net)).toEqual([-5, -2]);
+    expect(studentNetDomain(result.points)).toEqual({ low: -10, high: 0 });
+    expect(buildStudentNetOverview({ ...latest, total: { questionCount: 20 } }, history).net).toBeUndefined();
+    expect(buildStudentNetOverview({ ...latest, total: { net: Number.NaN } }, history).previousDelta).toBeUndefined();
+  });
+
+  test("attendance strip preserves real weekend/multiple records and excludes deleted/future records", () => {
+    const rows = [
+      { date: "2026-10-30", status: "PRESENT" as const },
+      { date: "2026-10-30", status: "ABSENT" as const },
+      { date: "2026-10-31", status: "PRESENT" as const },
+      { date: "2026-11-01", status: "ABSENT" as const, deletedAt: "2026-11-01T09:00:00Z" },
+      { date: "2026-11-03", status: "ABSENT" as const },
+    ].map((row, index) => ({ ...row, id: `att-${index}`, studentId: "student-a", tenantId: "tenant-flow" }));
+    const days = buildAttendanceStripDays(rows, "2026-10-30", "2026-11-02");
+    expect(days).toHaveLength(4);
+    expect(days[0]).toMatchObject({ status: "ABSENT", total: 2, counts: { ABSENT: 1, PRESENT: 1 } });
+    expect(days[1]).toMatchObject({ status: "PRESENT", total: 1 });
+    expect(days[2]?.status).toBeUndefined();
+    expect(days[3]?.status).toBeUndefined();
+  });
+
+  test("Tahta profile keeps compact nets, same-day attendance detail and published grades together", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 1280, height: 1000 }, {
+      examFixtures: true, timelineFixtures: true, requestedPaths, section: "overview",
+      responseOverrides: {
+        "/attendance": ["PRESENT", "ABSENT", "LATE"].map((status, index) => ({ id: `att-${index}`, studentId: "student-a", tenantId: "tenant-flow", date: istanbulDayKey(), status })),
+      },
+    });
+    const strip = page.getByRole("region", { name: "Öğrenci devam günleri" });
+    await expect(strip).toContainText("1 günde Yok kaydı");
+    await expect(strip).toContainText("1 günde Geç kaydı");
+    await strip.locator('button[data-status="ABSENT"]').click();
+    await expect(strip.locator("#student-attendance-day-detail")).toContainText("3 kayıt");
+    await expect(strip.locator("#student-attendance-day-detail")).toContainText("1 Yok");
+    await expect(page.getByRole("region", { name: "Öğrencinin yayımlanmış okul notları" })).toContainText("80 / 100");
+    await expect(page.getByRole("region", { name: "Son deneme neti" })).toContainText("+3,00 net");
+    await expect(page.getByRole("list", { name: "Son denemenin ders netleri" })).toContainText("15,00 / 20");
+    expect((await page.locator(".next-student-net-trend").boundingBox())?.height).toBeLessThanOrEqual(80);
+    const dayRequests = requestedPaths.filter((path) => path === "/attendance").length;
+    await page.setViewportSize({ width: 320, height: 900 });
+    await expect(strip.locator(".next-student-attendance-strip__days button")).toHaveCount(5);
+    const firstDate = await strip.locator(".next-student-attendance-strip__days button").first().getAttribute("aria-label");
+    await strip.getByRole("button", { name: "Önceki günler" }).click();
+    expect(await strip.locator(".next-student-attendance-strip__days button").first().getAttribute("aria-label")).not.toBe(firstDate);
+    expect(requestedPaths.filter((path) => path === "/attendance")).toHaveLength(dayRequests);
+    await expectNoHorizontalOverflow(page, "tahta-profile-320");
+  });
+
+  test("Tahta profile renders negative stored nets and a failed source without substituting zeros", async ({ page }) => {
+    const latest = createLatestExam();
+    latest.total.net = -2;
+    latest.total.successRate = -10;
+    await openStudentDetail(page, { width: 1280, height: 1000 }, {
+      examFixtures: true, section: "overview",
+      responseOverrides: {
+        "/students/student-a/overview": { ...createStudentOverview(), latestExam: latest },
+        "/exams/exam-b/reports/students/student-a/progress": {
+          tenantId: "tenant-flow", studentId: "student-a", examId: "exam-b", netDelta: 99,
+          points: [netPoint("exam-a", "snapshot-a1", -5, "2026-10-05T07:00:00Z"), netPoint("exam-b", "snapshot-b2", -2, "2026-10-15T07:00:00Z")],
+        },
+      },
+    });
+    const headline = page.getByRole("region", { name: "Son deneme neti" });
+    await expect(headline).toContainText("-2,00 / 20");
+    await expect(headline).toContainText("+3,00 net");
+    await expect(page.locator('.next-student-net-branch-fill[data-negative="true"]')).toBeVisible();
+    await page.route("**/api/v1/exams/exam-b/reports/students/student-a/progress**", (route) => route.request().method() === "OPTIONS"
+      ? route.fulfill({ status: 204, headers: corsHeadersFor(route) })
+      : route.fulfill({ status: 503, headers: corsHeadersFor(route), contentType: "application/json", body: JSON.stringify({ error: { code: "UNAVAILABLE", message: "Unavailable" } }) }));
+    await page.reload();
+    await expect(page.getByRole("status").filter({ hasText: "Geçmiş raporlar alınamadı" })).toBeVisible();
+    await expect(headline).toContainText("-2,00 / 20");
+    await expect(headline).not.toContainText("+0,00");
+  });
+
   test("liste görünümü ilişki haritasını PII sızdırmadan gösterir", async ({ page }) => {
     const auditLogRequests: URL[] = [];
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths, section: "overview" });
 
-    // K2: sayfa Genel bakış sekmesiyle açılır; dört KPI kutusu mevcut overview alanlarından okunur.
+    // The new identity/attendance/net areas replace the duplicated overview KPI cards.
     await expect(page.getByRole("tab", { name: "Genel bakış" })).toHaveAttribute("aria-selected", "true");
     const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" });
     const summaryMetrics = operationSummary.getByRole("group", { name: "Öğrenci detay özeti metrikleri" });
-    await expect(summaryMetrics.locator(".next-operation-summary__item")).toHaveCount(4);
-    await expect(summaryMetrics).toContainText("Devamsızlık");
-    await expect(summaryMetrics).toContainText("1 yok · 1 geç");
-    await expect(summaryMetrics).toContainText("30 yoklama kaydı");
-    await expect(summaryMetrics).toContainText("Son sınav Başarı %");
-    await expect(summaryMetrics).toContainText("Hazır sınav raporu yok");
+    await expect(summaryMetrics.locator(".next-operation-summary__item")).toHaveCount(2);
+    await expect(page.getByRole("region", { name: "Son deneme neti" })).toContainText("Hazır deneme raporu yok");
+    await expect(page.getByRole("region", { name: "Öğrenci devam günleri" })).toContainText("Yoklama kaydı yok");
     await expect(summaryMetrics).toContainText("Açık ödev");
     await expect(summaryMetrics).toContainText("Öğretmen notu");
     await expect(operationSummary).toContainText("Kişisel bilgiler maskeli");
     await expect(operationSummary).toContainText("2 veli bağlı");
     await expect(operationSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toHaveCount(0);
-    const studentProfile = page.getByLabel("Öğrenci profil kartı");
-    await expect(studentProfile).toContainText("Aktif");
-    await expect(studentProfile).toContainText("11-A");
-    const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
-    await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
-    await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
-    await expect(studentProfile).not.toContainText("Veli bağlantısı");
+    await expect(page.locator(".next-student-identity-meta")).toContainText("Aktif");
+    await expect(page.locator(".next-student-identity-meta")).toContainText("11-A");
     await expect(page.getByLabel("Öğrenci karar kartları")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Öğretmen notları" })).toHaveAttribute("href", "/kurum/notlar?classId=class-11a");
     await expect(page.getByRole("link", { name: "Portal erişimi" })).toHaveAttribute("href", "/kurum/ogrenci-portal-erisimi");
@@ -67,6 +178,13 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expectNoUnlabeledControls(page, "student-overview-desktop");
 
     await openRecordsSection(page);
+    const studentProfile = page.getByLabel("Öğrenci profil kartı");
+    await expect(studentProfile).toContainText("Aktif");
+    await expect(studentProfile).toContainText("11-A");
+    const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
+    await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
+    await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
+    await expect(studentProfile).not.toContainText("Veli bağlantısı");
     const relationshipMap = page.getByLabel("Öğrenci ilişki haritası");
     await expect(relationshipMap).toContainText("Ayşe Yılmaz");
     await expect(relationshipMap).toContainText("Mehmet Demir");
@@ -122,19 +240,21 @@ test.describe("Öğrenci ilişki haritası", () => {
     await openStudentDetail(page, { width: 1280, height: 900 }, { examFixtures: true, requestedPaths, section: "overview" });
 
     const summaryMetrics = page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" });
-    await expect(summaryMetrics).toContainText("%75,0");
-    await expect(summaryMetrics).toContainText("Net 15,00 / Soru 20");
+    const netHeadline = page.getByRole("region", { name: "Son deneme neti" });
+    await expect(netHeadline).toContainText("15,00 / 20");
+    await expect(netHeadline).toContainText("+3,00 net");
+    await expect(netHeadline).not.toContainText("99");
     await expect(summaryMetrics.locator(".next-operation-summary__item").filter({ hasText: "Açık ödev" })).toContainText("3");
     await expect(summaryMetrics.locator(".next-operation-summary__item").filter({ hasText: "Öğretmen notu" })).toContainText("2");
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toContainText("Son sınav: Deneme B");
     // Genel bakış yalnız gelişim grafiğini yükler; rapor sürümleri Sınav detaylarında istenir.
     await expect.poll(() => requestedPaths.includes("/exams/exam-b/reports/students/student-a/progress")).toBe(true);
     // L8: the exam history labels each point with the exam title and the exam date, not the report generation date.
-    const examHistory = page.getByRole("table", { name: "Öğrenci sınav geçmişi" });
+    const examHistory = page.getByRole("img", { name: /^Deneme netleri:/ });
     // tr-TR short date is d.MM.y: 5 Oct renders as "5.10.2026", 3 Nov as "3.11.2026".
-    await expect(examHistory).toContainText("Deneme A (5.10.2026)");
-    await expect(examHistory).toContainText("Deneme B (15.10.2026)");
-    await expect(examHistory).not.toContainText("3.11.2026");
+    await expect(examHistory).toHaveAttribute("aria-label", /5\.10\.2026: 12,00/);
+    await expect(examHistory).toHaveAttribute("aria-label", /15\.10\.2026: 15,00/);
+    await expect(examHistory).not.toHaveAttribute("aria-label", /3\.11\.2026/);
     expect(requestedPaths.some((path) => path.endsWith("/snapshots"))).toBe(false);
     expect(requestedPaths.some((path) => path.includes("/reports/snapshots/"))).toBe(false);
 
@@ -173,7 +293,7 @@ test.describe("Öğrenci ilişki haritası", () => {
   for (const viewport of [{ width: 320, height: 720 }, { width: 375, height: 812 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
     test(`K2: genel bakış ve kayıtlar ${viewport.width}px genişlikte taşmaz`, async ({ page }) => {
       await openStudentDetail(page, viewport, { examFixtures: true, section: "overview" });
-      await expect(page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" }).locator(".next-operation-summary__item")).toHaveCount(4);
+      await expect(page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" }).locator(".next-operation-summary__item")).toHaveCount(2);
       await expectNoHorizontalOverflow(page, `student-overview-${viewport.width}`);
       await expectNoUnlabeledControls(page, `student-overview-${viewport.width}`);
       await openRecordsSection(page);
@@ -261,7 +381,7 @@ test.describe("Öğrenci ilişki haritası", () => {
       await fulfillData(route, { ...createStudentProfile(), lastName: "Kaya Yıldız" });
     });
 
-    await expect(page.getByLabel("Öğrenci profil kartı")).toContainText("Sınıfı, kayıt durumunu veya iletişim bilgilerini değiştirmek için üstteki Düzenle'yi kullanın.");
+    await expect(page.locator(".next-student-identity-meta")).toContainText("Öğrenci no. 1101");
     await page.locator(".next-student-detail-actions").getByRole("button", { name: "Düzenle" }).click();
     const dialog = page.getByRole("dialog", { name: "Öğrenci düzenle" });
     await expect(dialog).toBeVisible();
@@ -502,11 +622,12 @@ test.describe("Öğrenci 360 zaman çizelgesi ve yoklama takvimi", () => {
     expect(withFinance.find((event) => event.kind === "finance")).toMatchObject({ detail: "1.500,00 TRY · Makbuz R-1", title: "Ödeme alındı" });
   });
 
-  test("kayıtlar sekmesi olayları sınırlı isteklerle gösterir; genel bakış bu istekleri atmaz", async ({ page }) => {
+  test("records reuse the overview grade read and keep detailed sources bounded", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 1280, height: 900 }, { requestedPaths, section: "overview", timelineFixtures: true });
-    const timelinePaths = ["/grade-assessments/students/student-a/published", "/development/assessments", "/attendance"];
-    expect(requestedPaths.filter((path) => timelinePaths.includes(path))).toEqual([]);
+    expect(requestedPaths).not.toContain("/development/assessments");
+    await expect.poll(() => requestedPaths.filter((path) => path === "/attendance").length).toBe(1);
+    await expect.poll(() => requestedPaths.filter((path) => path === "/grade-assessments/students/student-a/published").length).toBe(1);
     // UAT U1: Genel bakış "Açık ödev" kartı sınıf ödevini sayar; bu tek istek zaman çizelgesiyle paylaşılır.
     await expect.poll(() => requestedPaths.filter((path) => path === "/homework/students/student-a").length).toBe(1);
 
@@ -896,15 +1017,25 @@ function mockStudentExamResponse(pathName: string): { data: unknown } | undefine
       data: {
         examId: "exam-b",
         points: [
-          { examId: "exam-a", examStartsAt: "2026-10-05T07:00:00.000Z", examTitle: "Deneme A", generatedAt: "2026-11-03T09:00:00.000Z", snapshotId: "snapshot-a1", total: { net: 12, questionCount: 20, successRate: 60 } },
-          { examId: "exam-b", examStartsAt: "2026-10-15T07:00:00.000Z", examTitle: "Deneme B", generatedAt: "2026-11-03T09:05:00.000Z", snapshotId: "snapshot-b2", total: { net: 15, questionCount: 20, successRate: 75 } },
+          { ...netPoint("exam-a", "snapshot-a1", 12, "2026-10-05T07:00:00.000Z"), examTitle: "Deneme A", generatedAt: "2026-11-03T09:00:00.000Z" },
+          { ...netPoint("exam-b", "snapshot-b2", 15, "2026-10-15T07:00:00.000Z"), examTitle: "Deneme B", generatedAt: "2026-11-03T09:05:00.000Z" },
         ],
+        netDelta: 99,
         studentId: "student-a",
         tenantId: "tenant-flow",
       },
     };
   }
   return undefined;
+}
+
+function netPoint(examId: string, snapshotId: string, net: number, examStartsAt: string): ReportStudentProgressPoint {
+  return {
+    examId, snapshotId, examStartsAt, examType: "TYT", examYear: 2026,
+    scoringProfileId: "TR-YKS-2026-NOSD-V1", gradeLevelId: "grade-11",
+    courseId: "course-math", termId: "term-2026-fall",
+    total: { net, questionCount: 20 }, branches: [{ branch: "Matematik", net, questionCount: 20 }],
+  };
 }
 
 function createAuditSummaries() {
@@ -1152,6 +1283,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
     const body = document.body;
     return Math.max(documentElement.scrollWidth - documentElement.clientWidth, body.scrollWidth - body.clientWidth);
   });
+
 
   expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
 }

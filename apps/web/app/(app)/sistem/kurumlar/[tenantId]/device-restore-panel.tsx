@@ -31,7 +31,7 @@ export function DeviceRestorePanel({auth,tenantId,onPendingChange,onChange}:{aut
     finally{if(!controller.signal.aborted){setBusy(false);setCode("");}}
   }
   return <Panel title="Cihaz yedeğinden geri yükleme" description="Kurum yetkilisinin gönderdiği arşiv talebini incele.">
-    <Button type="button" onClick={()=>{setOpen(true);if(open)void query.refetch();}} disabled={busy}>Geri yükleme taleplerini göster</Button>
+    <Button type="button" onClick={()=>{setOpen(true);if(open)void query.refetch();}} disabled={busy}>Talepleri göster</Button>
     {open&&query.isPending?<p role="status">Talep kontrol ediliyor.</p>:null}
     {query.isError?<p role="alert">Talep bilgisi alınamadı.</p>:null}
     {open&&query.data&&!query.data.available?<p>Bu kurum için geri yükleme etkin değil.</p>:null}

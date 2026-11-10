@@ -12,9 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#eef2ff",
-    // Berrak --color-accent oklch(51% 0.230 277) sRGB karşılığı (tokens.css).
-    theme_color: "#4f46e5",
+    background_color: "#ffffff",
+    // Installed-app chrome uses the default whiteboard ink (DEC-20261109-01).
+    theme_color: "#20343b",
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

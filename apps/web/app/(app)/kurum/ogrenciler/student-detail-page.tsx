@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
-  AttendanceSummaryRecord,
   ClassRecord,
   CourseRecord,
   ExamRecord,
@@ -38,7 +37,6 @@ import { ApiRequestError, apiBaseUrl, apiRequest, withQueryParams } from "../../
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { canAccessHref, hasCapabilityForRoles } from "../../_shared/access.js";
-import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ErrorBookletTable } from "../../_shared/error-booklet-table.js";
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
@@ -50,9 +48,11 @@ import { GuardianLinkRetryAlert, isGuardianLinkConcurrentUpdate } from "../_shar
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { StudentFormModal } from "./student-form-modal.js";
 import { StudentAttendanceCalendar, StudentTimelinePanel } from "./student-timeline.js";
+import { StudentAttendanceStrip } from "./student-attendance-strip.js";
+import { buildStudentNetOverview, type StudentNetOverview } from "./student-profile-model.js";
+import { StudentNetCharts, StudentNetHeadline, StudentPublishedGrades } from "./student-profile-overview.js";
 
 interface StudentBaseDetail {
-  attendanceSummary: AttendanceSummaryRecord | null;
   auditLogs: StudentAuditSummaryRecord[];
   classes: ClassRecord[];
   courses: CourseRecord[];
@@ -193,6 +193,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const report = reportDataQuery.data?.report ?? null;
   const errorBooklet = reportDataQuery.data?.errorBooklet ?? null;
   const progress = reportDataQuery.data?.progress ?? null;
+  const netOverview = useMemo(() => buildStudentNetOverview(detail?.latestExam, progress), [detail?.latestExam, progress]);
   const studentName = detail ? `${detail.profile.firstName} ${detail.profile.lastName}` : "Öğrenci 360";
   const examResult = toStudentExamResult(report);
   const branchRadar = toStudentBranchRadar(report);
@@ -207,35 +208,38 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
     setSelectedSnapshotId("");
   }, [exams, selectedExamId]);
 
+  const studentActions = (
+    <div className="next-student-detail-actions">
+      <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
+        <ArrowLeft size={17} aria-hidden="true" />
+        Öğrencilere dön
+      </Link>
+      {canManageStudent && detail ? (
+        <Button onClick={() => setIsEditOpen(true)} type="button" variant="secondary">
+          <Pencil size={17} aria-hidden="true" />
+          Düzenle
+        </Button>
+      ) : null}
+      {mode === "exams" ? (
+        <Link className="uh-button uh-button--secondary" href={studentDashboardHref}>
+          <LayoutDashboard size={17} aria-hidden="true" />
+          Öğrenci özetine dön
+        </Link>
+      ) : (
+        <Link className="uh-button" href={studentExamsHref}>
+          <BarChart3 size={17} aria-hidden="true" />
+          Sınav detayları
+        </Link>
+      )}
+    </div>
+  );
+
   return (
     <PageFrame
-      title={studentName}
-      subtitle={mode === "exams" ? "Sınav detayları" : "Öğrenci özeti"}
-      actions={
-        <div className="next-student-detail-actions">
-          <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
-            <ArrowLeft size={17} aria-hidden="true" />
-            Öğrencilere dön
-          </Link>
-          {canManageStudent && detail ? (
-            <Button onClick={() => setIsEditOpen(true)} type="button" variant="secondary">
-              <Pencil size={17} aria-hidden="true" />
-              Düzenle
-            </Button>
-          ) : null}
-          {mode === "exams" ? (
-            <Link className="uh-button uh-button--secondary" href={studentDashboardHref}>
-              <LayoutDashboard size={17} aria-hidden="true" />
-              Öğrenci özetine dön
-            </Link>
-          ) : (
-            <Link className="uh-button" href={studentExamsHref}>
-              <BarChart3 size={17} aria-hidden="true" />
-              Sınav detayları
-            </Link>
-          )}
-        </div>
-      }
+      className={mode === "dashboard" ? "next-student-profile-page" : undefined}
+      title={detail && mode === "dashboard" ? <span className="next-student-identity-title"><span aria-hidden="true" className="next-student-identity-avatar">{`${detail.profile.firstName.slice(0, 1)}${detail.profile.lastName.slice(0, 1)}`.toLocaleUpperCase("tr-TR")}</span><span>{studentName}</span></span> : studentName}
+      subtitle={detail && mode === "dashboard" ? <span className="next-student-identity-meta"><strong>{formatCurrentClass(detail.profile.classId, classNameById)}</strong><span>Öğrenci no. {detail.profile.studentNo ?? "—"}</span><span>{formatStudentStatus(detail.profile.status)}</span></span> : mode === "exams" ? "Sınav detayları" : "Öğrenci özeti"}
+      actions={mode === "dashboard" && detail ? <StudentNetHeadline model={netOverview} loading={Boolean(activeExamId) && reportDataQuery.isPending} error={reportDataQuery.isError} /> : studentActions}
     >
       {pageDataQuery.isPending ? (
         <Panel
@@ -277,6 +281,11 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
         />
       ) : detail ? (
         <StudentDashboard
+          actions={studentActions}
+          netOverview={netOverview}
+          reportError={reportDataQuery.isError}
+          reportLoading={Boolean(activeExamId) && reportDataQuery.isPending}
+          onRetryReport={() => void reportDataQuery.refetch()}
           classNameById={classNameById}
           canManageStudent={canManageStudent}
           canOpenNotes={canOpenNotes}
@@ -286,7 +295,6 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           detail={detail}
           guardianNameById={guardianNameById}
           progress={progress}
-          progressPoints={progressPoints}
           studentAuditLogs={studentAuditLogs}
           studentId={studentId}
           termNameById={termNameById}
@@ -308,6 +316,11 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
 }
 
 function StudentDashboard({
+  actions,
+  netOverview,
+  reportLoading,
+  reportError,
+  onRetryReport,
   classNameById,
   canManageStudent,
   canOpenNotes,
@@ -317,12 +330,16 @@ function StudentDashboard({
   detail,
   guardianNameById,
   progress,
-  progressPoints,
   studentAuditLogs,
   studentId,
   teacherNameById,
   termNameById,
 }: {
+  actions: ReactNode;
+  netOverview: StudentNetOverview;
+  reportLoading: boolean;
+  reportError: boolean;
+  onRetryReport(): void;
   classNameById: ReadonlyMap<string, string>;
   canManageStudent: boolean;
   canOpenNotes: boolean;
@@ -332,7 +349,6 @@ function StudentDashboard({
   detail: StudentBaseDetail;
   guardianNameById: ReadonlyMap<string, string>;
   progress: ReportStudentProgress | null;
-  progressPoints: ReturnType<typeof toProgressPoints>;
   studentAuditLogs: StudentAuditSummaryRecord[];
   studentId: string;
   teacherNameById: ReadonlyMap<string, string>;
@@ -352,7 +368,6 @@ function StudentDashboard({
     staleTime: 60_000,
   });
   const classHomework = classHomeworkQuery.data ?? [];
-  const progressIsComparable = isComparableStudentProgress(progress);
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
   const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, classHomework, classHomeworkQuery.isError);
@@ -362,14 +377,8 @@ function StudentDashboard({
 
   return (
     <section className="next-detail-workspace next-student-growth-workspace" aria-label="Öğrenci özeti">
-      <OperationSummary
-        ariaLabel="Öğrenci detay özeti"
-        badges={studentDashboardSummaryBadges}
-        items={studentDashboardSummaryItems}
-      />
-      <Panel
-        actions={canOpenNotes || canOpenPortalAccess ? (
-          <div className="next-student-detail-actions" aria-label="Öğrenci hızlı işlemleri" role="group">
+      <StudentAttendanceStrip studentId={studentId} />
+      <div className="next-student-profile-toolbar">{actions}{canOpenNotes || canOpenPortalAccess ? (<div className="next-student-detail-actions" aria-label="Öğrenci hızlı işlemleri" role="group">
             {canOpenNotes ? (
               <Link className="uh-button uh-button--secondary uh-button--sm" href={notesHref}>
                 <NotebookTabs size={16} aria-hidden="true" />
@@ -382,25 +391,12 @@ function StudentDashboard({
                 Portal erişimi
               </Link>
             ) : null}
-          </div>
-        ) : undefined}
-        aria-label="Öğrenci profil kartı"
-        description={canManageStudent ? "Sınıfı, kayıt durumunu veya iletişim bilgilerini değiştirmek için üstteki Düzenle'yi kullanın." : undefined}
-        title="Öğrenci profili"
-      >
-        <InfoGrid className="next-student-profile-info" aria-label="Öğrenci profil özeti" role="region">
-          <InfoItem
-            label="Kayıt durumu"
-            value={<StatusBadge tone={studentStatusTone(detail.profile.status)}>{formatStudentStatus(detail.profile.status)}</StatusBadge>}
-          />
-          <InfoItem label="Sınıf" value={currentClass} />
-          <InfoItem label="Öğrenci no" value={detail.profile.studentNo ?? "Öğrenci no yok"} />
-          <InfoItem
-            label="Kayıt"
-            value={activeEnrollment ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}` : "Aktif kayıt yok"}
-          />
-        </InfoGrid>
-      </Panel>
+          </div>) : null}</div>
+      <OperationSummary
+        ariaLabel="Öğrenci detay özeti"
+        badges={studentDashboardSummaryBadges}
+        items={studentDashboardSummaryItems}
+      />
 
       <Tabs label="Öğrenci detay bölümleri">
         <TabButton aria-controls="student-detail-panel-overview" id="student-detail-tab-overview" selected={activeSection === "overview"} onClick={() => setActiveSection("overview")}>Genel bakış</TabButton>
@@ -408,30 +404,9 @@ function StudentDashboard({
       </Tabs>
 
       {activeSection === "overview" ? <div className="next-student-growth-tabpanel" aria-labelledby="student-detail-tab-overview" id="student-detail-panel-overview" role="tabpanel" tabIndex={0}>
-        <ReportChartPanel
-          className="next-student-growth-chart next-student-growth-chart--student"
-          description={progressIsComparable
-            ? "Aynı ders bağlamındaki sınavlarda Başarı % değişimi; Net/Soru açıklayıcı bağlamdır."
-            : "Farklı kapsamdaki sınav sonuçları tarih sırasıyla gösterilir; yönlü gelişim yorumu yapılmaz."}
-          title={progressIsComparable ? "Öğrenci gelişimi" : "Sınav geçmişi"}
-        >
-          <ProgressLineChart caption={progressIsComparable ? "Öğrenci başarı gelişimi" : "Öğrenci sınav geçmişi"} points={progressPoints} />
-        </ReportChartPanel>
+        <StudentNetCharts model={netOverview} loading={reportLoading} error={reportError} onRetry={onRetryReport} />
 
         <div className="next-student-detail-grid">
-          <Panel
-            aria-label="Öğretmen notları"
-            className="next-student-detail-panel"
-            description="Not içeriğini okumak veya yeni not eklemek için Öğretmen notları ekranını açın."
-            title="Öğretmen notları"
-          >
-            <StudentDetailRowsTable
-              caption="Öğretmen not kayıtları"
-              emptyText="Henüz not yok"
-              headers={{ primary: "Görünürlük", status: "Gelişim", meta: "Tarih" }}
-              rows={buildTeacherNoteRows(detail.teacherNotes)}
-            />
-          </Panel>
 
           <Panel
             aria-label="Ödevler"
@@ -455,12 +430,44 @@ function StudentDashboard({
               ]}
             />
           </Panel>
+          <StudentPublishedGrades studentId={studentId} courseNameById={courseNameById} />
+          <Panel
+            aria-label="Öğretmen notları"
+            className="next-student-detail-panel next-student-notes-panel"
+            description="Not içeriğini okumak veya yeni not eklemek için Öğretmen notları ekranını açın."
+            title="Öğretmen notları"
+          >
+            <StudentDetailRowsTable
+              caption="Öğretmen not kayıtları"
+              emptyText="Henüz not yok"
+              headers={{ primary: "Görünürlük", status: "Gelişim", meta: "Tarih" }}
+              rows={buildTeacherNoteRows(detail.teacherNotes)}
+            />
+          </Panel>
         </div>
       </div> : null}
 
       {activeSection === "records" ? <div aria-labelledby="student-detail-tab-records" id="student-detail-panel-records" role="tabpanel" tabIndex={0}>
+      <Panel
+        aria-label="Öğrenci profil kartı"
+        description={canManageStudent ? "Sınıfı, kayıt durumunu veya iletişim bilgilerini değiştirmek için üstteki Düzenle'yi kullanın." : undefined}
+        title="Öğrenci profili"
+      >
+        <InfoGrid className="next-student-profile-info" aria-label="Öğrenci profil özeti" role="region">
+          <InfoItem
+            label="Kayıt durumu"
+            value={<StatusBadge tone={studentStatusTone(detail.profile.status)}>{formatStudentStatus(detail.profile.status)}</StatusBadge>}
+          />
+          <InfoItem label="Sınıf" value={currentClass} />
+          <InfoItem label="Öğrenci no" value={detail.profile.studentNo ?? "Öğrenci no yok"} />
+          <InfoItem
+            label="Kayıt"
+            value={activeEnrollment ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}` : "Aktif kayıt yok"}
+          />
+        </InfoGrid>
+      </Panel>
       <div className="next-student-detail-grid">
-        {/* DEC-20261102-08: zaman çizelgesi ve yoklama takvimi yalnız bu sekme açıldığında istek atar. */}
+        {/* Detailed timeline/calendar stay on this tab; the recent strip is available above. */}
         <StudentTimelinePanel
           canViewFinance={canViewFinance}
           materialAssignments={detail.homeworkAssignments}
@@ -1013,30 +1020,10 @@ function buildStudentDashboardSummaryItems(
   // Açık ödev = teslim edilmemiş sınıf ödevi + açık materyal ataması (öğrenci ve veli portalıyla aynı tanım).
   const openClassHomeworkCount = classHomework.filter((record) => record.submission.status === "NOT_SUBMITTED").length;
   const openHomeworkCount = detail.openHomeworkCount + openClassHomeworkCount;
-  const attendance = detail.attendanceSummary;
-  const latestExam = detail.latestExam;
-  const latestSuccessRate = reportSuccessRate(latestExam?.total);
   const watchNoteCount = detail.teacherNotes.filter((note) => note.developmentStatus === "WATCH").length;
   return [
     {
-      description: attendance && attendance.total > 0 ? `${formatCount(attendance.total)} yoklama kaydı` : "Yoklama kaydı yok",
-      key: "attendance",
-      label: "Devamsızlık",
-      tone: attendance && attendance.absent > 0 ? "warning" : "default",
-      value: formatAttendanceSummary(attendance),
-    },
-    {
-      description: latestExam
-        ? `Net ${formatNetNumber(latestExam.total.net)} / Soru ${formatNumber(reportQuestionCount(latestExam.total))}`
-        : "Hazır sınav raporu yok",
-      key: "latest-exam",
-      label: "Son sınav Başarı %",
-      tone: latestSuccessRate === undefined ? "default" : "success",
-      value: formatPercentNumber(latestSuccessRate),
-    },
-    {
-      // Metin aynı kalır (route-family-student-detail-768 golden); sayı artık sınıf ödevini de içerir. Sınıf ödevi
-      // alınamazsa sayı kesin değildir: "en az N" ya da "Alınamadı" uyarı tonuyla yazılır.
+      // A failed classroom-homework source must not appear as a complete zero count.
       description: classHomeworkFailed ? "Sınıf ödevleri alınamadı; sayı eksik olabilir" : "Öğrenciye atanan ödev ve materyal",
       key: "homework",
       label: "Açık ödev",
@@ -1046,7 +1033,7 @@ function buildStudentDashboardSummaryItems(
         : formatCount(openHomeworkCount),
     },
     {
-      description: watchNoteCount > 0 ? `${formatCount(watchNoteCount)} not takipte` : formatTeacherNoteSummary(detail.teacherNotes),
+      description: watchNoteCount > 0 ? `${formatCount(watchNoteCount)} not takipte` : detail.teacherNoteCount > 0 ? `${formatCount(detail.teacherNoteCount)} not kaydı` : formatTeacherNoteSummary(detail.teacherNotes),
       key: "teacher-notes",
       label: "Öğretmen notu",
       tone: watchNoteCount > 0 ? "warning" : "default",
@@ -1347,7 +1334,6 @@ async function loadStudentBaseDetail(
     ? await apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
     : [];
   return {
-    attendanceSummary: overview.attendance,
     auditLogs: overview.activity,
     classes: overview.classes,
     courses: overview.courses,

@@ -1085,6 +1085,7 @@ describe("ReportGenerationService", () => {
         {
           snapshotId: "snapshot-a",
           examId: "exam-a",
+          gradeLevelId: "grade-8",
           courseId: "course-math",
           generatedAt: "2026-06-06T09:00:00.000Z",
           termId: "term-2026-spring",
@@ -1147,6 +1148,33 @@ describe("ReportGenerationService", () => {
     expect(result.successRateDelta).toBe(12.5);
     expect(result.netDelta).toBe(2.5);
     expect(result.standardScoreDelta).toBe(2.5);
+  });
+
+  it("projects frozen comparison provenance without filling missing legacy context", async () => {
+    const snapshot: ReportSnapshotRecord = {
+      ...structuredClone(fakeSnapshot),
+      snapshotData: {
+        ...structuredClone(fakeSnapshot.snapshotData),
+        examType: "LGS",
+        examYear: 2026,
+        scoringProfileId: "TR-LGS-2026-NOSD-V1",
+        examStartsAt: "2026-06-05T07:00:00.000Z",
+      },
+    };
+    const before = structuredClone(snapshot);
+    const store = new FakeReportSnapshotStore([snapshot, fakeOtherExamSnapshot]);
+    const service = new ReportGenerationService(new FakeProducer(), store);
+    const result = await service.getStudentProgress(adminContext(), "exam-a", "student-a", { scope: "all" });
+    expect(result.points.find((point) => point.snapshotId === snapshot.id)).toMatchObject({
+      examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1",
+      gradeLevelId: "grade-8", courseId: "course-math", termId: "term-2026-spring",
+      total: { net: 17.5, questionCount: 20 },
+    });
+    const legacy = result.points.find((point) => point.snapshotId === fakeOtherExamSnapshot.id);
+    expect(legacy).not.toHaveProperty("examType");
+    expect(legacy).not.toHaveProperty("examYear");
+    expect(legacy).not.toHaveProperty("scoringProfileId");
+    expect(snapshot).toEqual(before);
   });
 
   it("gelişim noktaları snapshot'ta saklanan sınav tarihine göre sıralanır; sınav tarihi yoksa sınav kaydının tarihine, o da yoksa rapor tarihine düşer", async () => {

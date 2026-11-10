@@ -2115,7 +2115,8 @@ const expectations = {
   "apps/web/app/page.tsx": [
     "next-marketing-workflow",
     "Özel okullar ve eğitim kurumları için",
-    "Öğrenci takibini tek platformda toplayın.",
+    "İyi bir okul, her öğrenciyi ",
+    "<span>görür.</span>",
     "Optik veriyi kontrol edin, rapora dönüştürün.",
     'href="/fiyatlar"',
     "Dosyayı alın",

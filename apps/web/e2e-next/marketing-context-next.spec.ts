@@ -50,7 +50,7 @@ test.describe("Public marketing context", () => {
   test("landing özel K12 konumunu, optik akışı, fiyat bağlantısını ve CTA ayrımını korur", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { level: 1, name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "İyi bir okul, her öğrenciyi görür." })).toBeVisible();
     await expect(page.getByText("Özel okullar ve eğitim kurumları için", { exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" }).locator("li")).toHaveCount(5);
     await expect(page.getByText("TXT/DAT yükleme", { exact: false }).first()).toBeVisible();

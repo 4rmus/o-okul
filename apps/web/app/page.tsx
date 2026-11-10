@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../src/brand.js";
+import { AppearanceSelect } from "../src/appearance-select.js";
 
 const optikSteps = [
   ["01", "Dosyayı alın", "TXT veya DAT optik verisini sınav kaydına aktarın."],
@@ -143,6 +144,7 @@ export default function HomePage() {
           </Link>
           <p className="next-marketing-nav__statement">Özel okullar için bütüncül öğrenci takibi.</p>
           <div className="next-marketing-nav__actions">
+            <AppearanceSelect />
             <Link className="next-marketing-login next-marketing-nav__wide-link" href="/fiyatlar">Fiyatlar</Link>
             <Link className="next-marketing-login" href="/login">Giriş yap</Link>
             <Link className="uh-button uh-button--primary uh-button--md" href="/iletisim#demo">Demo talep et</Link>
@@ -154,7 +156,7 @@ export default function HomePage() {
         <section className="next-marketing-hero" aria-labelledby="home-title">
           <div className="next-marketing-hero__copy">
             <p className="next-marketing-eyebrow">Özel okullar ve eğitim kurumları için</p>
-            <h1 id="home-title">Öğrenci takibini tek platformda toplayın.</h1>
+            <h1 id="home-title">İyi bir okul, her öğrenciyi <span>görür.</span></h1>
             <p className="next-marketing-hero__lead">
               Deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planı aynı öğrenci kaydında.
               Yönetici, öğretmen ve öğrenci yalnızca yetkili olduğu bilgiyi görür.
@@ -175,18 +177,20 @@ export default function HomePage() {
             </p>
           </div>
 
-          <section className="next-marketing-workflow" aria-label="Öğrenci kaydında toplanan bilgiler">
-            <header><span>Tek öğrenci kaydı</span><strong>Öğrencinin bütün takibi</strong></header>
-            <ol>
-              {studentRecord.map(([number, title, description], index) => (
-                <li data-current={index === 0 ? "true" : undefined} key={number}>
-                  <span>{number}</span>
-                  <div><strong>{title}</strong><small>{description}</small></div>
-                  <CheckCircle2 size={18} aria-hidden="true" />
-                </li>
-              ))}
-            </ol>
-          </section>
+          <div className="next-tahta-record-illustration">
+            <section className="next-marketing-workflow" aria-label="Öğrenci kaydında toplanan bilgiler">
+              <header><span>Tek öğrenci kaydı</span><strong>Öğrencinin bütün takibi</strong></header>
+              <ol>
+                {studentRecord.map(([number, title, description], index) => (
+                  <li data-current={index === 0 ? "true" : undefined} key={number}>
+                    <span>{number}</span>
+                    <div><strong>{title}</strong><small>{description}</small></div>
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
         </section>
 
         <section id="ogrenci-haftasi" className="next-marketing-section" aria-labelledby="week-title">

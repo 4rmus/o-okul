@@ -11,9 +11,20 @@ const allowedLocalStorageKeys = {
   },
 };
 const allowedStorageSnippets = {
-  // Tema tercihi (light/dark) kimlik veya oturum verisi değildir (DEC-20260930-01).
-  "apps/web/app/layout.tsx": ['localStorage.getItem("o-okul-theme")'],
-  "apps/web/app/(app)/_shell/theme-toggle.tsx": ['localStorage.setItem("o-okul-theme", next)'],
+  // Display preferences contain no identity or session data (DEC-20261109-01).
+  "apps/web/src/appearance.ts": [
+    'localStorage.getItem("o-okul-appearance")',
+    'localStorage.getItem("o-okul-theme")',
+    'localStorage.setItem("o-okul-appearance", appearance)',
+    'localStorage.setItem("o-okul-theme", theme)',
+  ],
+  "apps/web/e2e-next/a11y-next.spec.ts": [
+    'localStorage.setItem("o-okul-appearance", "blackboard")',
+  ],
+  "apps/web/e2e-next/campus-shell-next.spec.ts": [
+    'localStorage.removeItem("o-okul-appearance")',
+    'localStorage.setItem("o-okul-theme", "dark")',
+  ],
   "apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-reset-panel.tsx": [
     "window.sessionStorage.getItem(storageKey)",
     "window.sessionStorage.setItem(storageKey, requestKey)",

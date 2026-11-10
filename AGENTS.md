@@ -11,7 +11,7 @@
 - When DB schema or tenant tables change, update migrations, RLS checks, seed impact, and DB evidence gates together.
 - When production evidence behavior changes, update the scripts, templates, and plan docs in the same scoped change.
 - The optical pipeline and `ReportSnapshot` contract stay frozen; published grade rows are never updated in place (ADR-0011); `Basari %` is the cross-exam metric for the deneme series only.
-- The design source of truth is `design.md`, `tokens.css`, and `docs/ui-ux-professionalization-contract.md`: Campus for customer workspaces under DEC-20261107-01; Berrak remains the public, auth, system, and report/print foundation.
+- The design source of truth is `design.md`, `tokens.css`, and `docs/ui-ux-professionalization-contract.md`: Tahta screen appearances under DEC-20261109-01 build on the Campus navigation; Berrak remains the frozen report-card/print foundation.
 
 ## Subagent Orchestration
 

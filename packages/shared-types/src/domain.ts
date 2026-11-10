@@ -2835,6 +2835,11 @@ export interface ReportStudentSnapshot {
 export interface ReportStudentProgressPoint {
   snapshotId: string;
   examId?: string;
+  /** Frozen comparison context. Older snapshots may omit it; current exam metadata is not a fallback. */
+  examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
+  gradeLevelId?: string;
   courseId?: string;
   /** Exam title frozen in the snapshot (snapshotData.examTitle). */
   examTitle?: string;

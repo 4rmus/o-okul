@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import { appBrand, appBrandTitle } from "../src/brand.js";
+import { appearanceBootstrapScript } from "../src/appearance.js";
 import { Providers } from "./providers.js";
 import "./globals.css";
 
@@ -36,8 +37,23 @@ const campusDisplayFont = localFont({
   variable: "--font-fraunces",
 });
 
-// Paint öncesi tema: tarayıcıda saklı kullanıcı tercihi yoksa prefers-color-scheme (DEC-20260930-01).
-const themeScript = `(function(){var d=document.documentElement;try{var t=localStorage.getItem("o-okul-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}d.dataset.theme=t}catch(e){d.dataset.theme="light"}})();`;
+const boardBodyFont = localFont({
+  display: "swap",
+  preload: false,
+  src: "./fonts/ShantellSans-Variable.woff2",
+  weight: "300 800",
+  style: "normal",
+  variable: "--font-shantell-sans",
+});
+const boardDisplayFont = localFont({
+  display: "swap",
+  preload: false,
+  src: [
+    { path: "./fonts/Kalam-Regular.woff2", style: "normal", weight: "400" },
+    { path: "./fonts/Kalam-Bold.woff2", style: "normal", weight: "700" },
+  ],
+  variable: "--font-kalam",
+});
 
 export const metadata = {
   title: appBrandTitle,
@@ -53,9 +69,9 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={`${bodyFont.variable} ${campusBodyFont.variable} ${campusDisplayFont.variable}`} data-theme="light" lang="tr" suppressHydrationWarning>
+    <html className={`${bodyFont.variable} ${campusBodyFont.variable} ${campusDisplayFont.variable} ${boardBodyFont.variable} ${boardDisplayFont.variable}`} data-appearance="whiteboard" data-theme="light" lang="tr" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootstrapScript }} />
       </head>
       <body>
         <Providers>{children}</Providers>

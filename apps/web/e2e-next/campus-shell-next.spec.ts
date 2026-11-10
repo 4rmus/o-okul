@@ -80,17 +80,28 @@ for (const role of ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE
     if (role === "OPERATIONS_STAFF") await expect(nav.locator('a[href="/kurum/finans"]')).toHaveCount(0);
     if (["TEACHER", "STUDENT", "GUARDIAN"].includes(role)) await expect(nav.locator('a[href^="/kurum"]')).toHaveCount(0);
     await expectNoHorizontalOverflow(page, `campus-${role}`);
+    for (const width of [320, 375]) {
+      await page.setViewportSize({ width, height: 900 });
+      const header = page.locator(".next-mobile-topbar");
+      const brand = await header.locator(".next-brand").boundingBox();
+      const actions = await header.locator(".next-mobile-topbar__actions").boundingBox();
+      expect(brand).not.toBeNull();
+      expect(actions).not.toBeNull();
+      expect(actions!.y).toBeGreaterThanOrEqual(brand!.y + brand!.height);
+      await expectNoHorizontalOverflow(page, `tahta-${role}-${width}`);
+    }
   });
 }
 
 test("Kampüs açık ve koyu tema tüm hedef genişliklerde taşmaz ve erişilebilirdir", async ({ page }) => {
   test.setTimeout(90_000);
   await open(page, "TENANT_ADMIN", "/kurum");
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+  for (const appearance of ["plain", "whiteboard", "blackboard"]) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator(".next-campus-header").getByRole("combobox", { name: "Görünüm" }).selectOption(appearance);
     for (const width of [320, 375, 414, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
-      await expectNoHorizontalOverflow(page, `campus-${theme}-${width}`);
+      await expectNoHorizontalOverflow(page, `campus-${appearance}-${width}`);
       if (width < 1024) {
         await expect(page.locator(".next-campus-header")).toBeHidden();
         await page.getByRole("button", { name: "Ana menüyü aç" }).click();
@@ -115,7 +126,7 @@ test("Kampüs karma rollü öğretmen personasında öğretmen üst menüsünü 
   await expect(nav.locator('a[href^="/kurum"]')).toHaveCount(0);
 });
 
-test("Kampüs fontu ve renkleri public, auth, sistem, karne ve baskıya taşınmaz", async ({ page }) => {
+test("Tahta appearances preserve the frozen report-card and print foundation", async ({ page }) => {
   await open(page, "TENANT_ADMIN", "/kurum");
   const fonts = await page.locator(".next-campus-shell").evaluate((shell) => {
     const style = getComputedStyle(shell);
@@ -123,12 +134,12 @@ test("Kampüs fontu ve renkleri public, auth, sistem, karne ve baskıya taşınm
     report.className = "next-karne-sheet";
     shell.append(report);
     const paper = getComputedStyle(report);
-    const result = { body: style.fontFamily, manrope: style.getPropertyValue("--font-manrope").split(",")[0]!.trim().replaceAll('"', ""), ibm: style.getPropertyValue("--font-ibm-plex-sans").split(",")[0]!.trim().replaceAll('"', ""), report: paper.fontFamily, accent: style.getPropertyValue("--color-accent").trim(), reportAccent: paper.getPropertyValue("--color-accent").trim() };
+    const result = { body: style.fontFamily, handwriting: style.getPropertyValue("--font-shantell-sans").split(",")[0]!.trim().replaceAll('"', ""), ibm: style.getPropertyValue("--font-ibm-plex-sans").split(",")[0]!.trim().replaceAll('"', ""), report: paper.fontFamily, accent: style.getPropertyValue("--color-accent").trim(), reportAccent: paper.getPropertyValue("--color-accent").trim() };
     report.remove();
     return result;
   });
-  expect(fonts.manrope).not.toBe(fonts.ibm);
-  expect(fonts.body).toContain(fonts.manrope);
+  expect(fonts.handwriting).not.toBe(fonts.ibm);
+  expect(fonts.body).toContain(fonts.handwriting);
   expect(fonts.report).toContain(fonts.ibm);
   expect(fonts.accent).not.toBe(fonts.reportAccent);
   await page.emulateMedia({ media: "print" });
@@ -138,7 +149,7 @@ test("Kampüs fontu ve renkleri public, auth, sistem, karne ve baskıya taşınm
   for (const path of ["/", "/login"]) {
     await page.goto(path);
     await expect(page.locator(".next-campus-shell")).toHaveCount(0);
-    expect(await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily)).toContain(fonts.ibm);
+    expect(await page.locator("body").evaluate((element) => getComputedStyle(element).fontFamily)).toContain(fonts.handwriting);
   }
   await open(page, "SYSTEM_ADMIN", "/sistem");
   await expect(page.locator(".next-campus-shell")).toHaveCount(0);
@@ -167,6 +178,61 @@ test("Kampüs grup bağlantısında vazgeçilen gezinme odağı görünür tetik
   await expect(people).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByLabel("Ada Acar notu", { exact: true })).toHaveValue("70");
   await expect(page).toHaveURL(/\/kurum\/not-defteri$/);
+});
+
+test("Tahta defaults to whiteboard and persists the three choices across public and auth pages", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-appearance", "whiteboard");
+  await expect(html).toHaveAttribute("data-theme", "light");
+  for (const appearance of ["plain", "blackboard", "whiteboard"]) {
+    await page.getByRole("combobox", { name: "Görünüm" }).selectOption(appearance);
+    await expect(html).toHaveAttribute("data-appearance", appearance);
+    await page.reload();
+    await expect(page.getByRole("combobox", { name: "Görünüm" })).toHaveValue(appearance);
+    await expect(html).toHaveAttribute("data-theme", appearance === "blackboard" ? "dark" : "light");
+  }
+  await page.getByRole("combobox", { name: "Görünüm" }).selectOption("blackboard");
+  await page.goto("/login");
+  await expect(page.getByRole("combobox", { name: "Görünüm" })).toHaveValue("blackboard");
+  const mark = await page.locator(".next-brand-mark").first().evaluate((element) => ({
+    before: getComputedStyle(element, "::before").borderRadius,
+    after: getComputedStyle(element, "::after").borderRadius,
+  }));
+  expect(mark).toEqual({ before: "50%", after: "50%" });
+});
+
+test("Tahta migrates legacy darkness before hydration and tolerates denied preference storage", async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.removeItem("o-okul-appearance");
+      localStorage.setItem("o-okul-theme", "dark");
+    } catch {
+      // The storage-denial fixture intentionally rejects these keys on its next navigation.
+    }
+  });
+  await page.route("**/_next/static/**/*.js", (route) => route.abort());
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-appearance", "blackboard");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.unroute("**/_next/static/**/*.js");
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem;
+    const set = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (key === "o-okul-appearance" || key === "o-okul-theme") throw new DOMException("Blocked", "SecurityError");
+      return get.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === "o-okul-appearance" || key === "o-okul-theme") throw new DOMException("Blocked", "SecurityError");
+      set.call(this, key, value);
+    };
+  });
+  await page.goto("/login");
+  await expect(page.locator("html")).toHaveAttribute("data-appearance", "whiteboard");
+  await page.getByRole("combobox", { name: "Görünüm" }).selectOption("blackboard");
+  await expect(page.locator("html")).toHaveAttribute("data-appearance", "blackboard");
 });
 
 async function open(page: Page, role: string, path: string, extraResponses: Record<string, unknown> = {}) {

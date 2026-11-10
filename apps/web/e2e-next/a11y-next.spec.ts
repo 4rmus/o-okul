@@ -35,7 +35,7 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expectFirstFocusableElement(page, "İçeriğe geç");
-    await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "İyi bir okul, her öğrenciyi görür." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/fiyatlar");
@@ -79,7 +79,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     for (const viewport of hallmarkResponsiveViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "İyi bir okul, her öğrenciyi görür." })).toBeVisible();
       await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
       await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
       await page.goto("/fiyatlar");
@@ -131,6 +131,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     test(`kurum dashboard koyu temada ${width}px görünümde yüksek etkili axe ihlali yok`, async ({ page }) => {
       await page.setViewportSize({ height: 900, width });
       await page.emulateMedia({ colorScheme: "dark" });
+      await page.addInitScript(() => localStorage.setItem("o-okul-appearance", "blackboard"));
       await openInstitutionDashboard(page, { expectNavigationVisible: width >= 1024 });
       await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
       await expectNoHighImpactA11yViolations(page, `kurum-dashboard-dark-${width}`);
@@ -143,23 +144,23 @@ test.describe("Next erişilebilirlik smoke", () => {
     await openInstitutionDashboard(page);
     const html = page.locator("html");
     await expect(html).toHaveAttribute("data-theme", "light");
-    const toggle = page.locator('header[aria-label="Üst gezinme"]').getByRole("button", { name: "Koyu tema" });
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await toggle.click();
+    const toggle = page.locator('header[aria-label="Üst gezinme"]').getByRole("combobox", { name: "Görünüm" });
+    await expect(toggle).toHaveValue("whiteboard");
+    await toggle.selectOption("blackboard");
     await expect(html).toHaveAttribute("data-theme", "dark");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).toHaveValue("blackboard");
     // Renk geçişleri bitmeden kontrast ölçülmez.
     await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).length)).toBe(0);
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard-dark-toggle");
     await page.reload();
     await expect(html).toHaveAttribute("data-theme", "dark");
-    await page.locator('header[aria-label="Üst gezinme"]').getByRole("button", { name: "Koyu tema" }).click();
+    await page.locator('header[aria-label="Üst gezinme"]').getByRole("combobox", { name: "Görünüm" }).selectOption("plain");
     await expect(html).toHaveAttribute("data-theme", "light");
 
     await page.setViewportSize({ height: 812, width: 375 });
-    const mobileToggle = page.locator(".next-mobile-topbar").getByRole("button", { name: "Koyu tema" });
+    const mobileToggle = page.locator(".next-mobile-topbar").getByRole("combobox", { name: "Görünüm" });
     await expect(mobileToggle).toBeVisible();
-    await mobileToggle.click();
+    await mobileToggle.selectOption("blackboard");
     await expect(html).toHaveAttribute("data-theme", "dark");
   });
 

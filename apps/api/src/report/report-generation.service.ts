@@ -2111,9 +2111,16 @@ function toStudentProgressPoint(snapshot: ReportSnapshotRecord, student: Record<
   // Exam title and date frozen in the snapshot; the generation time stays as context.
   const examStartsAt = readText(snapshot.snapshotData?.examStartsAt);
   const examTitle = readText(snapshot.snapshotData?.examTitle).trim();
+  const examType = readText(snapshot.snapshotData?.examType);
+  const examYear = readOptionalNumber(snapshot.snapshotData?.examYear);
+  const scoringProfileId = readText(snapshot.snapshotData?.scoringProfileId);
   return {
     snapshotId: snapshot.id,
     examId: snapshot.examId,
+    ...(examType ? { examType } : {}),
+    ...(examYear !== undefined ? { examYear } : {}),
+    ...(scoringProfileId ? { scoringProfileId } : {}),
+    ...(snapshot.gradeLevelId ? { gradeLevelId: snapshot.gradeLevelId } : {}),
     ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
     ...(examTitle ? { examTitle } : {}),
     ...(examStartsAt ? { examStartsAt } : {}),
