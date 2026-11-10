@@ -132,3 +132,9 @@ deployment and live data. Fonts are vendored with source and license records.
   portal navigation all passed the final targeted run. Gate B was recollected on that
   clean source and passed again. The 13 updated Linux references exclude the frozen
   report card. Required checks are recorded on [PR #241](https://github.com/4rmus/o-okul/pull/241).
+- PR CI `42895377005` passed static, unit, PostgreSQL, RC and Linux visual checks
+  (102 routes and 32 visual cases). One of 416 interaction tests failed at 320px:
+  the restore-request button repeated its panel title and exceeded the viewport. The
+  action now reads “Talepleri göster” without changing any restore or MFA behavior.
+  The complete MFA interaction passed at 320, 390 and 1280px on `b485437fb`; Gate B
+  was recollected and validated on clean source. Final CI is tracked on PR #241.
