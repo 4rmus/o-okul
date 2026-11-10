@@ -205,7 +205,7 @@ test.describe("UI route family smoke", () => {
         await expectNoHorizontalOverflow(page, `${routeCase.routeTemplate}-${viewport.width}`);
         await expectNoClippedVisibleText(page, routeCase, viewport);
         await expectNoUnlabeledControls(page, routeCase, viewport);
-        await expectClickableTextOnOneLine(page, routeCase, viewport);
+        await expectClickableTextLayout(page, routeCase, viewport);
         await expectNoHighImpactA11yViolations(page, routeCase, viewport);
         expect(unknownApiRequests, contractLabel(routeCase, viewport, "unhandled /api/v1 request")).toEqual([]);
       }
@@ -786,6 +786,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/audit-logs": [],
     "/audit-logs/safe-list": [],
     "/grade-assessments": [],
+    "/grade-assessments/students/student-a/published": [],
     "/grade-assessments/teacher-scopes": [{ classId: classFixture.id }],
     "/backup-restore-jobs": [],
     "/campuses": [campusFixture],
@@ -1072,13 +1073,14 @@ async function expectNoClippedVisibleText(
   expect(clippedText, contractLabel(routeCase, viewport, "clipped visible text")).toEqual([]);
 }
 
-async function expectClickableTextOnOneLine(
+async function expectClickableTextLayout(
   page: Page,
   routeCase: RouteCase,
   viewport: (typeof routeViewports)[number],
 ) {
   const wrappedTextNodes = await page.evaluate(() => {
     const failures: string[] = [];
+    const maxLines = window.innerWidth <= 768 ? 2 : 1;
     for (const clickable of document.querySelectorAll("a, button, [role='button'], [role='link']")) {
       const element = clickable as HTMLElement;
       const bounds = element.getBoundingClientRect();
@@ -1091,19 +1093,20 @@ async function expectClickableTextOnOneLine(
         if (text) {
           const range = document.createRange();
           range.selectNodeContents(textNode);
-          const lineTops = new Set(
-            Array.from(range.getClientRects())
-              .filter((rect) => rect.width > 0 && rect.height > 0)
-              .map((rect) => Math.round(rect.top)),
+          const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+          const lineTops = new Set(rects.map((rect) => Math.round(rect.top)));
+          const wrappedOutsideControl = lineTops.size > 1 && rects.some((rect) =>
+            rect.left < bounds.left - 1 || rect.right > bounds.right + 1
+            || rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1,
           );
-          if (lineTops.size > 1) failures.push(text.replace(/\s+/g, " ").slice(0, 100));
+          if (lineTops.size > maxLines || wrappedOutsideControl) failures.push(text.replace(/\s+/g, " ").slice(0, 100));
         }
         textNode = walker.nextNode();
       }
     }
     return failures;
   });
-  expect(wrappedTextNodes, contractLabel(routeCase, viewport, "clickable text-node wraps")).toEqual([]);
+  expect(wrappedTextNodes, contractLabel(routeCase, viewport, "clickable text line budget and containment")).toEqual([]);
 }
 
 async function expectNoHighImpactA11yViolations(

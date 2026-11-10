@@ -19,7 +19,8 @@ This section supersedes the older screen tone, font and default-theme paragraphs
   The same self-contained initializer runs before paint and for explicit selections.
 - Appearance does not alter navigation, permissions, data scope or report calculations.
   The shared selector appears on public/auth/application surfaces and supports keyboard use.
-- On narrow screens, long action labels can wrap without clipping; mobile appearance and
+- At widths up to 768px, action labels can use at most two lines inside their control;
+  wider screens keep one line. Text must remain unclipped. Mobile appearance and
   notification controls occupy their own row below the institution identity.
 - The mark is two equal circles and a short bridge; uploaded institution logos remain separate.
   Installed-app icons use the same vector geometry.

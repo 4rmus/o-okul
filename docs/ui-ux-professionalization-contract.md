@@ -7,6 +7,8 @@ the older screen palette/font/default-theme rules. Whiteboard is the default; ex
 stored dark preferences migrate to blackboard. The shared first-paint initializer and
 selector must agree, including storage-denied cases. Fonts are locally served.
 Campus navigation, roles and real-data compositions stay authoritative.
+Long action labels can wrap to two lines at widths up to 768px; wider screens retain
+one line. Wrapped text must remain inside its control, without clipping or page overflow.
 
 The institution student overview uses stored Net / Soru and compact net charts only
 for verified equivalent exam/course scope, scoring context and question distribution.
