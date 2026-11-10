@@ -244,6 +244,9 @@
     }
   }
   @media (max-width: 1023px) {
+    :root[data-appearance] .next-portal-bottom-nav__link span {
+      white-space: normal;
+    }
     :root[data-appearance] .next-mobile-topbar {
       grid-template-columns: 44px minmax(0, 1fr);
     }

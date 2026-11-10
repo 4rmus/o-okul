@@ -109,3 +109,12 @@ deployment and live data. Fonts are vendored with source and license records.
   unchanged. Linux references and the final Gate B/CI evidence are still pending.
 - Three independent read-only reviews found no remaining P0/P1/P2 after the mobile header,
   frozen-level comparison and mixed-day attendance count fixes (LOCAL_STATIC review only).
+
+- 2026-11-10 / TAHTA-3 follow-up: the full auth contract exposed the old percentage-KPI
+  assertion in the integrated login journey. It now checks the stored-net header,
+  attendance strip and relocated profile card; all 37 auth-contract tests passed.
+- Linux visual preparation run `42891549245` produced 13 changed application references.
+  Its test log records 31 passes and a 320px bottom-navigation label overflow; the
+  workflow intentionally uploads references even when a test fails. The Tahta layer
+  now restores label wrapping for the handwriting fonts. Final Linux CI must verify
+  this fix before acceptance. Both frozen report-card hashes are unchanged.
