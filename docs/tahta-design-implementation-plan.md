@@ -118,3 +118,17 @@ deployment and live data. Fonts are vendored with source and license records.
   workflow intentionally uploads references even when a test fails. The Tahta layer
   now restores label wrapping for the handwriting fonts. Final Linux CI must verify
   this fix before acceptance. Both frozen report-card hashes are unchanged.
+- 2026-11-10 / TAHTA-3 final mobile layout (`be110b11e`): the route suite now checks
+  the documented two-line mobile action budget and containment, retains the desktop
+  one-line limit and models the authorized published-grade read. Wrapping is scoped
+  to long export/optical controls and mobile navigation; narrow header actions can move
+  to their own row without squeezing the account sessions table. All 102 route cases
+  passed across four widths. The final Gate B collection on clean UI source recorded
+  five samples for each of three tasks with zero request errors or axe findings.
+  The required PR CI run is the Linux acceptance record. No deployment or live smoke
+  was run by this implementation.
+- The remaining 320px optical review-tab label now wraps with the format-step labels
+  (`dd459f28e`). The four-width optical route, six-width optical workflow and 320px
+  portal navigation all passed the final targeted run. Gate B was recollected on that
+  clean source and passed again. The 13 updated Linux references exclude the frozen
+  report card. Required checks are recorded on [PR #241](https://github.com/4rmus/o-okul/pull/241).
