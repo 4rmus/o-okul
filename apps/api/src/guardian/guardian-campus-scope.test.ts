@@ -29,7 +29,7 @@ async function setup() {
   const unplaced = await students.create({ tenantId: "tenant-a", firstName: "Unplaced", lastName: "Student" });
   const outside = await guardians.create({ tenantId: "tenant-a", firstName: "Outside", lastName: "Guardian", phone: "5321234567" });
   const unlinked = await guardians.create({ tenantId: "tenant-a", firstName: "Legacy", lastName: "Unlinked" });
-  const shared = await guardians.create({ tenantId: "tenant-a", firstName: "Shared", lastName: "Guardian", phone: "5321234568" });
+  const shared = await guardians.create({ tenantId: "tenant-a", firstName: "Shared", lastName: "Guardian", phone: "5551234568" });
   await links.create({ tenantId: "tenant-a", guardianId: outside.id, studentId: foreignStudent.id });
   await links.create({ tenantId: "tenant-a", guardianId: shared.id, studentId: "student-a" });
   await links.create({ tenantId: "tenant-a", guardianId: shared.id, studentId: foreignStudent.id });
