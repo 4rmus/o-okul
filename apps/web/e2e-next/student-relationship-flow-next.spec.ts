@@ -31,13 +31,13 @@ const rawStudentDetailPiiValues = [
 test.describe("Öğrenci ilişki haritası", () => {
   test("net comparison uses frozen matching scope and the last two results", () => {
     const first = netPoint("exam-first", "snapshot-first", 5, "2026-09-01T07:00:00Z");
-    const previous = netPoint("exam-a", "snapshot-a1", 12, "2026-10-05T07:00:00Z");
+    const previous = netPoint("exam-a", "snapshot-a1", 10, "2026-10-05T07:00:00Z");
     const current = netPoint("exam-b", "snapshot-b2", 15, "2026-10-15T07:00:00Z");
     const latest = { examId: "exam-b", snapshotId: "snapshot-b2", total: { net: 15, questionCount: 20 } };
     const history = { tenantId: "tenant-flow", studentId: "student-a", examId: "exam-b", points: [current, first, previous], netDelta: 99 };
     const model = buildStudentNetOverview(latest, history);
-    expect(model.points.map((point) => point.net)).toEqual([5, 12, 15]);
-    expect(model.previousDelta).toBe(3);
+    expect(model.points.map((point) => point.net)).toEqual([5, 10, 15]);
+    expect(model.previousDelta).toBe(5);
     expect(model.seriesDelta).toBe(10);
     expect(model.net).toBe(15);
     expect(studentNetDomain(model.points)).toEqual({ low: 0, high: 20 });

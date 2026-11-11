@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
+import { examRepositoryToken } from "../exam/exam.service.js";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 
@@ -54,6 +55,8 @@ describe("StudentContact API", () => {
       },
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(examRepositoryToken)
+      .useValue({ findById: async () => undefined, listByIds: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     await app.listen(0, "127.0.0.1");
