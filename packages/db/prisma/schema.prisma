@@ -1017,6 +1017,8 @@ model Guardian {
   nationalIdEncrypted String?
   nationalIdHash String?
   userId    String?   @unique
+  // Immutable server provenance; legacy unlinked records stay tenant-wide-only.
+  createdByUserId String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

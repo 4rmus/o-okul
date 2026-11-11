@@ -16,6 +16,7 @@ describe("PostgresGuardianStore", () => {
               firstName: "Ali",
               lastName: "Veli",
               phone: "5000000001",
+              createdByUserId: "creator-a",
               deletedAt: null,
             },
           ] as T[],
@@ -30,7 +31,8 @@ describe("PostgresGuardianStore", () => {
       async () => {
         await store.list();
         await store.findById("guardian-a");
-        await store.create({ tenantId: "tenant-a", firstName: "Can", lastName: "Veli", phone: "5000000010" });
+        const created = await store.create({ tenantId: "tenant-a", firstName: "Can", lastName: "Veli", phone: "5000000010", createdByUserId: "creator-a" });
+        expect(created).toHaveProperty("createdByUserId", "creator-a");
         await store.update("guardian-a", { phone: "5000000011" });
         await store.purgePii("guardian-a");
         await store.softDelete("guardian-a", "2026-06-01T12:00:00.000Z");
@@ -42,7 +44,8 @@ describe("PostgresGuardianStore", () => {
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Guardian"');
     expect(businessQueries[1]?.values).toEqual(["guardian-a"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "Guardian"');
-    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Can", "Veli", "5000000010", null, null]);
+    expect(businessQueries[2]?.sql).toContain('"createdByUserId"');
+    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Can", "Veli", "5000000010", null, null, "creator-a"]);
     expect(businessQueries[4]?.sql).toContain('UPDATE "Guardian"');
     expect(businessQueries[4]?.values).toEqual(["guardian-a", null, null, true, "5000000011", null, null]);
     expect(businessQueries[6]?.sql).toContain('"phone" = NULL');

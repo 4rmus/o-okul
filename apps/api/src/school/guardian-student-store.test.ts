@@ -48,6 +48,7 @@ describe("PostgresGuardianStudentStore", () => {
         });
         await store.update("guardian-a", "student-a", { canViewFinance: false, canReceiveSms: false });
         await store.delete("guardian-a", "student-a");
+        expect(await store.listPairs("tenant-a")).toEqual([{ tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }]);
       },
     );
 
@@ -79,6 +80,8 @@ describe("PostgresGuardianStudentStore", () => {
     expect(businessQueries[4]?.sql).toContain("FOR UPDATE OF u");
     expect(businessQueries[5]?.sql).toContain('DELETE FROM "GuardianStudent"');
     expect(businessQueries[5]?.values).toEqual(["guardian-a", "student-a"]);
+    expect(businessQueries[6]?.sql).toBe('SELECT "tenantId", "guardianId", "studentId" FROM "GuardianStudent" WHERE "tenantId" = $1');
+    expect(businessQueries[6]?.values).toEqual(["tenant-a"]);
   });
 
   it("KV-3c Postgres: son bağ silinince yalnız başka ACTIVE üyeliği olan kullanıcının GUARDIAN üyeliğini aynı transaction'da bitirir", async () => {
