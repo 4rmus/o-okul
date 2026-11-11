@@ -23,6 +23,8 @@ export type IdempotencyStartResult =
 
 export interface IdempotencyStore {
   start(input: IdempotencyStartInput): Promise<IdempotencyStartResult>;
+  /** Read-only compatibility lookup: never reserves or changes a legacy key. */
+  findCompleted?(input: IdempotencyStartInput): Promise<{ responseBody: unknown } | undefined>;
   complete(input: IdempotencyStartInput & { responseBody: unknown }): Promise<void>;
   /**
    * Completes an IN_PROGRESS key on the caller's open tenant transaction, so the business write and the replay
@@ -50,6 +52,20 @@ const idempotencyKeyPattern = /^[A-Za-z0-9._:-]+$/;
 @Injectable()
 export class IdempotencyService {
   constructor(@Inject(idempotencyStoreToken) private readonly store: IdempotencyStore) {}
+
+  /** Callers must authorize the request and validate the response owner before replaying a legacy record. */
+  async findCompleted(
+    context: RequestContext,
+    options: { key: string; operation: string; request: unknown },
+  ): Promise<{ responseBody: unknown } | undefined> {
+    const key = normalizeIdempotencyKey(options.key);
+    if (!key) return undefined;
+    if (!context.tenantId) throw new BadRequestException("IDEMPOTENCY_TENANT_REQUIRED");
+    return this.store.findCompleted?.({
+      tenantId: context.tenantId, key, operation: options.operation,
+      requestHash: hashIdempotencyRequest(options.operation, options.request),
+    });
+  }
 
   async run<T>(
     context: RequestContext,
@@ -103,6 +119,12 @@ export class IdempotencyService {
 export class InMemoryIdempotencyStore implements IdempotencyStore {
   private readonly records = new Map<string, IdempotencyRecord>();
 
+  async findCompleted(input: IdempotencyStartInput): Promise<{ responseBody: unknown } | undefined> {
+    const record = this.records.get(recordKey(input));
+    if (record?.status !== "COMPLETED" || record.requestHash !== input.requestHash) return undefined;
+    return { responseBody: cloneJson(record.responseBody) };
+  }
+
   async start(input: IdempotencyStartInput): Promise<IdempotencyStartResult> {
     const mapKey = recordKey(input);
     const existing = this.records.get(mapKey);
@@ -133,6 +155,18 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
 
 export class PostgresIdempotencyStore implements IdempotencyStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
+
+  async findCompleted(input: IdempotencyStartInput): Promise<{ responseBody: unknown } | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ responseBody: unknown }>(
+        `SELECT "responseBody" FROM "IdempotencyKey"
+         WHERE "tenantId" = $1 AND "key" = $2 AND "operation" = $3
+           AND "requestHash" = $4 AND "status" = 'COMPLETED' LIMIT 1`,
+        [input.tenantId, input.key, input.operation, input.requestHash],
+      );
+      return result.rows[0];
+    });
+  }
 
   async start(input: IdempotencyStartInput): Promise<IdempotencyStartResult> {
     return withTenantQuery(this.pool, async (client) => {

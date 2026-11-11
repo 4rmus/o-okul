@@ -88,6 +88,8 @@ console.log(`landing-screens ${runId}: veri seti ${dataset.id} doğrulandı (${d
 const gaps = [];
 const adjustments = [];
 const children = [];
+const examPipeline = { requested: withExams, exams: [] };
+const capturedScreens = [];
 let examWorkers = [];
 let edgeProxy;
 let exitCode = 0;
@@ -113,7 +115,7 @@ try {
   if (examStack) {
     await loadExams(ownerToken, loaded);
   } else {
-    gaps.push("EXAM_PIPELINE_NOT_RUN: --with-exams verilmedi; Öğrenci 360 ve Gelişimim sınav panelleri sınav verisi olmadan çekildi.");
+    gaps.push("EXAM_PIPELINE_NOT_RUN: --with-exams verilmedi; sınav verisi yüklenmedi.");
   }
 
   if (skipCapture) {
@@ -126,13 +128,13 @@ try {
     edgeProxy = await startEdgeProxy();
     const capture = await captureScreens(seed, loaded);
     const failed = capture.screens.filter((screen) => screen.status === "FAILED");
-    writeManifest(seed, capture.screens, {
+    const manifest = writeManifest(seed, capture.screens, {
       tool: capture.tool,
       ...(failed.length > 0 ? { status: "FAILED", failure: `LANDING_SCREENS_CAPTURE_FAILED:${failed.length}` } : {}),
     });
-    if (failed.length > 0) {
+    if (manifest.status !== "COMPLETED") {
       exitCode = 1;
-      console.error(`landing-screens ${runId}: ${failed.length} ekran yakalanamadı (manifest.json içinde reason alanı).`);
+      console.error(`landing-screens ${runId}: yakalama ${manifest.status} (${failed.length} başarısız ekran; uyarılar ve eksikler manifest.json içinde).`);
     }
     console.log(`landing-screens ${runId}: ${capture.screens.length - failed.length} PNG yazıldı -> ${relative(repoRoot, outDir) || outDir}`);
   }
@@ -147,10 +149,10 @@ try {
   for (const child of children.reverse()) await stopChild(child);
   for (const worker of examWorkers) await worker.close().catch(() => undefined);
   if (!manifestWritten) {
-    // A stopped run still leaves its gaps and adjustments behind; no screen list, status FAILED.
+    // Preserve every completed screen and the last successful exam stage even if the browser/run stops.
     try {
-      writeManifest(seed, [], { tool: { node: process.version }, status: "FAILED", failure: failure ?? LANDING_SCREENS_UNKNOWN_FAILURE });
-      console.error(`landing-screens ${runId}: kısmi manifest yazıldı (status FAILED) -> ${relative(repoRoot, outDir) || outDir}/manifest.json`);
+      const manifest = writeManifest(seed, capturedScreens, { tool: { node: process.version }, status: "FAILED", failure: failure ?? LANDING_SCREENS_UNKNOWN_FAILURE });
+      console.error(`landing-screens ${runId}: kısmi manifest yazıldı (${manifest.status}) -> ${relative(repoRoot, outDir) || outDir}/manifest.json`);
     } catch (manifestError) {
       console.error(`landing-screens ${runId}: kısmi manifest yazılamadı: ${errorCode(manifestError)}`);
     }
@@ -710,6 +712,8 @@ async function loadExams(token, loaded) {
   let addedOutsideClasses = 0;
   const examDates = previousSchoolDays(loaded.today, 30, loaded.activeTermStartsAt);
   for (const [index, exam] of LANDING_SCREENS_DATASET_FILES.exams.entries()) {
+    const evidence = { key: exam.key, stage: "CREATING" };
+    examPipeline.exams.push(evidence);
     const expectedExam = expected.exams.find((candidate) => candidate.opticalFile === exam.opticalTxt);
     if (!expectedExam) throw new Error(`LANDING_SCREENS_EXPECTED_RESULTS_MISSING:${exam.key}`);
     const examDate = examDates[Math.max(0, Math.min(examDates.length - 1, 20 - index * 8))] ?? loaded.today;
@@ -718,9 +722,11 @@ async function loadExams(token, loaded) {
       startsAt: `${examDate}T09:00:00+03:00`,
       answerKey: { version: `${exam.key}-v1`, fileBase64: fileBase64(exam.answerKey) },
     }));
+    Object.assign(evidence, { examId: created.id, stage: "CREATED" });
     const suggestion = await api(token, "POST", `/exams/${created.id}/parser-configs/suggestions`, { preset: "OPTIK_7108_LGS" });
     const parserConfigVersion = `${exam.key}-optik-7108`;
     await api(token, "POST", `/exams/${created.id}/parser-configs/approvals`, { suggestion: suggestion.suggestion, version: parserConfigVersion });
+    evidence.stage = "PARSER_APPROVED";
     // classIds already enrolled the class rosters; only optical rows outside them are added here.
     const enrolled = await api(token, "GET", `/exams/${created.id}/participants`);
     let missing;
@@ -732,10 +738,12 @@ async function loadExams(token, loaded) {
     for (const participant of missing) await api(token, "POST", `/exams/${created.id}/participants`, participant);
     enrolledByClass += expectedExam.results.length - missing.length;
     addedOutsideClasses += missing.length;
+    evidence.stage = "PARTICIPANTS_READY";
     const upload = await api(token, "POST", `/exams/${created.id}/raw-imports`, {
       sourceType: "OPTICAL_TXT", fileName: exam.opticalTxt, contentType: "text/plain", parserConfigVersion, fileBase64: fileBase64(exam.opticalTxt),
     });
     const rawImportId = upload.rawImport.id;
+    evidence.rawImportId = rawImportId;
     const summary = await poll(`LANDING_SCREENS_PARSE_TIMEOUT:${exam.key}`, 60_000, async () => {
       const current = await api(token, "GET", `/exams/${created.id}/raw-imports/${rawImportId}/summary`);
       return current.totalRows === expectedExam.results.length ? current : undefined;
@@ -743,17 +751,21 @@ async function loadExams(token, loaded) {
     if (summary.matchedCount !== expectedExam.results.length || summary.quarantinedCount !== 0) {
       throw new Error(`LANDING_SCREENS_PARSE_SUMMARY_MISMATCH:${exam.key}:${summary.matchedCount}/${summary.quarantinedCount}`);
     }
+    evidence.stage = "IMPORTED";
     await api(token, "POST", `/exams/${created.id}/raw-imports/${rawImportId}/evaluation-jobs`, {});
     await poll(`LANDING_SCREENS_EVALUATION_TIMEOUT:${exam.key}`, 90_000, async () => {
       const status = await api(token, "GET", `/exams/${created.id}/raw-imports/${rawImportId}/evaluation-status`);
       return status.status === "COMPLETED" && status.pendingCount === 0 ? status : undefined;
     });
+    evidence.stage = "EVALUATED";
     await api(token, "POST", `/exams/${created.id}/reports/generation-jobs`, { reportType: "EXAM_RESULT_SUMMARY" });
-    await poll(`LANDING_SCREENS_REPORT_TIMEOUT:${exam.key}`, 90_000, async () => {
+    const snapshot = await poll(`LANDING_SCREENS_REPORT_TIMEOUT:${exam.key}`, 90_000, async () => {
       const snapshots = await api(token, "GET", `/exams/${created.id}/reports/snapshots`);
       return snapshots.find((snapshot) => snapshot.status === "READY");
     });
+    Object.assign(evidence, { reportSnapshotId: snapshot.id, stage: "REPORT_READY" });
     await api(token, "POST", `/exams/${created.id}/publish`);
+    evidence.stage = "PUBLISHED";
     console.log(`landing-screens: ${exam.title} raporu hazır ve yayımlandı`);
   }
   console.log(`landing-screens: sınav katılımcıları 8-A/8-B sınıflarından geldi (${LANDING_SCREENS_DATASET_FILES.exams.length} sınavda ${enrolledByClass} optik satır), sınıf dışından eklenen ${addedOutsideClasses}`);
@@ -762,7 +774,7 @@ async function loadExams(token, loaded) {
 async function poll(code, timeoutMs, probe) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const result = await probe().catch(() => undefined);
+    const result = await probe();
     if (result) return result;
     await delay(1_000);
   }
@@ -828,7 +840,7 @@ async function captureScreens(seed, loaded) {
   const browser = await chromium.launch({ args: ["--lang=tr-TR"] });
   const accounts = { admin: seed.owner, teacher: seed.teacher, student: seed.student };
   const homes = { admin: /\/kurum(?:[/?#]|$)/, teacher: /\/ogretmen(?:[/?#]|$)/, student: /\/ogrenci(?:[/?#]|$)/ };
-  const results = [];
+  const results = capturedScreens;
   let chromiumVersion = "unknown";
   try {
     for (const role of ["admin", "teacher", "student"]) {
@@ -870,7 +882,7 @@ async function captureScreens(seed, loaded) {
             results.push({
               id: screen.id, title: screen.title, role, route: new URL(route, webOrigin).pathname, viewport,
               file, bytes: buffer.length, sha256: sha256Hex(buffer), status: alerts.length > 0 ? "CAPTURED_WITH_ALERTS" : "CAPTURED", alerts,
-              examDataLoaded: Boolean(examStack), needsExams: screen.needsExams,
+              needsExams: screen.needsExams,
             });
           } catch (error) {
             results.push(failedScreen(screen, viewport, route, errorCode(error)));
@@ -887,7 +899,7 @@ async function captureScreens(seed, loaded) {
 }
 
 function failedScreen(screen, viewport, route, reason) {
-  return { id: screen.id, title: screen.title, role: screen.role, route: new URL(route, webOrigin).pathname, viewport, file: null, bytes: 0, sha256: null, status: "FAILED", reason, alerts: [], examDataLoaded: Boolean(examStack), needsExams: screen.needsExams };
+  return { id: screen.id, title: screen.title, role: screen.role, route: new URL(route, webOrigin).pathname, viewport, file: null, bytes: 0, sha256: null, status: "FAILED", reason, alerts: [], needsExams: screen.needsExams };
 }
 
 function errorCode(error) {
@@ -897,7 +909,7 @@ function errorCode(error) {
 
 async function settle(page) {
   await page.waitForLoadState("networkidle");
-  await page.waitForFunction(() => document.querySelectorAll('[aria-busy="true"]').length === 0, undefined, { timeout: 10_000 }).catch(() => undefined);
+  await page.waitForFunction(() => document.querySelectorAll('[aria-busy="true"]').length === 0, undefined, { timeout: 10_000 });
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -926,25 +938,26 @@ function gitCommit() {
   }
 }
 
-function writeManifest(seedRecord, screens, { tool, status = "COMPLETED", failure: failureCode = null }) {
+function writeManifest(seedRecord, screens, { tool, status, failure: failureCode = null }) {
+  const verifiedScreens = screens.map((screen) => screen.file && (!existsSync(join(outDir, screen.file)) || !statSync(join(outDir, screen.file)).isFile())
+    ? { ...screen, file: null, bytes: 0, sha256: null, status: "FAILED", reason: "LANDING_SCREENS_OUTPUT_MISSING" }
+    : screen);
   const manifest = buildProvenanceManifest({
     capturedAt: new Date().toISOString(),
     commit: gitCommit(),
     dataset,
-    examsLoaded: Boolean(examStack),
+    examPipeline,
+    captureSkipped: skipCapture,
     failure: failureCode,
     gaps,
     queueAvailable: Boolean(queueStack),
     adjustments,
     runId,
-    screens,
+    screens: verifiedScreens,
     status,
     tool: { ...tool, database: databaseName, tenantSlug: seedRecord?.tenantSlug ?? null },
   });
   writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  for (const screen of screens) {
-    if (screen.file && !statSync(join(outDir, screen.file)).isFile()) throw new Error(`LANDING_SCREENS_OUTPUT_MISSING:${screen.file}`);
-  }
-  // Set only after the screen files are checked; a missing file leaves the FAILED manifest of the finally block.
   manifestWritten = true;
+  return manifest;
 }

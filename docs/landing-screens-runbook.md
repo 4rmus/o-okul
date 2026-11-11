@@ -124,23 +124,44 @@ portal hesabı bağlama.
 `artifacts/landing-screens/<runId>/` (gitignore'daki `artifacts/` altında):
 
 - `<ekran>--<boyut>.png`: 15 PNG (5 ekran × 3 boyut). WebP dönüşümü yayın adımına bırakılır.
-- `manifest.json`: koşu durumu (`status: COMPLETED` veya `FAILED`; `FAILED` için `failure` alanında yalnız
+- `manifest.json` (sürüm 2): koşu durumu (`COMPLETED`, `PARTIAL`, `SKIPPED` veya `FAILED`; hata için `failure` alanında yalnız
   `LANDING_SCREENS_*` ile başlayan hata kodu; başka bir hata metni `LANDING_SCREENS_UNKNOWN_FAILURE` olarak
   yazılır), veri seti kimliği ve dosya SHA-256'ları, commit SHA ve kirli dosya sayısı, çekim zamanı
   (koşuda doldurulur), araç sürümleri (Node, Playwright, Chromium), her ekranın rotası, boyutu, dosyası,
-  bayt ve SHA-256 değeri, ekrandaki uyarılar, `gaps` ve `adjustments`, `evidenceClass: LOCAL_TEST`,
+  bayt ve SHA-256 değeri, ekrandaki uyarılar, beklenen/yakalanan/başarısız/uyarılı ekran sayıları ve eksik
+  ekran-boyut çiftleri (`capture`), `gaps` ve `adjustments`, `evidenceClass: LOCAL_TEST`,
   `review.status: PENDING_HUMAN_PII_REVIEW`, `publication.status: NOT_APPROVED`.
 - `logs/api.log`, `logs/web.log`, `logs/run.log`: yalnız yerel inceleme için; istek gövdesi yazılmaz.
   `run.log` koşuyu durduran hatanın tam metnini ve yığınını taşır; manifest'e yalnız kod geçer.
 
+`COMPLETED` bütün 15 ekran-boyut çiftinin uyarısız yakalandığını belirtir. `PARTIAL`, bazı karelerin
+başarısız/eksik olduğunu, en az bir karede uyarı görüldüğünü veya istenen sınav hattının tamamlanmadığını
+belirtir. Hiç kare üretilemeyen başarısızlık `FAILED`, başarıyla veri yükleyip `--skip-capture` ile
+yakalamayı atlamak `SKIPPED` olur. `PARTIAL` ve `FAILED` süreçten sıfır olmayan çıkış koduyla döner;
+`SKIPPED` görüntü kanıtı değildir. Her karenin `status`, `reason` ve `alerts` alanları ayrıca incelenir.
+
+`source.examEvidence` sınav isteğini (`requested`), beklenen/tamamlanan sınav sayılarını ve her sınavın
+son başarılı aşamasını, sınav/ham aktarım/READY rapor kimliklerini taşır. `--with-exams` tek başına rapor
+kanıtı değildir: hiç başlanmamış hat `NOT_RUN`, başlanmış fakat tüm sınavları yayımlanmamış hat
+`PARTIAL` olur. `source.examPipeline` ancak üç sınavın da gerçek aktarım, değerlendirme, READY rapor
+ve yayın adımları tamamlandığında hattın adını yazar; diğer durumlarda `NOT_RUN` veya `PARTIAL` yazar.
+Ekranların `examDataLoaded` ve `examPipelineStatus` alanları aynı sonuçtan türetilir.
+
 Koşu yarıda durursa (API hatası, zaman aşımı, eksik derleme) yığın kapatıldıktan sonra kısmi bir
-`manifest.json` yine yazılır: `status: FAILED`, `failure` (ör.
+`manifest.json` yine yazılır: `status: FAILED` (önceden yakalanmış kare varsa `PARTIAL`), `failure` (ör.
 `LANDING_SCREENS_API_FAILED:POST /exams:400:SCORING_PROFILE_REQUIRED`; sürücü, ağ veya çalışma zamanı
 hatası gibi `LANDING_SCREENS_*` olmayan iletiler `LANDING_SCREENS_UNKNOWN_FAILURE` olarak yazılır, ayrıntı
-`logs/run.log` dosyasındadır), boş `screens` ve o ana kadar
+`logs/run.log` dosyasındadır), o ana kadar yakalanan `screens`, sınav aşamaları,
 biriken `gaps` ile `adjustments`. Yakalama sırasında ekran düşerse manifest ekran listesiyle birlikte
-`status: FAILED` ve `failure: LANDING_SCREENS_CAPTURE_FAILED:<sayı>` taşır. Veri seti doğrulaması gibi çıktı
+`PARTIAL` (hiç kare yoksa `FAILED`) ve `failure: LANDING_SCREENS_CAPTURE_FAILED:<sayı>` taşır.
+API yoklama hataları ve ekranın `aria-busy` zaman aşımı yutulmaz: sınav hattını veya ilgili kareyi
+başarısız yapar. Ekrandaki uyarılar `CAPTURED_WITH_ALERTS` ve koşuda `PARTIAL` olarak kaydedilir.
+Veri seti doğrulaması gibi çıktı
 dizini açılmadan önceki hatalarda manifest yazılmaz.
+
+Yerel doğrulama: `node --test scripts/landing-screens-contract.test.mjs` ve
+`node --check scripts/landing-screens.mjs`. Bunlar `LOCAL_TEST`/`LOCAL_STATIC` kanıtıdır; gerçek yerel
+Postgres/Redis/MinIO/tarayıcı koşusunu, staging UAT'yi veya üretim kanıtını tamamlamaz.
 
 Görseller ve manifest depoya işlenmez.
 

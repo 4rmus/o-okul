@@ -198,6 +198,7 @@ test("provenance manifest records dataset, commit and viewport and starts unrevi
     tool: { node: "v24" },
   });
   assert.equal(manifest.decision, "DEC-20261102-08");
+  assert.equal(manifest.version, 2);
   assert.equal(manifest.evidenceClass, "LOCAL_TEST");
   assert.equal(manifest.theme, "light");
   assert.equal(manifest.dataset.id, "sentetik-v1");
@@ -208,8 +209,8 @@ test("provenance manifest records dataset, commit and viewport and starts unrevi
   assert.equal(manifest.review.status, "PENDING_HUMAN_PII_REVIEW");
   assert.equal(manifest.review.reviewer, null);
   assert.equal(manifest.publication.status, "NOT_APPROVED");
-  assert.equal(manifest.status, "COMPLETED");
-  assert.equal(manifest.failure, null);
+  assert.equal(manifest.status, "PARTIAL");
+  assert.equal(manifest.failure, "LANDING_SCREENS_CAPTURE_INCOMPLETE");
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [{ ...screen, route: "/veli" }] }), /FORBIDDEN_ROUTE/);
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [{ ...screen, route: "/kurum/finans/tahsilat" }] }), /FORBIDDEN_ROUTE/);
 });
@@ -226,8 +227,97 @@ function manifestInput() {
   };
 }
 
+function capturedScreens() {
+  return LANDING_SCREENS.flatMap((screen) => LANDING_SCREENS_VIEWPORTS.map((viewport) => ({
+    id: screen.id, viewport, route: screen.role === "admin" ? "/kurum/ogrenciler/featured" : screen.role === "teacher" ? "/ogretmen" : "/ogrenci",
+    file: `${screen.id}--${viewport.id}.png`, status: "CAPTURED", alerts: [],
+  })));
+}
+
+function completedExamEvidence() {
+  return {
+    requested: true,
+    exams: LANDING_SCREENS_DATASET_FILES.exams.map((exam) => ({
+      key: exam.key, examId: `id-${exam.key}`, rawImportId: `raw-${exam.key}`,
+      reportSnapshotId: `snapshot-${exam.key}`, stage: "PUBLISHED",
+    })),
+  };
+}
+
+test("exam provenance follows successful pipeline stages, never a requested flag", () => {
+  const build = (examPipeline, extra = {}) => buildProvenanceManifest({ ...manifestInput(), screens: capturedScreens(), examPipeline, ...extra });
+  const notStarted = build({ requested: true, exams: [] }, { examsLoaded: true });
+  assert.equal(notStarted.source.examPipeline, "NOT_RUN");
+  assert.equal(notStarted.source.examEvidence.status, "NOT_RUN");
+  assert.equal(notStarted.source.examEvidence.requested, true);
+  assert.equal(notStarted.status, "PARTIAL");
+  assert.ok(notStarted.screens.every((screen) => screen.examDataLoaded === false));
+
+  const partial = completedExamEvidence();
+  partial.exams[1] = { key: partial.exams[1].key, examId: partial.exams[1].examId, stage: "EVALUATED" };
+  partial.exams.pop();
+  const stopped = build(partial, { screens: [], status: "FAILED", failure: "LANDING_SCREENS_REPORT_TIMEOUT" });
+  assert.equal(stopped.source.examPipeline, "PARTIAL");
+  assert.equal(stopped.source.examEvidence.completedExamCount, 1);
+  assert.equal(stopped.source.examEvidence.expectedExamCount, 3);
+  assert.equal(stopped.source.examEvidence.exams[1].stage, "EVALUATED");
+
+  const completed = build(completedExamEvidence());
+  assert.match(completed.source.examPipeline, /raw import.*ReportSnapshot/);
+  assert.equal(completed.source.examEvidence.status, "COMPLETED");
+  assert.ok(completed.screens.every((screen) => screen.examDataLoaded === true && screen.examPipelineStatus === "COMPLETED"));
+  const noSnapshot = completedExamEvidence();
+  delete noSnapshot.exams[0].reportSnapshotId;
+  assert.equal(build(noSnapshot).source.examEvidence.status, "PARTIAL");
+  const duplicateExam = completedExamEvidence();
+  duplicateExam.exams[2] = duplicateExam.exams[0];
+  assert.equal(build(duplicateExam).source.examEvidence.status, "PARTIAL");
+});
+
+test("capture evidence distinguishes skipped, missing, partial, alert and failed screens", () => {
+  const skipped = buildProvenanceManifest({ ...manifestInput(), screens: [], captureSkipped: true });
+  assert.equal(skipped.status, "SKIPPED");
+  assert.equal(skipped.capture.status, "SKIPPED");
+  assert.equal(skipped.capture.expected, 15);
+  assert.equal(skipped.capture.captured, 0);
+  assert.equal(skipped.capture.missing.length, 15);
+  const screens = capturedScreens();
+  const build = (rows, extra = {}) => buildProvenanceManifest({ ...manifestInput(), screens: rows, ...extra });
+  assert.equal(build(screens).status, "COMPLETED");
+  assert.equal(build(screens).capture.captured, 15);
+  const incomplete = build(screens.slice(0, -1));
+  assert.equal(incomplete.status, "PARTIAL");
+  assert.equal(incomplete.capture.missing.length, 1);
+  assert.deepEqual(incomplete.capture.missing[0], { id: screens.at(-1).id, viewportId: screens.at(-1).viewport.id });
+  const duplicate = [...screens];
+  duplicate[14] = duplicate[0];
+  assert.equal(build(duplicate).status, "PARTIAL");
+  const failed = [...screens];
+  failed[0] = { ...failed[0], status: "FAILED", file: null, reason: "LANDING_SCREENS_SCREEN_NOT_READY" };
+  const partial = build(failed);
+  assert.equal(partial.status, "PARTIAL");
+  assert.equal(partial.capture.failed, 1);
+  assert.equal(partial.screens[0].reason, "LANDING_SCREENS_SCREEN_NOT_READY");
+  assert.equal(build(failed.map((screen) => ({ ...screen, status: "FAILED", file: null }))).status, "FAILED");
+  const alerts = [...screens];
+  alerts[0] = { ...alerts[0], status: "CAPTURED_WITH_ALERTS", alerts: ["İstek başarısız"] };
+  assert.equal(build(alerts).status, "PARTIAL");
+  assert.equal(build(alerts).capture.withAlerts, 1);
+  const interrupted = build(screens.slice(0, 1), { status: "FAILED", failure: "LANDING_SCREENS_BROWSER_FAILED" });
+  assert.equal(interrupted.status, "PARTIAL");
+  assert.equal(interrupted.failure, "LANDING_SCREENS_BROWSER_FAILED");
+  assert.equal(interrupted.screens.length, 1);
+});
+
+test("readiness and pipeline probe failures are not swallowed and partial screen results survive an interruption", () => {
+  assert.doesNotMatch(pipelineSource, /await probe\(\)\.catch/);
+  assert.doesNotMatch(pipelineSource, /waitForFunction\([^;]*\.catch\(\(\) => undefined\)/);
+  assert.doesNotMatch(pipelineSource, /examDataLoaded: Boolean\(examStack\)|examsLoaded: Boolean\(examStack\)/);
+  assert.match(pipelineSource, /writeManifest\(seed, capturedScreens, \{[\s\S]*status: "FAILED"/);
+});
+
 test("a stopped run writes a FAILED manifest that keeps gaps and adjustments", () => {
-  assert.deepEqual(LANDING_SCREENS_RUN_STATUSES, ["COMPLETED", "FAILED"]);
+  assert.deepEqual(LANDING_SCREENS_RUN_STATUSES, ["COMPLETED", "PARTIAL", "SKIPPED", "FAILED"]);
   const manifest = buildProvenanceManifest({
     ...manifestInput(),
     adjustments: ["TENANT_BOOTSTRAP: test"],
@@ -245,7 +335,7 @@ test("a stopped run writes a FAILED manifest that keeps gaps and adjustments", (
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [], status: "FAILED" }), /RUN_FAILURE_REQUIRED/);
   assert.throws(() => buildProvenanceManifest({ ...manifestInput(), screens: [], status: "DONE" }), /RUN_STATUS_INVALID/);
   // A completed run never carries a failure code.
-  assert.equal(buildProvenanceManifest({ ...manifestInput(), screens: [], failure: "x" }).failure, null);
+  assert.equal(buildProvenanceManifest({ ...manifestInput(), screens: capturedScreens(), failure: "x" }).failure, null);
   // The pipeline writes the partial manifest from its finally block, after the stack has stopped.
   assert.match(pipelineSource, /finally \{[\s\S]*if \(!manifestWritten\)[\s\S]*status: "FAILED"/);
 });

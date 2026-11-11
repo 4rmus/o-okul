@@ -8,7 +8,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "nod
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const LANDING_SCREENS_DATASET_ID = "sentetik-v1";
-export const LANDING_SCREENS_MANIFEST_VERSION = 1;
+export const LANDING_SCREENS_MANIFEST_VERSION = 2;
 
 /** Files the pipeline reads; each must match the dataset's own manifest.json sha256 before anything runs. */
 export const LANDING_SCREENS_DATASET_FILES = Object.freeze({
@@ -35,7 +35,7 @@ export const LANDING_SCREENS_LGS_SCORING = Object.freeze({
 });
 
 /** Run states written to manifest.json; a FAILED run still records its gaps and adjustments. */
-export const LANDING_SCREENS_RUN_STATUSES = Object.freeze(["COMPLETED", "FAILED"]);
+export const LANDING_SCREENS_RUN_STATUSES = Object.freeze(["COMPLETED", "PARTIAL", "SKIPPED", "FAILED"]);
 export const LANDING_SCREENS_UNKNOWN_FAILURE = "LANDING_SCREENS_UNKNOWN_FAILURE";
 // The manifest `failure` field carries a LANDING_SCREENS_* code only (the first line of the error, at most 160
 // characters, a code optionally followed by `:` details). Any other error text stays in logs/run.log.
@@ -55,7 +55,7 @@ export const LANDING_SCREENS_VIEWPORTS = Object.freeze([
 
 /**
  * The agreed screens. No guardian portal and no finance screen (DEC-20261102-08).
- * `needsExams` marks screens whose exam panels stay empty unless the run used --with-exams; `focusLabel` is the
+ * `needsExams` marks screens whose exam panels need successfully published exam reports; `focusLabel` is the
  * accessible name of a panel below the fold that is scrolled to the top of the frame.
  */
 export const LANDING_SCREENS = Object.freeze([
@@ -305,23 +305,60 @@ export function istanbulDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
-export function buildProvenanceManifest({ adjustments = [], capturedAt, commit, dataset, examsLoaded, failure = null, gaps, queueAvailable = false, runId, screens, status = "COMPLETED", tool }) {
-  if (!LANDING_SCREENS_RUN_STATUSES.includes(status)) throw new Error(`LANDING_SCREENS_RUN_STATUS_INVALID:${status}`);
+function summarizeExamPipeline({ requested = false, exams = [] } = {}) {
+  const expectedKeys = LANDING_SCREENS_DATASET_FILES.exams.map((exam) => exam.key);
+  const completedKeys = new Set(exams.filter((exam) => expectedKeys.includes(exam.key)
+    && exam.stage === "PUBLISHED" && exam.examId && exam.rawImportId && exam.reportSnapshotId).map((exam) => exam.key));
+  return {
+    requested,
+    status: completedKeys.size === expectedKeys.length ? "COMPLETED" : exams.length > 0 ? "PARTIAL" : "NOT_RUN",
+    expectedExamCount: expectedKeys.length,
+    completedExamCount: completedKeys.size,
+    exams: exams.map((exam) => ({ ...exam })),
+  };
+}
+
+function summarizeCapture(screens, skipped) {
+  const expected = LANDING_SCREENS.flatMap((screen) => LANDING_SCREENS_VIEWPORTS.map((viewport) => ({ id: screen.id, viewportId: viewport.id })));
+  const rows = expected.map((slot) => screens.find((screen) => screen.id === slot.id && screen.viewport.id === slot.viewportId));
+  const captured = rows.filter((screen) => screen?.file && ["CAPTURED", "CAPTURED_WITH_ALERTS"].includes(screen.status)).length;
+  const failed = rows.filter((screen) => screen?.status === "FAILED").length;
+  const withAlerts = rows.filter((screen) => screen?.status === "CAPTURED_WITH_ALERTS" || screen?.alerts?.length > 0).length;
+  const missing = expected.filter((_, index) => !rows[index]);
+  return {
+    status: skipped ? "SKIPPED" : screens.length === 0 ? "NOT_RUN"
+      : captured === expected.length && failed === 0 && withAlerts === 0 ? "COMPLETED" : captured > 0 ? "PARTIAL" : "FAILED",
+    expected: expected.length, captured, failed, withAlerts, missing,
+  };
+}
+
+export function buildProvenanceManifest({ adjustments = [], capturedAt, captureSkipped = false, commit, dataset, examPipeline, failure = null, gaps, queueAvailable = false, runId, screens, status, tool }) {
+  if (status !== undefined && !LANDING_SCREENS_RUN_STATUSES.includes(status)) throw new Error(`LANDING_SCREENS_RUN_STATUS_INVALID:${status}`);
   if (status === "FAILED" && !failure) throw new Error("LANDING_SCREENS_RUN_FAILURE_REQUIRED");
   for (const screen of screens) {
     if (LANDING_SCREENS_FORBIDDEN_ROUTE_PREFIXES.some((prefix) => screen.route === prefix || screen.route.startsWith(`${prefix}/`) || screen.route.startsWith(`${prefix}?`))) {
       throw new Error(`LANDING_SCREENS_FORBIDDEN_ROUTE:${screen.id}`);
     }
   }
+  const examEvidence = summarizeExamPipeline(examPipeline);
+  const capture = summarizeCapture(screens, captureSkipped);
+  const runStatus = status === "FAILED" ? (capture.captured > 0 ? "PARTIAL" : "FAILED")
+    : capture.status === "NOT_RUN" ? "FAILED"
+      : capture.status === "COMPLETED" && examEvidence.requested && examEvidence.status !== "COMPLETED" ? "PARTIAL" : capture.status;
+  const runFailure = ["FAILED", "PARTIAL"].includes(runStatus)
+    ? (status === "FAILED" ? failure : null) ?? (capture.failed > 0 ? `LANDING_SCREENS_CAPTURE_FAILED:${capture.failed}`
+      : capture.withAlerts > 0 ? `LANDING_SCREENS_CAPTURE_ALERTS:${capture.withAlerts}`
+        : capture.status === "NOT_RUN" ? "LANDING_SCREENS_CAPTURE_NOT_RUN"
+          : capture.status === "COMPLETED" ? "LANDING_SCREENS_EXAM_PIPELINE_INCOMPLETE" : "LANDING_SCREENS_CAPTURE_INCOMPLETE")
+    : null;
   return {
     version: LANDING_SCREENS_MANIFEST_VERSION,
     kind: "landing-screens-provenance",
     decision: "DEC-20261102-08",
     runId,
     capturedAt,
-    // FAILED keeps the gaps and adjustments of a run that stopped; `failure` is the error code only, never a body.
-    status,
-    failure: status === "FAILED" ? failure : null,
+    status: runStatus,
+    failure: runFailure,
     evidenceClass: "LOCAL_TEST",
     dataset,
     source: {
@@ -329,11 +366,13 @@ export function buildProvenanceManifest({ adjustments = [], capturedAt, commit, 
       dirtyFileCount: commit.dirtyFileCount,
       stack: "local API (PERSISTENCE_DRIVER=postgres, TZ=UTC) + next start behind a local /api edge proxy; real HTTP import flow; SMS and notification providers off",
       queue: queueAvailable ? "local Redis, run-scoped QUEUE_PREFIX, no announcement/SMS worker" : "NONE: grade publish skipped",
-      examPipeline: examsLoaded ? "raw import -> excel-import/exam-evaluation/report-generation workers -> ReportSnapshot" : "NOT_RUN",
+      examPipeline: examEvidence.status === "COMPLETED" ? "raw import -> excel-import/exam-evaluation/report-generation workers -> ReportSnapshot" : examEvidence.status,
+      examEvidence,
     },
     tool,
     theme: "light",
-    screens,
+    capture,
+    screens: screens.map((screen) => ({ ...screen, examDataLoaded: examEvidence.status === "COMPLETED", examPipelineStatus: examEvidence.status })),
     gaps,
     // Direct database steps outside the HTTP flow (tenant bootstrap, portal account binding, enrollment start).
     adjustments,

@@ -777,30 +777,39 @@ export class HomeworkService {
     homeworkId: string,
     idempotencyKey?: string,
   ): Promise<HomeworkSubmissionRecord> {
-    if (idempotencyKey && this.idempotency) {
-      return this.idempotency.run(
-        context,
-        { key: idempotencyKey, operation: "homework.submission.submit", request: { homeworkId } },
-        () => this.submitCurrentStudentHomeworkOnce(context, homeworkId),
-      );
-    }
-
-    return this.submitCurrentStudentHomeworkOnce(context, homeworkId);
-  }
-
-  private async submitCurrentStudentHomeworkOnce(context: RequestContext, homeworkId: string): Promise<HomeworkSubmissionRecord> {
-    // The student id always comes from the session: a student can only ever mark their own row.
+    // Resolve the current student and class on every request, including completed retries.
     const student = await this.students.findCurrentStudent(context);
     const homework = await this.store.findById(homeworkId);
     if (!homework || homework.deletedAt || !student.classId || homework.classId !== student.classId) {
       throw new NotFoundException("HOMEWORK_NOT_FOUND");
     }
     this.assertAccess(context, homework);
+    if (idempotencyKey?.trim() && this.idempotency) {
+      const legacy = await this.idempotency.findCompleted(context, {
+        key: idempotencyKey, operation: "homework.submission.submit", request: { homeworkId },
+      });
+      const response = legacy?.responseBody;
+      if (response && typeof response === "object" && "studentId" in response && "homeworkId" in response
+        && response.studentId === student.id && response.homeworkId === homework.id) {
+        return response as HomeworkSubmissionRecord;
+      }
+      // A key belongs to this authenticated student/actor. A classmate using the same raw key writes their own row.
+      const key = createHash("sha256").update(JSON.stringify([context.userId, student.id, idempotencyKey.trim()])).digest("hex");
+      return this.idempotency.run(
+        context,
+        { key, operation: "homework.submission.submit", request: { homeworkId, actorUserId: context.userId, studentId: student.id } },
+        () => this.submitCurrentStudentHomeworkOnce(context, homework, student.id),
+      );
+    }
 
+    return this.submitCurrentStudentHomeworkOnce(context, homework, student.id);
+  }
+
+  private async submitCurrentStudentHomeworkOnce(context: RequestContext, homework: HomeworkRecord, studentId: string): Promise<HomeworkSubmissionRecord> {
     const row = await this.store.markSubmitted({
       tenantId: homework.tenantId,
       homeworkId: homework.id,
-      studentId: student.id,
+      studentId,
       submittedAt: new Date().toISOString(),
     });
     if (!row) {
@@ -814,7 +823,7 @@ export class HomeworkService {
       action: "homework_submission.submitted",
       diff: { homeworkId: row.homeworkId, studentId: row.studentId },
     });
-    return toSubmissionRecord(homework.id, student.id, row);
+    return toSubmissionRecord(homework.id, studentId, row);
   }
 
   private async listClassStudentIds(context: RequestContext, classId: string): Promise<string[]> {
