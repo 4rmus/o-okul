@@ -189,7 +189,7 @@
     "web:measurement-baseline:check": "node scripts/check-ui-measurement-baseline.mjs",
     "web:measurement-baseline:collect": "node scripts/prepare-ui-measurement-baseline.mjs && ALMANAC_MEASUREMENT_MODE=1 pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --retries=0 --reporter=line e2e-next/ui-route-family-smoke-next.spec.ts --grep 'Gate B local synthetic' && node scripts/collect-ui-measurement-baseline.mjs",
     "web:performance:check": "WEB_PERFORMANCE_BUDGET=1 node scripts/profile-web-performance.mjs && node scripts/check-web-performance-profile-contract.mjs",
-    "web:token-storage:check": "node scripts/check-web-token-storage.mjs",
+    "web:token-storage:check": "node scripts/check-web-token-storage.mjs && node --test scripts/check-web-push-security.test.mjs",
     "web:ux-baseline:check": "node scripts/check-web-ux-baseline.mjs",
     "web:ux-contract:check": "pnpm --filter @o-okul/web ux-contract",
     "web:ux-route-family:check": "pnpm --filter @o-okul/web ux-route-family-smoke",
