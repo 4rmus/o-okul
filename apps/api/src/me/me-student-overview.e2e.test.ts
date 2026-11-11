@@ -5,6 +5,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { StudentSelfOverview } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
+import { examRepositoryToken } from "../exam/exam.service.js";
 import { testLoginBody } from "../test-auth.js";
 
 const overviewKeys = ["attendance", "examSeries", "homework", "schoolGrades"];
@@ -19,7 +20,11 @@ describe("Student self overview (Gelişimim)", () => {
   let tenantBAdmin: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      // Keep the legacy snapshot fallback explicit; these overview tests do not use Postgres.
+      .overrideProvider(examRepositoryToken)
+      .useValue({ findById: async () => undefined, listByIds: async () => [] })
+      .compile();
     app = moduleRef.createNestApplication();
     await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
