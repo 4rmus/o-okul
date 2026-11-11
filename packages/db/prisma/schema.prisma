@@ -335,6 +335,7 @@ model NotificationDeviceToken {
   subjectId   String?
   provider    String
   token       String
+  webPushEndpointHash String?
   platform    String?
   lastSeenAt  DateTime
   disabledAt  DateTime?
@@ -343,7 +344,8 @@ model NotificationDeviceToken {
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
 
-  @@unique([tenantId, userId, token])
+  @@unique([tenantId, userId, provider, token], map: "NotificationDeviceToken_user_provider_token_key")
+  @@unique([tenantId, webPushEndpointHash], map: "NotificationDeviceToken_web_push_endpoint_key")
   @@index([tenantId, userId, disabledAt])
   @@index([tenantId, subjectType, subjectId, disabledAt], map: "NotificationDeviceToken_tenantId_subjectType_subjectId_disabled")
 }
@@ -1017,6 +1019,8 @@ model Guardian {
   nationalIdEncrypted String?
   nationalIdHash String?
   userId    String?   @unique
+  // Immutable server provenance; legacy unlinked records stay tenant-wide-only.
+  createdByUserId String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

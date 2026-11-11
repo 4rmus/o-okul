@@ -7,6 +7,7 @@ import request from "supertest";
 import { testLoginBody } from "./test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "./app.module.js";
+import { examRepositoryToken } from "./exam/exam.service.js";
 import { AuthService } from "./auth/auth.service.js";
 
 describe("API auth + tenant isolation", () => {
@@ -18,7 +19,11 @@ describe("API auth + tenant isolation", () => {
     process.env.STUDENT_QUOTA = "2";
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // Report snapshots here are legacy fixtures; model a missing Exam without contacting Postgres.
+      .overrideProvider(examRepositoryToken)
+      .useValue({ findById: async () => undefined, listByIds: async () => [] })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.listen(0, "127.0.0.1");

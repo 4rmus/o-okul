@@ -1,4 +1,5 @@
 import webPush from "web-push";
+import { parseWebPushSubscription } from "@o-okul/shared-types";
 import type { TenantJobPayload } from "../queue/queues.js";
 import type { AnnouncementDeliveryJobResult, AnnouncementDeliveryReportInput } from "./announcement-delivery-job.js";
 
@@ -57,8 +58,8 @@ export function assertAnnouncementPushSendPayload(payload: AnnouncementPushSendJ
 }
 
 /** Notification payload: title + internal link only. No body, names, TC or phone. */
-export function buildAnnouncementPushPayload(title: string, subjectType: string | null | undefined): string {
-  return JSON.stringify({ title, url: announcementLinkFor(subjectType) });
+export function buildAnnouncementPushPayload(title: string, subjectType: string | null | undefined, deviceId: string): string {
+  return JSON.stringify({ title, url: announcementLinkFor(subjectType), deviceId });
 }
 
 function announcementLinkFor(subjectType: string | null | undefined): string {
@@ -84,7 +85,7 @@ export async function processAnnouncementPushChunk(
   const sender = deps.sender;
   const outcomes = await Promise.all(devices.map(async (device) => ({
     id: device.id,
-    outcome: await sender.send(device.token, buildAnnouncementPushPayload(payload.title, device.subjectType)).catch((): PushSendOutcome => "failed"),
+    outcome: await sender.send(device.token, buildAnnouncementPushPayload(payload.title, device.subjectType, device.id)).catch((): PushSendOutcome => "failed"),
   })));
 
   const deliveredCount = outcomes.filter((entry) => entry.outcome === "sent").length;
@@ -131,20 +132,16 @@ export function createWebPushSenderFromEnv(
 
   return {
     async send(subscriptionJson, payload) {
-      let subscription: webPush.PushSubscription;
+      const subscription = parseWebPushSubscription(subscriptionJson);
+      if (!subscription) return "failed";
       try {
-        subscription = JSON.parse(subscriptionJson) as webPush.PushSubscription;
-      } catch {
-        return "failed";
-      }
-      if (!subscription?.endpoint?.startsWith("https://") || !subscription.keys?.p256dh || !subscription.keys?.auth) return "failed";
-      try {
-        await sendNotification(subscription, payload, {
+        const result = await sendNotification(subscription, payload, {
           TTL: 24 * 60 * 60,
           timeout: 10_000,
           vapidDetails: { subject, publicKey, privateKey },
         });
-        return "sent";
+        // web-push 3.6.7 uses https.request without following redirects. Treat any non-2xx as failure.
+        return result.statusCode >= 200 && result.statusCode < 300 ? "sent" : "failed";
       } catch (error) {
         const statusCode = (error as { statusCode?: unknown }).statusCode;
         return statusCode === 404 || statusCode === 410 ? "gone" : "failed";

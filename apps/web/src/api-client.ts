@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { bindWebPushRegistration, pushOwnerKey, reconcileWebPushOwner } from "./web-push-lifecycle.js";
 import type {
   AuthResponse,
   ActivePersona,
@@ -107,6 +108,7 @@ export const queryClient = new QueryClient({
 });
 
 export async function login(body: LoginRequest): Promise<AuthResponse> {
+  await reconcileWebPushOwner(null);
   const response = await fetch(`${apiBaseUrl}/auth/login`, {
     body: JSON.stringify(body),
     credentials: "include",
@@ -288,6 +290,7 @@ async function refreshSessionRequest(): Promise<AuthResponse> {
 export async function logout(): Promise<void> {
   let response: Response;
   try {
+    await reconcileWebPushOwner(null).catch(() => undefined);
     response = await fetch(`${apiBaseUrl}/auth/logout`, {
       credentials: "include",
       headers: { "content-type": "application/json", "x-csrf-token": readCookie("csrfToken") },
@@ -463,9 +466,26 @@ function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string
   return headers;
 }
 
-function rememberAuth(auth: AuthResponse): AuthResponse {
+async function rememberAuth(auth: AuthResponse): Promise<AuthResponse> {
+  await reconcileWebPushOwner(auth.session);
   activeAuth = auth;
   return auth;
+}
+
+/** Explicit opt-in uses one actor, with no refresh/replay, and cannot revive a stale tab's browser binding. */
+export async function registerPushForCurrentSession<T extends { id: string }>(expected: AuthResponse["session"], register: (currentToken: string) => Promise<T>): Promise<T> {
+  const matches = () => activeAuth && sessionOwnershipKey(activeAuth.session) === sessionOwnershipKey(expected);
+  if (!matches()) throw new Error("AUTH_CONTEXT_CHANGED");
+  return bindWebPushRegistration(await pushOwnerKey(expected), async () => {
+    if (!matches()) throw new Error("AUTH_CONTEXT_CHANGED");
+    const record = await register(activeAuth!.accessToken);
+    if (!matches()) throw new Error("AUTH_CONTEXT_CHANGED");
+    return record;
+  });
+}
+
+function sessionOwnershipKey(session: AuthResponse["session"]): string {
+  return JSON.stringify([session.tenantId, session.userId, session.id, session.activePersona, session.membershipVersion, session.subjectType, session.subjectId]);
 }
 
 function isMfaChallengeResponse(value: LoginResponse): value is MfaChallengeResponse {

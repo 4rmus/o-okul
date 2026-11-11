@@ -23,6 +23,7 @@ import {
   verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
 import { clearLogoutPendingFlag, hasLogoutPendingFlag } from "../src/logout-pending.js";
+import { reconcileWebPushOwner } from "../src/web-push-lifecycle.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider, useToast } from "@o-okul/ui";
 
@@ -53,6 +54,7 @@ export function Providers({ children }: { children: ReactNode }) {
     if (!hasCookie("csrfToken")) {
       // Without the CSRF cookie the surviving refresh cookie cannot be used from this browser.
       clearLogoutPendingFlag();
+      void reconcileWebPushOwner(null).catch(() => undefined);
       setAuth(null);
       setIsBootstrapping(false);
       return;
@@ -75,7 +77,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
     refreshSession()
       .then(setAuth)
-      .catch(() => setAuth(null))
+      .catch(async () => { await reconcileWebPushOwner(null).catch(() => undefined); setAuth(null); })
       .finally(() => setIsBootstrapping(false));
   }, []);
 
@@ -106,7 +108,10 @@ export function Providers({ children }: { children: ReactNode }) {
         if (!auth) throw new Error("AUTH_REQUIRED");
         const expected = { userId: auth.session.userId, sessionId: auth.session.id, membershipVersion: auth.session.membershipVersion };
         await requestChangePassword(auth.accessToken, input, expected);
-        if (clearAuthForSession(expected)) setAuth((current) => current?.session.userId === expected.userId && current.session.id === expected.sessionId && current.session.membershipVersion === expected.membershipVersion ? null : current);
+        if (clearAuthForSession(expected)) {
+          await reconcileWebPushOwner(null).catch(() => undefined);
+          setAuth((current) => current?.session.userId === expected.userId && current.session.id === expected.sessionId && current.session.membershipVersion === expected.membershipVersion ? null : current);
+        }
       },
       async switchPersona(activePersona) {
         if (!auth) throw new Error("AUTH_REQUIRED");

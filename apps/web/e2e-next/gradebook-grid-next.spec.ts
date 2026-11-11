@@ -694,21 +694,19 @@ test.describe("Not girişi tablosu", () => {
   });
 
   test("vazgeç, odak ekran dışındaki not hücresine dönse de kaydırma konumunu korur", backForwardTag, async ({ page }) => {
-    await openGradebookFromSessions(page, { saves: [] });
+    // Resize before any grade field is focused: WebKit otherwise schedules a later reveal of that field.
     await page.setViewportSize({ width: 1280, height: 600 });
-    // WebKit keeps a focused field visible when the viewport resizes, so the resize settles before the focus.
-    await page.waitForFunction(() => window.innerHeight === 600);
-    await page.waitForTimeout(200);
+    await openGradebookFromSessions(page, { saves: [] });
     const ada = page.getByLabel("Ada Acar notu", { exact: true });
-    await ada.focus();
+    await ada.evaluate((element) => (element as HTMLInputElement).focus({ preventScroll: true }));
     const scrollable = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
     expect(scrollable).toBeGreaterThan(300);
-    // WebKit reveals the newly focused field in a later rendering update, which can undo an early scroll; retry it.
+    // Check after rendering settles inside the retry, so a transient off-screen position cannot pass the setup.
     await expect(async () => {
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(200);
       await expect(ada).not.toBeInViewport({ timeout: 500 });
-    }).toPass();
-    await page.waitForTimeout(200);
+    }).toPass({ timeout: 5000 });
     await expect(ada).not.toBeInViewport();
     const target = await page.evaluate(() => Math.round(window.scrollY));
     expect(target).toBeGreaterThan(300);

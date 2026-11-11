@@ -1150,6 +1150,61 @@ describe("ReportGenerationService", () => {
     expect(result.standardScoreDelta).toBe(2.5);
   });
 
+  it("preserves 10 to 15 net comparison provenance through the real memory store", async () => {
+    const previous = comparisonSnapshot("exam-previous", "snapshot-previous", 10, "2026-05-01T07:00:00Z");
+    const current = comparisonSnapshot("exam-current", "snapshot-current", 15, "2026-05-15T07:00:00Z");
+    const store = new InMemoryReportSnapshotStore({ snapshots: [current, previous] });
+    const service = new ReportGenerationService(new FakeProducer(), store);
+    const progress = await service.getStudentProgress(adminContext(), current.examId, "student-a", { scope: "all" });
+    expect(progress.points.map((point) => ({
+      net: point.total.net, examType: point.examType, examYear: point.examYear, scoringProfileId: point.scoringProfileId,
+      gradeLevelId: point.gradeLevelId, questionCount: point.total.questionCount,
+    }))).toEqual([10, 15].map((net) => ({
+      net, examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1", gradeLevelId: "grade-8", questionCount: 20,
+    })));
+    expect(progress.netDelta).toBe(5);
+    expect(await service.getLatestStudentOverview(adminContext(), "student-a")).toMatchObject({
+      examId: current.examId, snapshotId: current.id, total: { net: 15 },
+    });
+  });
+
+  it.each([false, true])("headline and progress pick the same broadest, then newest version regardless of store order (%s)", async (reverse) => {
+    const wide = comparisonSnapshot("exam-current", "wide-old", 14, "2026-05-15T07:00:00Z");
+    const wideNew = { ...wide, id: "wide-new", generatedAt: "2026-06-03T09:00:00Z" };
+    const narrow = { ...wideNew, id: "narrow-newest", classId: "class-a", generatedAt: "2026-06-10T09:00:00Z" };
+    const backfill = { ...comparisonSnapshot("exam-previous", "backfill", 10, "2026-05-01T07:00:00Z"), generatedAt: "2026-06-20T09:00:00Z" };
+    const snapshots = [narrow, backfill, wide, wideNew];
+    const service = new ReportGenerationService(new FakeProducer(), new InMemoryReportSnapshotStore({ snapshots: reverse ? snapshots.reverse() : snapshots }));
+    const latest = await service.getLatestStudentOverview(adminContext(), "student-a");
+    const progress = await service.getStudentProgress(adminContext(), wide.examId, "student-a", { scope: "all" });
+    expect(latest?.snapshotId).toBe(wideNew.id);
+    expect(progress.points.map((point) => point.snapshotId)).toEqual([backfill.id, wideNew.id]);
+    expect(await service.getLatestStudentReport(adminContext(), wide.examId, "student-a")).toMatchObject({ snapshotId: wideNew.id });
+  });
+
+  it("headline uses batched legacy exam dates so a late backfill does not replace the latest exam", async () => {
+    const old = comparisonSnapshot("exam-old", "old-backfill", 10);
+    old.generatedAt = "2026-07-01T09:00:00Z";
+    const current = comparisonSnapshot("exam-current", "current", 15, "2026-06-01T07:00:00Z");
+    const exams = new FakeExamDirectory([{ id: old.examId, startsAt: "2026-05-01T07:00:00Z" }]);
+    const service = new ReportGenerationService(new FakeProducer(), new InMemoryReportSnapshotStore({ snapshots: [old, current] }),
+      undefined, undefined, undefined, undefined, exams as unknown as ExamRepository);
+    expect(await service.getLatestStudentOverview(adminContext(), "student-a")).toMatchObject({ snapshotId: current.id });
+    expect(exams.calls).toEqual([{ tenantId: "tenant-a", examIds: [old.examId] }]);
+  });
+
+  it.each(["listByIds", "findById"] as const)("surfaces legacy date lookup %s failures instead of returning reversed deltas", async (method) => {
+    const legacy = comparisonSnapshot("exam-old", "old-backfill", 10);
+    legacy.generatedAt = "2026-07-01T09:00:00Z";
+    const current = comparisonSnapshot("exam-current", "current", 15, "2026-06-01T07:00:00Z");
+    const failure = new Error("EXAM_DATE_QUERY_FAILED");
+    const exams = { [method]: async () => { throw failure; } } as unknown as ExamRepository;
+    const service = new ReportGenerationService(new FakeProducer(), new InMemoryReportSnapshotStore({ snapshots: [legacy, current] }),
+      undefined, undefined, undefined, undefined, exams);
+    await expect(service.getStudentProgress(adminContext(), current.examId, "student-a", { scope: "all" })).rejects.toBe(failure);
+    await expect(service.getLatestStudentOverview(adminContext(), "student-a")).rejects.toBe(failure);
+  });
+
   it("projects frozen comparison provenance without filling missing legacy context", async () => {
     const snapshot: ReportSnapshotRecord = {
       ...structuredClone(fakeSnapshot),
@@ -1355,27 +1410,19 @@ describe("ReportGenerationService", () => {
       generatedAt: "2026-06-07T09:00:00.000Z",
       createdAt: "2026-06-07T09:00:00.000Z",
     };
+    const assignments = new FakeTeacherAssignmentStore([
+      { id: "teacher-assignment-math", tenantId: "tenant-a", teacherId: "teacher-a", classId: "class-a", courseId: "course-math",
+        termId: "term-2026-spring", role: "BRANCH_TEACHER", startsAt: "2026-01-01", endsAt: "2026-06-10" },
+    ]);
     const service = new ReportGenerationService(
       producer,
-      new FakeReportSnapshotStore([tenantWide, fakeSnapshot]),
+      new FakeReportSnapshotStore([tenantWide, { ...fakeSnapshot, id: "older-authorized", generatedAt: "2026-06-05T09:00:00Z" }, fakeSnapshot]),
       undefined,
       undefined,
       new FakeStudentStore([
         { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" },
       ]) as unknown as StudentStore,
-      new FakeTeacherAssignmentStore([
-        {
-          id: "teacher-assignment-math",
-          tenantId: "tenant-a",
-          teacherId: "teacher-a",
-          classId: "class-a",
-          courseId: "course-math",
-          termId: "term-2026-spring",
-          role: "BRANCH_TEACHER",
-          startsAt: "2026-01-01",
-          endsAt: "2026-06-10",
-        },
-      ]) as unknown as TeacherAssignmentStore,
+      assignments as unknown as TeacherAssignmentStore,
     );
     const teacherContext: RequestContext = {
       tenantId: "tenant-a",
@@ -1390,9 +1437,29 @@ describe("ReportGenerationService", () => {
 
     const teacherProgress = await service.getStudentProgress(teacherContext, "exam-a", "student-a", { scope: "all" });
     expect(teacherProgress.points.map((point) => point.snapshotId)).toEqual(["snapshot-a"]);
+    expect(assignments.calls).toEqual(["teacher-a"]);
+    expect(await service.getLatestStudentOverview(teacherContext, "student-a")).toMatchObject({ snapshotId: "snapshot-a" });
+    expect(await service.getLatestStudentReport(teacherContext, "exam-a", "student-a")).toMatchObject({ snapshotId: "snapshot-a" });
 
     const adminProgress = await service.getStudentProgress(adminContext(), "exam-a", "student-a", { scope: "all" });
     expect(adminProgress.points.map((point) => point.snapshotId)).toEqual(["snapshot-tenant-wide"]);
+  });
+
+  it("does not load legacy dates from unauthorized snapshots for the headline", async () => {
+    const hidden = comparisonSnapshot("exam-hidden", "hidden-legacy", 99);
+    const visible = { ...comparisonSnapshot("exam-visible", "visible", 15, "2026-06-01T07:00:00Z"), courseId: "course-math" };
+    const exams = new FakeExamDirectory([]);
+    const assignments = new FakeTeacherAssignmentStore([{ id: "assignment-a", tenantId: "tenant-a", teacherId: "teacher-a",
+      classId: "class-a", courseId: "course-math", role: "BRANCH_TEACHER" }]);
+    const service = new ReportGenerationService(new FakeProducer(), new InMemoryReportSnapshotStore({ snapshots: [hidden, visible] }),
+      undefined, undefined, undefined, assignments as unknown as TeacherAssignmentStore, exams as unknown as ExamRepository);
+    const context: RequestContext = { ...adminContext(), roles: ["TEACHER"], activePersona: "TEACHER", subjectType: "TEACHER", subjectId: "teacher-a" };
+    expect(await service.getLatestStudentOverview(context, "student-a")).toMatchObject({ snapshotId: visible.id });
+    expect(exams.calls).toEqual([]);
+    expect(assignments.calls).toEqual(["teacher-a"]);
+    await expect(service.getLatestStudentReport(context, hidden.examId, "student-a")).rejects.toThrow(ForbiddenException);
+    await expect(service.getLatestStudentReport(context, hidden.examId, "missing-student")).rejects.toThrow(NotFoundException);
+    expect(await service.getLatestStudentOverview({ ...context, tenantId: "tenant-b" }, "student-a")).toBeUndefined();
   });
 
   it("öğrenciye ait hazır snapshot yoksa gelişim raporunu boş döner", async () => {
@@ -1420,6 +1487,20 @@ describe("ReportGenerationService", () => {
     });
   });
 });
+
+function comparisonSnapshot(examId: string, id: string, net: number, examStartsAt?: string): ReportSnapshotRecord {
+  return {
+    ...structuredClone(fakeSnapshot), id, examId,
+    campusId: undefined, classId: undefined, courseId: undefined, termId: undefined,
+    generatedAt: examStartsAt ?? "2026-06-01T09:00:00Z",
+    snapshotData: {
+      schemaVersion: 2,
+      examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1",
+      ...(examStartsAt ? { examStartsAt } : {}),
+      students: [{ studentId: "student-a", classId: "class-a", total: { net, questionCount: 20 }, branches: [{ branch: "Matematik", net, questionCount: 20 }] }],
+    },
+  };
+}
 
 function adminContext(): RequestContext {
   return {
@@ -1565,11 +1646,14 @@ class FakeTenantStore {
 }
 
 class FakeTeacherAssignmentStore {
+  readonly calls: string[] = [];
+
   constructor(private readonly records: FakeTeacherAssignment[] = [
     { id: "teacher-assignment-a", tenantId: "tenant-a", teacherId: "teacher-a", classId: "class-a", role: "CLASS_TEACHER" },
   ]) {}
 
   async listByTeacher(teacherId: string) {
+    this.calls.push(teacherId);
     return this.records.filter((assignment) => assignment.teacherId === teacherId);
   }
 }

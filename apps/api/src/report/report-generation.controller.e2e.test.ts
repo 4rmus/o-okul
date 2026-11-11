@@ -6,6 +6,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { examRepositoryToken } from "../exam/exam.service.js";
 import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
 import {
   campusOperationsStaffEmail,
@@ -34,6 +35,7 @@ describe("ReportGenerationController", () => {
   let pdfRenderer: FakePdfRenderer;
   let generationJobStatuses: FakeReportGenerationJobStatusReader;
   let snapshotStore: FakeReportSnapshotStore;
+  let examDateLookupFails = false;
 
   beforeAll(async () => {
     resetInMemoryAuthUsers();
@@ -54,6 +56,14 @@ describe("ReportGenerationController", () => {
       .useValue(snapshotStore)
       .overrideProvider(reportPdfRendererToken)
       .useValue(pdfRenderer)
+      .overrideProvider(examRepositoryToken)
+      .useValue({
+        findById: async () => undefined,
+        listByIds: async () => {
+          if (examDateLookupFails) throw new Error("EXAM_DATE_QUERY_FAILED");
+          return [];
+        },
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -553,6 +563,22 @@ describe("ReportGenerationController", () => {
       netDelta: 0,
       standardScoreDelta: 0,
     });
+  });
+
+  it("legacy date query failure returns an error without publishing a generation-ordered delta", async () => {
+    const issued = await login("teacher-a@example.test");
+    examDateLookupFails = true;
+    try {
+      const response = await request(server)
+        .get("/exams/exam-a/reports/students/student-a/progress?scope=all")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(500);
+      expect(response.body).toMatchObject({ error: { code: "INTERNAL_SERVER_ERROR" } });
+      expect(response.body).not.toHaveProperty("netDelta");
+      expect(response.body).not.toHaveProperty("points");
+    } finally {
+      examDateLookupFails = false;
+    }
   });
 
   it("TEACHER öğrenci gelişim raporunu tüm sınav snapshotlarıyla okuyabilir", async () => {

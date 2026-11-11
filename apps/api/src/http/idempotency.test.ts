@@ -10,6 +10,39 @@ import {
 } from "./idempotency.js";
 
 describe("IdempotencyService", () => {
+  it("reads only completed matching legacy records without claiming missing, mismatched or busy keys", async () => {
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const options = { key: "legacy-1", operation: "homework.submission.submit", request: { homeworkId: "homework-a" } };
+    expect(await service.findCompleted(context, options)).toBeUndefined();
+    const input = { tenantId: context.tenantId!, key: options.key, operation: options.operation, requestHash: hashIdempotencyRequest(options.operation, options.request) };
+    expect(await store.start(input)).toEqual({ kind: "started" });
+    expect(await service.findCompleted(context, options)).toBeUndefined();
+    await store.complete({ ...input, responseBody: { studentId: "student-a" } });
+    expect(await service.findCompleted(context, { ...options, request: { homeworkId: "other" } })).toBeUndefined();
+    expect(await service.findCompleted({ ...context, tenantId: "tenant-b" }, options)).toBeUndefined();
+    const result = await service.findCompleted(context, options);
+    expect(result).toEqual({ responseBody: { studentId: "student-a" } });
+    (result!.responseBody as { studentId: string }).studentId = "changed";
+    expect(await service.findCompleted(context, options)).toEqual({ responseBody: { studentId: "student-a" } });
+  });
+
+  it("pins the Postgres legacy lookup to tenant, key, operation, hash and completed status with no reservation", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const store = new PostgresIdempotencyStore({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: (sql.includes('SELECT "responseBody"') ? [{ responseBody: { studentId: "student-a" } }] : []) as T[] };
+      },
+    });
+    const input = { tenantId: "tenant-a", key: "legacy-1", operation: "homework.submission.submit", requestHash: "hash" };
+    await expect(runWithRequestContext(context, () => store.findCompleted(input))).resolves.toEqual({ responseBody: { studentId: "student-a" } });
+    const query = queries.find((entry) => entry.sql.includes('SELECT "responseBody"'))!;
+    expect(query.values).toEqual([input.tenantId, input.key, input.operation, input.requestHash]);
+    expect(query.sql).toContain(`"status" = 'COMPLETED'`);
+    expect(queries.some((entry) => /INSERT|UPDATE|DELETE/.test(entry.sql))).toBe(false);
+  });
+
   it("completes the key on the caller's transaction and skips the separate completion", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {

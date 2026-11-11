@@ -8,6 +8,8 @@ export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
+  /** Server-set, immutable creator provenance for unlinked campus-scoped guardians. */
+  createdByUserId?: string;
 }
 
 export interface GuardianStore {
@@ -189,8 +191,8 @@ export class PostgresGuardianStore implements GuardianStore {
   async create(input: Omit<GuardianRecord, "id">): Promise<GuardianRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<GuardianRow>(
-        `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "phone", "nationalIdEncrypted", "nationalIdHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "phone", "nationalIdEncrypted", "nationalIdHash", "createdByUserId", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -200,6 +202,7 @@ export class PostgresGuardianStore implements GuardianStore {
           input.phone ?? null,
           input.nationalIdEncrypted ?? null,
           input.nationalIdHash ?? null,
+          input.createdByUserId ?? null,
         ],
       );
       const record = result.rows[0];
@@ -327,6 +330,7 @@ interface GuardianRow {
   nationalIdEncrypted: string | null;
   nationalIdHash: string | null;
   userId: string | null;
+  createdByUserId: string | null;
   deletedAt: Date | null;
 }
 
@@ -340,6 +344,7 @@ function toGuardianRecord(row: GuardianRow): GuardianRecord {
     nationalIdEncrypted: row.nationalIdEncrypted ?? undefined,
     nationalIdHash: row.nationalIdHash ?? undefined,
     userId: row.userId ?? undefined,
+    createdByUserId: row.createdByUserId ?? undefined,
     deletedAt: row.deletedAt?.toISOString(),
   };
 }

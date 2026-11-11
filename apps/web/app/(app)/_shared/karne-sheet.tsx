@@ -269,7 +269,7 @@ export function KarneSheet({
                       <td>{formatPercentNumber(reportSuccessRate(point.total))}</td>
                       <td>{formatNetNumber(point.total.net)}</td>
                       <td>{formatNumber(reportQuestionCount(point.total))}</td>
-                      <td>{formatProgressDate(point.generatedAt, index)}</td>
+                      <td>{formatProgressDate(point.examStartsAt ?? point.generatedAt, index)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -666,6 +666,7 @@ function buildCurrentProgressPoint(report: ReportStudentSnapshot): ReportStudent
   return {
     snapshotId: report.snapshotId,
     examTitle: "Son rapor",
+    examStartsAt: report.examStartsAt,
     generatedAt: report.generatedAt,
     total: report.total,
   };

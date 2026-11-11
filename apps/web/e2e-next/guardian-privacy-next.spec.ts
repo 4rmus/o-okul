@@ -218,11 +218,11 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     expect(notificationDeviceRegistrations).toEqual([{ platform: "web", provider: "web-push" }]);
   });
 
-  test("UAT F-29: izin zaten verilmişse push hatırlatması görünmez", async ({ page }) => {
+  test("izin verilmiş olsa da bu hesap için kayıt yoksa açık opt-in ister", async ({ page }) => {
     await openGuardianPortal(page, "false", { enabled: true, permission: "granted" });
     await expect(page.getByLabel("Bildirim tercihleri")).toBeVisible();
-    await expect(page.getByLabel("Push bildirim hatırlatması")).toHaveCount(0);
-    // The sidebar panel still exists for the device list; only the in-portal reminder is suppressed.
+    await expect(page.getByLabel("Push bildirim hatırlatması")).toBeVisible();
+    await expect(page.getByLabel("Push bildirim hatırlatması").getByRole("button", { name: "Push iznini aç" })).toBeVisible();
     await expect(page.getByLabel("Bildirim cihazı")).toBeVisible();
   });
 
@@ -290,7 +290,7 @@ async function openGuardianPortal(page: Page, visibility: "false" | "omitted", p
           register: async () => ({
             pushManager: {
               getSubscription: async () => null,
-              subscribe: async () => ({ toJSON: () => ({ endpoint: "https://push.example/subscription", keys: { auth: "auth-key", p256dh: "p256dh-key" } }) }),
+              subscribe: async () => ({ toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/subscription", keys: { auth: "auth-key", p256dh: "p256dh-key" } }) }),
             },
           }),
         },

@@ -435,6 +435,9 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            '{}'::jsonb AS "inputRefs",
            jsonb_build_object(
              'generatedAt', snapshot."snapshotData"->'generatedAt',
+             'examType', snapshot."snapshotData"->'examType',
+             'examYear', snapshot."snapshotData"->'examYear',
+             'scoringProfileId', snapshot."snapshotData"->'scoringProfileId',
              'examStartsAt', snapshot."snapshotData"->'examStartsAt',
              'examTitle', snapshot."snapshotData"->'examTitle',
              'students', (
@@ -892,6 +895,15 @@ function toStudentProgressRecord(snapshot: ReportSnapshotRecord, studentId: stri
     snapshotData: {
       ...(typeof snapshot.snapshotData?.generatedAt === "string"
         ? { generatedAt: snapshot.snapshotData.generatedAt }
+        : {}),
+      ...(typeof snapshot.snapshotData?.examType === "string"
+        ? { examType: snapshot.snapshotData.examType }
+        : {}),
+      ...(typeof snapshot.snapshotData?.examYear === "number"
+        ? { examYear: snapshot.snapshotData.examYear }
+        : {}),
+      ...(typeof snapshot.snapshotData?.scoringProfileId === "string"
+        ? { scoringProfileId: snapshot.snapshotData.scoringProfileId }
         : {}),
       ...(typeof snapshot.snapshotData?.examStartsAt === "string"
         ? { examStartsAt: snapshot.snapshotData.examStartsAt }

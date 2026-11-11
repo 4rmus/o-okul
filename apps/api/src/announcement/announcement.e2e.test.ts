@@ -453,7 +453,7 @@ describe("Announcement API", () => {
   });
 
   it("tenant admin duyuru push'unu 25'lik chunk job'larıyla worker kuyruğuna verir; payload PII taşımaz", async () => {
-    const subscription = (name: string) => JSON.stringify({ endpoint: `https://push.example.test/${name}`, keys: { p256dh: "p256dh", auth: "auth" } });
+    const subscription = (name: string) => JSON.stringify({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}`, keys: { p256dh: "p256dh", auth: "auth" } });
     await request(server)
       .post("/me/notification-devices")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
@@ -497,7 +497,7 @@ describe("Announcement API", () => {
     expect(job.deviceIds).toHaveLength(3);
     const serialized = JSON.stringify(job);
     expect(serialized).not.toContain("veli toplantısı yapılacaktır");
-    expect(serialized).not.toContain("push.example.test");
+    expect(serialized).not.toContain("fcm.googleapis.com");
     expect(serialized).not.toMatch(/"(body|firstName|lastName|displayName|phone|tcKimlikNo|nationalId|email)"/i);
     const firstJobId = `announcement_announcement-a_PUSH_${sendKeyOf("announcement-delivery-send-push-a")}_0`;
     expect(producer.added).toEqual([firstJobId]);

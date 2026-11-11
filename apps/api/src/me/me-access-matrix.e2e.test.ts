@@ -6,6 +6,7 @@ import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 import { AppModule } from "../app.module.js";
+import { examRepositoryToken } from "../exam/exam.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
@@ -23,11 +24,15 @@ describe("Me access matrix", () => {
   let teacherToken: string;
   let studentToken: string;
   let guardianToken: string;
+  const listExamDates = vi.fn(async (_tenantId: string, _examIds: string[]) => []);
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      // A missing legacy Exam is a successful empty lookup; DB failure behavior is tested separately below.
+      .overrideProvider(examRepositoryToken)
+      .useValue({ findById: async () => undefined, listByIds: listExamDates })
       // Rapor dizini Postgres sınav deposu ister; bu matris yalnız erişim sınırını doğrular (birleşim: me-teacher-today.service.test.ts).
       .overrideProvider(MeTeacherTodayService)
       .useValue({ get: async () => ({ generatedAt: "2026-10-01T06:00:00.000Z", date: "2026-10-01", teacherName: "Öğretmen", todayLessons: [], pendingHomework: [], pendingHomeworkCount: 0, latestReport: null }) })
@@ -126,6 +131,42 @@ describe("Me access matrix", () => {
       await request(server).get(endpoint).set("Authorization", `Bearer ${studentToken}`).expect(403);
       await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(403);
       await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`).expect(403);
+    }
+  });
+
+  it("a missing legacy exam keeps authorized portal progress readable with its generation date fallback", async () => {
+    for (const [endpoint, token] of [
+      ["/me/student/reports/exam-demo/progress", studentToken],
+      ["/me/guardian/students/student-a/reports/exam-demo/progress", guardianToken],
+      ["/me/teacher/reports/exam-demo/students/student-a/progress", teacherToken],
+    ] as const) {
+      const { body } = await request(server).get(endpoint).set("Authorization", `Bearer ${token}`).expect(200);
+      expect(body.points).toHaveLength(1);
+      expect(body.points[0]).toMatchObject({ snapshotId: "snapshot-demo", generatedAt: "2026-06-06T09:00:00.000Z", total: { net: 17.5 } });
+      expect(body.points[0]).not.toHaveProperty("examStartsAt");
+      expect(body.netDelta).toBe(0);
+    }
+  });
+
+  it.each([
+    ["/me/student/reports/exam-demo/progress", "STUDENT"],
+    ["/me/guardian/students/student-a/reports/exam-demo/progress", "GUARDIAN"],
+    ["/me/teacher/reports/exam-demo/students/student-a/progress", "TEACHER"],
+    ["/me/student/overview", "STUDENT"],
+    ["/me/guardian/students/student-a/overview", "GUARDIAN"],
+  ] as const)("date lookup failure surfaces through %s without publishing progress", async (endpoint, role) => {
+    listExamDates.mockClear();
+    listExamDates.mockRejectedValueOnce(new Error("EXAM_DATE_QUERY_FAILED"));
+    const token = role === "STUDENT" ? studentToken : role === "GUARDIAN" ? guardianToken : teacherToken;
+    try {
+      const { body } = await request(server).get(endpoint).set("Authorization", `Bearer ${token}`).expect(500);
+      expect(listExamDates).toHaveBeenCalledExactlyOnceWith("tenant-a", ["exam-demo"]);
+      expect(body).toMatchObject({ error: { code: "INTERNAL_SERVER_ERROR" } });
+      for (const field of ["points", "netDelta", "examSeries"]) expect(body).not.toHaveProperty(field);
+      expect(JSON.stringify(body)).not.toContain("EXAM_DATE_QUERY_FAILED");
+    } finally {
+      listExamDates.mockReset();
+      listExamDates.mockResolvedValue([]);
     }
   });
 
