@@ -49,7 +49,7 @@ function browser() {
   const lifecycle = load("apps/web/src/web-push-lifecycle.ts");
   const api = load("apps/web/src/api-client.ts", { "./web-push-lifecycle.js": lifecycle, "@tanstack/react-query": { QueryClient: class { clear() {} } } });
   const handlers = {};
-  context.self = { navigator, registration, clients: { claim: async () => {}, openWindow: async (url) => state.windows.push(url) }, skipWaiting: async () => {}, addEventListener: (name, handler) => { handlers[name] = handler; } };
+  context.self = { location: new URL("https://school.example/push-sw.js"), navigator, registration, clients: { claim: async () => {}, openWindow: async (url) => state.windows.push(url) }, skipWaiting: async () => {}, addEventListener: (name, handler) => { handlers[name] = handler; } };
   vm.runInContext(readFileSync("apps/web/public/push-sw.js", "utf8"), context);
   function dispatch(name, data) { let work; handlers[name]({ ...data, waitUntil: (promise) => { work = promise; } }); return work; }
   return { state, lifecycle, api, navigator, registration, dispatch, response(next) { context.fetch = async () => new Response(JSON.stringify({ data: next })); }, failFetch() { context.fetch = async () => { throw new Error("offline"); }; } };
@@ -164,4 +164,30 @@ test("device opt-out retires this binding, preserves other-device actions and pe
   assert.equal(b.state.notifications.length, 0);
   await b.api.registerPushForCurrentSession(a.session, async () => ({ id: "new-binding-a" }));
   assert.equal(b.state.binding.deviceId, "new-binding-a");
+});
+
+test("matching-device pushes and clicks reject separator and control-character navigation escapes", async () => {
+  const b = browser(), a = auth("a");
+  b.response(a); await b.api.refreshSession();
+  await b.api.registerPushForCurrentSession(a.session, async () => ({ id: "binding-a" }));
+  for (const url of ["/\\outside.example/path", "//outside.example/path", "/\n/outside.example/path", "/\r/outside.example/path", "/\t/outside.example/path", "/\u0000outside.example/path", "/\u001foutside.example/path", "/\u007foutside.example/path", "\n//outside.example/path", "https://outside.example/path", "javascript:alert(1)"]) {
+    await b.dispatch("push", { data: { json: () => ({ title: "Notice", deviceId: "binding-a", url }) } });
+    assert.equal(b.state.notifications.at(-1).data.url, "/", `push URL ${JSON.stringify(url)}`);
+    // Independently validate notification data, including notifications created before this fix.
+    await b.dispatch("notificationclick", { notification: { data: { deviceId: "binding-a", url }, close() {} } });
+    assert.equal(b.state.windows.at(-1), "/", `click URL ${JSON.stringify(url)}`);
+    assert.equal(new URL(b.state.windows.at(-1), "https://school.example").origin, "https://school.example");
+  }
+});
+
+test("matching-device pushes and clicks retain valid internal paths, queries and fragments", async () => {
+  const b = browser(), a = auth("a");
+  b.response(a); await b.api.refreshSession();
+  await b.api.registerPushForCurrentSession(a.session, async () => ({ id: "binding-a" }));
+  for (const url of ["/", "/veli/duyurular", "/veli/duyurular?notice=42&view=unread#details", "/veli/duyurular?next=https%3A%2F%2Foutside.example%2Fpath#notice"]) {
+    await b.dispatch("push", { data: { json: () => ({ title: "Notice", deviceId: "binding-a", url }) } });
+    assert.equal(b.state.notifications.at(-1).data.url, url);
+    await b.dispatch("notificationclick", { notification: b.state.notifications.at(-1) });
+    assert.equal(b.state.windows.at(-1), url);
+  }
 });
