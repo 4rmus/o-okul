@@ -152,17 +152,36 @@ run("grade-level analytics projection with restricted app role and RLS", () => {
     expect(fall.withoutLevelReport.map((item: { examId: string }) => item.examId)).toEqual(["exam-boundary-no-level"]);
   });
 
-  it("carries the snapshot's frozen exam date and title into the student progress projection", async () => {
+  it("carries frozen comparison provenance and leaves legacy provenance null in the student progress projection", async () => {
     const store = new PostgresReportSnapshotStore(app);
     const records = await runWithRequestContext(context(tenantA), () =>
       store.listReadyByStudent(tenantA, "student-a", scoped(tenantA, "exam-boundary-start")));
-    // The fixture snapshot stored no exam title; the projection carries the key as JSON null (readText ignores it).
+    // Frozen values must survive the real JSONB projection under the restricted app role, including the numeric year.
+    // The fixture snapshot stored no exam title; its projection key is JSON null (readText ignores it).
     expect(records.map((record) => record.snapshotData)).toEqual([{
       generatedAt: null,
       examStartsAt: "2026-08-31T21:30:00.000Z",
       examTitle: null,
+      examType: "LGS",
+      examYear: 2026,
+      scoringProfileId: "TR-LGS-2026-NOSD-V1",
       students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],
     }]);
+
+    const legacy = await runWithRequestContext(context(tenantA), () =>
+      store.listReadyByStudent(tenantA, "student-a", scoped(tenantA, "exam-boundary-end")));
+    // The live exam is LGS, but omitted frozen context must stay unknown rather than being filled from that row.
+    expect(legacy.map((record) => record.snapshotData)).toEqual([{
+      generatedAt: null,
+      examStartsAt: null,
+      examTitle: null,
+      examType: null,
+      examYear: null,
+      scoringProfileId: null,
+      students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],
+    }]);
+    expect(records.map((record) => record.tenantId)).toEqual([tenantA]);
+    expect(legacy.map((record) => record.tenantId)).toEqual([tenantA]);
   });
 
   it("keeps tenants apart: RLS hides another tenant's snapshots even when its ids are requested", async () => {
