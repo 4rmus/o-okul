@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import type { NotificationDeviceTokenRecord } from "@o-okul/shared-types";
+import { createHash, randomUUID } from "node:crypto";
+import { parseWebPushSubscription, type NotificationDeviceTokenRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
@@ -43,12 +43,20 @@ export class InMemoryNotificationDeviceTokenStore implements NotificationDeviceT
   }
 
   async upsert(input: NotificationDeviceTokenInput): Promise<NotificationDeviceTokenRecord> {
+    input = { ...input };
+    const webPush = normalizeWebPushInput(input);
     const existing = this.devices.find((device) =>
       device.tenantId === input.tenantId &&
-      device.userId === input.userId &&
-      device.token === input.token,
+      (webPush ? device.provider === "web-push" && parseWebPushSubscription(device.token)?.endpoint === webPush.endpoint
+        : device.userId === input.userId && device.provider === input.provider && device.token === input.token),
     );
     if (existing) {
+      if (webPush && (existing.userId !== input.userId || existing.subjectType !== input.subjectType ||
+        existing.subjectId !== input.subjectId || existing.token !== input.token || existing.disabledAt)) {
+        existing.id = randomUUID();
+      }
+      existing.userId = input.userId;
+      existing.token = input.token;
       existing.subjectType = input.subjectType;
       existing.subjectId = input.subjectId;
       existing.provider = input.provider;
@@ -60,7 +68,7 @@ export class InMemoryNotificationDeviceTokenStore implements NotificationDeviceT
     }
 
     const record: NotificationDeviceTokenRecord = {
-      id: `notification-device-${this.devices.length + 1}`,
+      id: randomUUID(),
       ...input,
       createdAt: input.lastSeenAt,
       updatedAt: input.lastSeenAt,
@@ -117,14 +125,29 @@ export class PostgresNotificationDeviceTokenStore implements NotificationDeviceT
   }
 
   async upsert(input: NotificationDeviceTokenInput): Promise<NotificationDeviceTokenRecord> {
+    input = { ...input };
+    const webPush = normalizeWebPushInput(input);
     return withTenantQuery(this.pool, async (client) => {
+      // Disabled pre-migration registrations have no binding hash. Release a possible raw-token unique conflict.
+      if (webPush) await client.query(
+        `DELETE FROM "NotificationDeviceToken" WHERE "tenantId" = $1 AND "userId" = $2 AND "provider" = 'web-push'
+           AND "token" = $3 AND "webPushEndpointHash" IS NULL AND "disabledAt" IS NOT NULL`,
+        [input.tenantId, input.userId, input.token],
+      );
       const result = await client.query<NotificationDeviceTokenRow>(
         `INSERT INTO "NotificationDeviceToken" (
-           "id", "tenantId", "userId", "subjectType", "subjectId", "provider", "token", "platform", "lastSeenAt", "updatedAt"
+           "id", "tenantId", "userId", "subjectType", "subjectId", "provider", "token", "platform", "lastSeenAt", "webPushEndpointHash", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-         ON CONFLICT ("tenantId", "userId", "token") DO UPDATE
-         SET "subjectType" = EXCLUDED."subjectType",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+         ON CONFLICT (${webPush ? '"tenantId", "webPushEndpointHash"' : '"tenantId", "userId", "provider", "token"'}) DO UPDATE
+         SET "id" = CASE WHEN EXCLUDED."provider" = 'web-push' AND (
+               "NotificationDeviceToken"."userId" <> EXCLUDED."userId" OR "NotificationDeviceToken"."disabledAt" IS NOT NULL
+               OR "NotificationDeviceToken"."subjectType" IS DISTINCT FROM EXCLUDED."subjectType"
+               OR "NotificationDeviceToken"."subjectId" IS DISTINCT FROM EXCLUDED."subjectId"
+               OR "NotificationDeviceToken"."token" <> EXCLUDED."token") THEN EXCLUDED."id" ELSE "NotificationDeviceToken"."id" END,
+             "userId" = EXCLUDED."userId",
+             "token" = EXCLUDED."token",
+             "subjectType" = EXCLUDED."subjectType",
              "subjectId" = EXCLUDED."subjectId",
              "provider" = EXCLUDED."provider",
              "platform" = EXCLUDED."platform",
@@ -142,6 +165,7 @@ export class PostgresNotificationDeviceTokenStore implements NotificationDeviceT
           input.token,
           input.platform ?? null,
           input.lastSeenAt,
+          webPush ? createHash("sha256").update(webPush.endpoint).digest("hex") : null,
         ],
       );
       const record = result.rows[0];
@@ -164,6 +188,14 @@ export class PostgresNotificationDeviceTokenStore implements NotificationDeviceT
       return result.rows[0] ? toDeviceRecord(result.rows[0]) : undefined;
     });
   }
+}
+
+function normalizeWebPushInput(input: NotificationDeviceTokenInput) {
+  if (input.provider !== "web-push") return undefined;
+  const subscription = parseWebPushSubscription(input.token);
+  if (!subscription) throw new Error("NOTIFICATION_DEVICE_SUBSCRIPTION_INVALID");
+  input.token = JSON.stringify(subscription);
+  return subscription;
 }
 
 export function createNotificationDeviceTokenStore(): NotificationDeviceTokenStore {

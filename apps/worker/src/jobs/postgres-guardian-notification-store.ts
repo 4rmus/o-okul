@@ -167,7 +167,7 @@ export class PostgresGuardianNotificationStore implements GuardianNotificationSt
       const result = await client.query<PushDevice>(
         `SELECT "id", "token", "subjectType"
          FROM "NotificationDeviceToken"
-         WHERE "tenantId" = $1 AND "userId" = ANY($2::text[]) AND "provider" = 'web-push' AND "disabledAt" IS NULL
+         WHERE "tenantId" = $1 AND "userId" = ANY($2::text[]) AND "provider" = 'web-push' AND "disabledAt" IS NULL AND "webPushEndpointHash" IS NOT NULL
          ORDER BY "id"`,
         [tenantId, userIds],
       );

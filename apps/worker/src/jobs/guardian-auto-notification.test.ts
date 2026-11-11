@@ -89,7 +89,7 @@ describe("KV-8 guardian auto notification job", () => {
     expect(store.calls).toContainEqual(["listRecipients", "tenant-a", ["student-a"], false]);
     // Two notices x two active devices of the one guardian user.
     expect(result).toMatchObject({ notificationCount: 2, recipientCount: 2, pushSentCount: 4, emailSentCount: 2 });
-    expect([...new Set(deps.pushes.map((push) => push.payload))].map((body) => JSON.parse(body))).toEqual([
+    expect([...new Set(deps.pushes.map((push) => { const { deviceId: _deviceId, ...notice } = JSON.parse(push.payload); return JSON.stringify(notice); }))].map((body) => { const { deviceId: _deviceId, ...notice } = JSON.parse(body); return notice; })).toEqual([
       { title: "Devamsızlık: öğrenciniz 05.10.2026 günü okula gelmedi olarak işaretlendi.", url: "/veli/ogrenci" },
       { title: "Devamsızlık uyarısı: öğrencinizin bu dönemki devamsızlığı 10 güne ulaştı.", url: "/veli/ogrenci" },
     ]);
@@ -119,7 +119,7 @@ describe("KV-8 guardian auto notification job", () => {
 
     expect(store.calls).toContainEqual(["claimPaymentDue", "tenant-a", "installment-a", "2026-10-05"]);
     expect(store.calls).toContainEqual(["listRecipients", "tenant-a", ["student-a"], true]);
-    expect(JSON.parse(deps.pushes[0]!.payload)).toEqual({ title: "Ödeme hatırlatması: bugün vadesi gelen bir taksitiniz var.", url: "/veli/odemeler" });
+    expect(JSON.parse(deps.pushes[0]!.payload)).toEqual({ title: "Ödeme hatırlatması: bugün vadesi gelen bir taksitiniz var.", url: "/veli/odemeler", deviceId: "device-1" });
   });
 
   it("finans izni olmayan veli listede yoksa vade bildirimi gitmez", async () => {
