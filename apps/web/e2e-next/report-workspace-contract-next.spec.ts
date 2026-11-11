@@ -10,6 +10,25 @@ const corsHeaders = {
 };
 
 test.describe("Rapor çalışma alanı sözleşmesi", () => {
+  for (const history of ["progress", "current-only", "legacy"] as const) {
+    test(`karne history shows exam dates with generation fallback (${history})`, async ({ page }) => {
+      await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
+      const examStartsAt = history === "legacy" ? undefined : "2026-06-05T07:00:00.000Z";
+      await page.route("**/api/v1/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a", (route) =>
+        fulfillData(route, { ...createStudentReport(), examStartsAt, generatedAt: "2026-06-20T09:00:00.000Z" }));
+      await page.route("**/api/v1/exams/exam-report-ready/reports/students/student-a/progress**", (route) =>
+        fulfillData(route, { ...createProgress(), points: history === "current-only" ? [] : [{
+          snapshotId: "snapshot-ready", examStartsAt, generatedAt: "2026-06-20T09:00:00.000Z", total: { net: 20, questionCount: 30 },
+        }] }));
+      await page.getByRole("button", { name: "Raporu getir" }).click();
+      await page.getByRole("tab", { name: "Öğrenciler" }).click();
+      await page.getByRole("table", { name: "Öğrenci sıralamaları" }).getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+      const historyTable = page.getByRole("tabpanel", { name: "Karne" }).locator(".next-karne-last-stack table");
+      await expect(historyTable).toContainText(history === "legacy" ? "20.06.2026" : "05.06.2026");
+      if (history !== "legacy") await expect(historyTable).not.toContainText("20.06.2026");
+    });
+  }
+
   test("aktif rapor sekmesi URL state ile korunur", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar?tab=exports", { height: 960, width: 1440 });
 

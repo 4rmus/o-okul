@@ -14,6 +14,58 @@ describe("ReportSnapshotStore", () => {
     await expect(store.findById("tenant-b", "exam-demo", "snapshot-demo")).resolves.toBeUndefined();
   });
 
+  it("student progress preserves frozen comparison scope and only the requested student's rows", async () => {
+    const demo = (await new InMemoryReportSnapshotStore().listByExam("tenant-a", "exam-demo"))[0]!;
+    const frozen = {
+      ...demo,
+      snapshotData: {
+        ...demo.snapshotData,
+        examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1",
+        examStartsAt: "2026-06-01T07:00:00Z", examTitle: "Deneme 1",
+        students: [...(demo.snapshotData!.students as object[]), { studentId: "student-other", displayName: "Private other student" }],
+        privateExtra: "do not project",
+      },
+    };
+    const before = structuredClone(frozen);
+    const store = new InMemoryReportSnapshotStore({ snapshots: [frozen, { ...frozen, id: "foreign", tenantId: "tenant-b" }] });
+    const [projected] = await store.listReadyByStudent("tenant-a", "student-a", "exam-demo");
+    expect(projected?.snapshotData).toEqual({
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      examType: "LGS", examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1",
+      examStartsAt: "2026-06-01T07:00:00Z", examTitle: "Deneme 1",
+      students: demo.snapshotData!.students,
+    });
+    expect(frozen).toEqual(before);
+    expect(await store.listReadyByStudent("tenant-a", "missing")).toEqual([]);
+    const legacy = (await new InMemoryReportSnapshotStore().listReadyByStudent("tenant-a", "student-a"))[0]!;
+    for (const field of ["examType", "examYear", "scoringProfileId"]) expect(legacy.snapshotData).not.toHaveProperty(field);
+  });
+
+  it("Postgres student progress explicitly projects comparison scope with tenant/student guards", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const store = new PostgresReportSnapshotStore({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    });
+    await runWithRequestContext(
+      { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.listReadyByStudent("tenant-a", "student-a", "exam-a"),
+    );
+    const query = queries.find(({ sql }) => sql.includes('FROM "ReportSnapshot" AS snapshot'))!;
+    for (const field of ["examType", "examYear", "scoringProfileId", "examStartsAt", "examTitle"]) {
+      expect(query.sql).toContain(`'${field}', snapshot."snapshotData"->'${field}'`);
+    }
+    expect(query.sql).toContain('snapshot."tenantId" = $1');
+    expect(query.sql).toContain('snapshot."status" = \'READY\'');
+    expect(query.sql).toContain('snapshot."deletedAt" IS NULL');
+    expect(query.sql).toContain('snapshot."examId" = $3');
+    expect(query.sql).toContain("WHERE student->>'studentId' = $2");
+    expect(query.sql).not.toContain('snapshot."snapshotData",');
+    expect(query.values).toEqual(["tenant-a", "student-a", "exam-a"]);
+  });
+
   it("in-memory portal indeksinde yalnız kimlik ve tarih alanlarını taşır", async () => {
     const store = new InMemoryReportSnapshotStore();
 

@@ -1,8 +1,8 @@
 import type { ReportSnapshotRecord } from "@o-okul/shared-types";
 
 /**
- * Read-side preference among the READY snapshots of one exam, shared by the student progress series (L7, one point
- * per exam) and the institution dashboard headline: the broadest scope wins, that is the fewest of the campus, grade
+ * Read-side preference among the authorized READY snapshots of one exam, shared by student progress, the student
+ * overview/latest karne and the institution dashboard headline: the broadest scope wins, that is the fewest campus, grade
  * level, class, course and term filters, so a tenant-wide snapshot beats a level or class one. Within the same width
  * the most recent snapshot wins by COALESCE(generatedAt, createdAt), then by createdAt; the snapshot id breaks a
  * remaining tie deterministically. The SQL form below renders the same three keys (report-snapshot-preference.fixture.ts
