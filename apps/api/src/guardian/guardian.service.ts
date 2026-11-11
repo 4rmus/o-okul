@@ -12,7 +12,7 @@ import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
-import { filterTenantResources } from "../tenant/tenant-access.js";
+import { campusScopedClassIds, filterTenantResources, resolveCampusRestriction } from "../tenant/tenant-access.js";
 import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -36,7 +36,6 @@ import {
 import {
   assertGuardianTeacherScope,
   assertTeacherScopedStudent,
-  filterGuardianStudentLinksByTeacherScope,
   listTeacherScopedGuardianIds,
   listTeacherScopedStudents,
   shouldLimitToTeacherScope,
@@ -46,6 +45,8 @@ export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
+  /** Immutable server provenance; permits the creator's scoped create→link workflow before the first link. */
+  createdByUserId?: string;
 }
 
 export type GuardianWriteInput = Partial<GuardianRecord> & { email?: string; nationalId?: string };
@@ -89,13 +90,18 @@ export class GuardianService {
   ) {}
 
   async listGuardians(context: RequestContext): Promise<GuardianRecord[]> {
-    const guardians = filterTenantResources(context, await this.guardianStore.list()).filter((record) => !record.deletedAt);
-    if (!shouldLimitToTeacherScope(context)) {
-      return guardians;
+    let guardians = filterTenantResources(context, await this.guardianStore.list()).filter((record) => !record.deletedAt);
+    if (shouldLimitToTeacherScope(context)) {
+      const guardianIds = await this.listScopedGuardianIds(context);
+      guardians = guardians.filter((guardian) => guardianIds.has(guardian.id));
     }
-
-    const guardianIds = await this.listScopedGuardianIds(context);
-    return guardians.filter((guardian) => guardianIds.has(guardian.id));
+    if (!this.campusRestriction(context)) return guardians;
+    const studentIds = new Set((await this.listScopedStudents(context)).map((student) => student.id));
+    const pairs = filterTenantResources(context, await this.guardianStudentStore.listPairs(context.tenantId!));
+    const linkedGuardianIds = new Set(pairs.map((link) => link.guardianId));
+    const visibleGuardianIds = new Set(pairs.filter((link) => studentIds.has(link.studentId)).map((link) => link.guardianId));
+    return guardians.filter((guardian) => visibleGuardianIds.has(guardian.id)
+      || (!linkedGuardianIds.has(guardian.id) && guardian.createdByUserId === context.userId));
   }
 
   async findGuardian(context: RequestContext, id: string): Promise<GuardianRecord> {
@@ -106,22 +112,28 @@ export class GuardianService {
 
     assertTenantAccess(context, record);
     await assertGuardianTeacherScope(context, this.studentStore, this.teacherAssignmentStore, this.guardianStudentStore, record.id);
+    await this.assertGuardianCampusScope(context, record);
     return record;
   }
 
   async createGuardian(context: RequestContext, input: GuardianWriteInput, idempotencyKey?: string): Promise<GuardianRecord> {
+    this.campusRestriction(context);
     if (idempotencyKey && this.idempotency) {
-      return this.idempotency.run(
+      const record = await this.idempotency.run(
         context,
-        { key: idempotencyKey, operation: "guardian.create", request: input },
+        { key: idempotencyKey, operation: "guardian.create", request: { actorUserId: context.userId, input } },
         () => this.createGuardianOnce(context, input),
       );
+      const current = await this.findGuardian(context, record.id);
+      await this.assertGuardianCampusScope(context, current, true);
+      return record;
     }
 
     return this.createGuardianOnce(context, input);
   }
 
   private async createGuardianOnce(context: RequestContext, input: GuardianWriteInput): Promise<GuardianRecord> {
+    this.campusRestriction(context);
     const tenantId = resolveWriteTenantId(context, input.tenantId);
     const phone = optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID");
     const identity = this.resolveGuardianIdentity(input.nationalId);
@@ -135,6 +147,8 @@ export class GuardianService {
 
     const matched = nationalIdMatch ?? phoneMatch;
     if (matched) {
+      await this.findGuardian(context, matched.id);
+      await this.assertGuardianCampusScope(context, matched, true);
       const updated = await this.updateMatchedGuardian(matched, phone, identity);
       return { ...(await this.autoProvisionGuardianAccount(context, updated, input)), matched: true };
     }
@@ -143,6 +157,7 @@ export class GuardianService {
       tenantId,
       firstName: input.firstName ?? "",
       lastName: input.lastName ?? "",
+      createdByUserId: context.userId,
       ...identity,
       phone,
     });
@@ -159,6 +174,7 @@ export class GuardianService {
 
   async updateGuardian(context: RequestContext, id: string, input: GuardianWriteInput): Promise<GuardianRecord> {
     const existing = await this.findGuardian(context, id);
+    await this.assertGuardianCampusScope(context, existing, true);
     const identity = await this.resolveGuardianIdentityInput(context, existing.tenantId, input.nationalId, existing.id);
     const changedFields = changedInputFields(input, ["firstName", "lastName", "phone", "nationalId"]);
     const record = await this.guardianStore.update(id, {
@@ -184,6 +200,7 @@ export class GuardianService {
 
   async deleteGuardian(context: RequestContext, id: string): Promise<void> {
     const existing = await this.findGuardian(context, id);
+    await this.assertGuardianCampusScope(context, existing, true);
     if (!this.identityProvisioning) {
       throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
     }
@@ -215,6 +232,7 @@ export class GuardianService {
 
   async purgeGuardianPii(context: RequestContext, id: string): Promise<GuardianRecord> {
     const existing = await this.findGuardian(context, id);
+    await this.assertGuardianCampusScope(context, existing, true);
     const hadFirstName = existing.firstName.length > 0;
     const hadLastName = existing.lastName.length > 0;
     const hadPhone = existing.phone !== undefined;
@@ -241,24 +259,16 @@ export class GuardianService {
 
   async listGuardianStudents(context: RequestContext, guardianId: string): Promise<GuardianStudentRecord[]> {
     const guardian = await this.findGuardian(context, guardianId);
-    return filterGuardianStudentLinksByTeacherScope(
-      context,
-      this.studentStore,
-      this.teacherAssignmentStore,
-      filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id)),
-    );
+    const links = filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+    if (!this.campusRestriction(context) && !shouldLimitToTeacherScope(context)) return links;
+    const studentIds = new Set((await this.listScopedStudents(context)).map((student) => student.id));
+    return links.filter((link) => studentIds.has(link.studentId));
   }
 
   async listGuardianStudentDetails(context: RequestContext, guardianId: string): Promise<GuardianStudentDetailsResponse> {
-    const guardian = await this.findGuardian(context, guardianId);
-    const links = await filterGuardianStudentLinksByTeacherScope(
-      context,
-      this.studentStore,
-      this.teacherAssignmentStore,
-      filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id)),
-    );
+    const links = await this.listGuardianStudents(context, guardianId);
     const linkedStudentIds = new Set(links.map((link) => link.studentId));
-    const students = await listTeacherScopedStudents(context, this.studentStore, this.teacherAssignmentStore);
+    const students = await this.listScopedStudents(context);
 
     const classNameById = new Map(
       filterTenantResources(context, await this.classStore.list())
@@ -284,11 +294,11 @@ export class GuardianService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await assertTeacherScopedStudent(context, this.teacherAssignmentStore, student);
+    await this.assertStudentScope(context, student);
 
     const links = filterTenantResources(context, await this.guardianStudentStore.listByStudent(student.id));
     const guardians = await Promise.all(links.map((link) => this.guardianStore.findById(link.guardianId)));
-    return guardians.filter((guardian): guardian is GuardianRecord => guardian !== undefined && !guardian.deletedAt);
+    return guardians.filter((guardian): guardian is GuardianRecord => guardian !== undefined && !guardian.deletedAt && guardian.tenantId === student.tenantId);
   }
 
   async listStudentGuardianLinks(context: RequestContext, studentId: string): Promise<GuardianStudentRecord[]> {
@@ -296,7 +306,7 @@ export class GuardianService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await assertTeacherScopedStudent(context, this.teacherAssignmentStore, student);
+    await this.assertStudentScope(context, student);
 
     return filterTenantResources(context, await this.guardianStudentStore.listByStudent(student.id));
   }
@@ -321,9 +331,14 @@ export class GuardianService {
     idempotencyKey?: string,
   ): Promise<GuardianStudentRecord> {
     if (idempotencyKey && this.idempotency) {
+      // Authorization must run before the cache can return a response from an earlier membership scope.
+      await this.findGuardian(context, guardianId);
+      const student = await this.studentStore.findById(studentId);
+      if (!student) throw new NotFoundException("STUDENT_NOT_FOUND");
+      await this.assertStudentScope(context, student);
       return this.idempotency.run(
         context,
-        { key: idempotencyKey, operation: "guardian.student-link.create", request: { guardianId, studentId, ...input } },
+        { key: idempotencyKey, operation: "guardian.student-link.create", request: { ...input, guardianId, studentId, actorUserId: context.userId } },
         () => this.linkGuardianStudentOnce(context, guardianId, studentId, input),
       );
     }
@@ -342,7 +357,7 @@ export class GuardianService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    assertTenantAccess(context, student);
+    await this.assertStudentScope(context, student);
     const relation = resolveGuardianStudentRelation(input);
 
     const { link, ...roleRestore } = await this.guardianStudentStore.create({
@@ -374,7 +389,7 @@ export class GuardianService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    assertTenantAccess(context, student);
+    await this.assertStudentScope(context, student);
 
     const relation = resolveGuardianStudentRelation(input, false);
     // KV-3c: an admin permission change adopts a link the StudentContact flow created; a contact unlink keeps it.
@@ -431,7 +446,7 @@ export class GuardianService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    assertTenantAccess(context, student);
+    await this.assertStudentScope(context, student);
 
     const deleted = await this.guardianStudentStore.delete(guardian.id, student.id);
     if (!deleted) {
@@ -476,6 +491,46 @@ export class GuardianService {
 
   private listScopedGuardianIds(context: RequestContext): Promise<Set<string>> {
     return listTeacherScopedGuardianIds(context, this.studentStore, this.teacherAssignmentStore, this.guardianStudentStore);
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("GUARDIAN_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  private async listScopedStudents(context: RequestContext): Promise<SharedStudentRecord[]> {
+    const restriction = this.campusRestriction(context);
+    const students = await listTeacherScopedStudents(context, this.studentStore, this.teacherAssignmentStore);
+    if (!restriction) return students;
+    const classIds = campusScopedClassIds(context, restriction, await this.classStore.list());
+    return students.filter((student) => Boolean(student.classId && classIds.has(student.classId)));
+  }
+
+  private async assertStudentScope(context: RequestContext, student: SharedStudentRecord): Promise<void> {
+    assertTenantAccess(context, student);
+    const restriction = this.campusRestriction(context);
+    if (restriction) {
+      const schoolClass = student.classId ? await this.classStore.findById(student.classId) : undefined;
+      if (!schoolClass || schoolClass.deletedAt || schoolClass.tenantId !== student.tenantId
+        || !schoolClass.campusId || !restriction.has(schoolClass.campusId)) {
+        throw new ForbiddenException("GUARDIAN_CAMPUS_SCOPE_FORBIDDEN");
+      }
+    }
+    if (shouldLimitToTeacherScope(context)) await assertTeacherScopedStudent(context, this.teacherAssignmentStore, student);
+  }
+
+  /** Profile/account changes affect every child, unlike a permission change on one student link. */
+  private async assertGuardianCampusScope(context: RequestContext, guardian: GuardianRecord, allLinks = false): Promise<void> {
+    if (!this.campusRestriction(context)) return;
+    const links = filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+    if (links.length === 0 && guardian.createdByUserId === context.userId) return;
+    const studentIds = new Set((await this.listScopedStudents(context)).map((student) => student.id));
+    if (links.length === 0 || !(allLinks ? links.every((link) => studentIds.has(link.studentId)) : links.some((link) => studentIds.has(link.studentId)))) {
+      throw new ForbiddenException("GUARDIAN_CAMPUS_SCOPE_FORBIDDEN");
+    }
   }
 
   /** The single guardian→student link check: 404 for an unknown or other-tenant student, 403 when not linked. */

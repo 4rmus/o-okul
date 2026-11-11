@@ -13,7 +13,11 @@ export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "gua
     "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications"
   >>;
 
+export type GuardianStudentPair = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId">;
+
 export interface GuardianStudentStore {
+  /** One tenant-scoped projection for campus attribution; excludes permissions and account data. */
+  listPairs(tenantId: string): Promise<GuardianStudentPair[]>;
   listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]>;
   listByStudent(studentId: string): Promise<GuardianStudentRecord[]>;
   /**
@@ -87,6 +91,10 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
 
   /** guardians is only needed to end the GUARDIAN role after the last link (the module wires the shared store). */
   constructor(private readonly guardians?: GuardianStore) {}
+
+  async listPairs(tenantId: string): Promise<GuardianStudentPair[]> {
+    return this.links.filter((link) => link.tenantId === tenantId).map(({ tenantId, guardianId, studentId }) => ({ tenantId, guardianId, studentId }));
+  }
 
   async listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]> {
     return this.links.filter((link) => link.guardianId === guardianId);
@@ -176,6 +184,16 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
 
 export class PostgresGuardianStudentStore implements GuardianStudentStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
+
+  async listPairs(tenantId: string): Promise<GuardianStudentPair[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<GuardianStudentPair>(
+        `SELECT "tenantId", "guardianId", "studentId" FROM "GuardianStudent" WHERE "tenantId" = $1`,
+        [tenantId],
+      );
+      return result.rows.map(({ tenantId, guardianId, studentId }) => ({ tenantId, guardianId, studentId }));
+    });
+  }
 
   async listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]> {
     return withTenantQuery(this.pool, async (client) => {

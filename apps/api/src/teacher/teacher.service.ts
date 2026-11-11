@@ -11,7 +11,7 @@ import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
-import { filterTenantResources } from "../tenant/tenant-access.js";
+import { filterTenantResources, resolveCampusRestriction } from "../tenant/tenant-access.js";
 import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { type ClassRecord, SchoolService } from "../school/school.service.js";
@@ -291,7 +291,7 @@ export class TeacherService {
 
   async listTeacherAssignments(context: RequestContext, teacherId: string): Promise<TeacherAssignmentRecord[]> {
     const teacher = await this.findTeacher(context, teacherId);
-    return filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(teacher.id));
+    return this.filterCampusScopedAssignments(context, filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(teacher.id)));
   }
 
   /**
@@ -299,6 +299,7 @@ export class TeacherService {
    * returns, so the teachers screen and the teacher detail agree. Teachers without assignments get zero counts.
    */
   async summarizeTeacherAssignments(context: RequestContext, teacherIds: readonly string[]): Promise<Map<string, TeacherAssignmentSummary>> {
+    this.campusRestriction(context);
     const summaries = new Map<string, TeacherAssignmentSummary>();
     const scopes = new Map<string, { classIds: Set<string>; courseIds: Set<string>; studentIds: Set<string> }>();
     for (const teacherId of teacherIds) {
@@ -307,7 +308,7 @@ export class TeacherService {
     }
     if (summaries.size === 0) return summaries;
 
-    for (const assignment of filterTenantResources(context, await this.teacherAssignmentStore.list())) {
+    for (const assignment of await this.filterCampusScopedAssignments(context, filterTenantResources(context, await this.teacherAssignmentStore.list()))) {
       const summary = summaries.get(assignment.teacherId);
       const scope = scopes.get(assignment.teacherId);
       if (!summary || !scope) continue;
@@ -330,9 +331,14 @@ export class TeacherService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await assertTeacherScopedStudent(context, this.teacherAssignmentStore, student);
+    assertTenantAccess(context, student);
+    if (this.campusRestriction(context)) {
+      const classIds = new Set((await this.school.listClasses(context)).map((record) => record.id));
+      if (!student.classId || !classIds.has(student.classId)) throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    if (!context.roles.includes("OPERATIONS_STAFF")) await assertTeacherScopedStudent(context, this.teacherAssignmentStore, student);
 
-    return filterTenantResources(context, await this.teacherAssignmentStore.list()).filter((assignment) =>
+    return (await this.filterCampusScopedAssignments(context, filterTenantResources(context, await this.teacherAssignmentStore.list()))).filter((assignment) =>
       assignment.studentId === student.id || Boolean(student.classId && assignment.classId === student.classId),
     );
   }
@@ -344,9 +350,11 @@ export class TeacherService {
     idempotencyKey?: string,
   ): Promise<TeacherAssignmentRecord> {
     if (idempotencyKey && this.idempotency) {
+      const teacher = await this.findTeacher(context, teacherId);
+      await this.assertTeacherAssignmentCourseFitsClass(context, this.resolveTeacherAssignmentInput(teacher, input) as TeacherAssignmentInput);
       return this.idempotency.run(
         context,
-        { key: idempotencyKey, operation: "teacher.assignment.create", request: { teacherId, ...input } },
+        { key: idempotencyKey, operation: "teacher.assignment.create", request: { ...input, teacherId, actorUserId: context.userId } },
         () => this.createTeacherAssignmentOnce(context, teacherId, input),
       );
     }
@@ -392,6 +400,7 @@ export class TeacherService {
       throw new NotFoundException("TEACHER_ASSIGNMENT_NOT_FOUND");
     }
     assertTenantAccess(context, existing);
+    await this.assertAssignmentCampusScope(context, existing);
     if (input.courseId) {
       await this.school.findCourse(context, input.courseId);
     }
@@ -426,6 +435,7 @@ export class TeacherService {
       throw new NotFoundException("TEACHER_ASSIGNMENT_NOT_FOUND");
     }
     assertTenantAccess(context, existing);
+    await this.assertAssignmentCampusScope(context, existing);
 
     const deleted = await this.teacherAssignmentStore.delete(assignmentId);
     if (!deleted) {
@@ -446,18 +456,13 @@ export class TeacherService {
     assignment: Pick<TeacherAssignmentInput, "tenantId"> &
       Partial<Pick<TeacherAssignmentInput, "classId" | "studentId" | "courseId">>,
   ): Promise<void> {
-    const courseId = optionalText(assignment.courseId);
-    if (!courseId) return;
-
-    const course = await this.school.findCourse(context, courseId);
-    if (course.tenantId !== assignment.tenantId) {
-      throw new ForbiddenException("FORBIDDEN_TENANT");
-    }
-
+    // Target authorization is independent of an optional course; validate both targets when both are present.
+    await this.assertAssignmentCampusScope(context, assignment);
     let targetClass: ClassRecord | undefined;
     const classId = optionalText(assignment.classId);
     if (classId) {
       targetClass = await this.school.findClass(context, classId);
+      if (targetClass.tenantId !== assignment.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
     }
 
     const studentId = optionalText(assignment.studentId);
@@ -467,11 +472,17 @@ export class TeacherService {
         throw new NotFoundException("STUDENT_NOT_FOUND");
       }
       assertTenantAccess(context, student);
-      if (!targetClass && student.classId) {
-        targetClass = await this.school.findClass(context, student.classId);
+      if (student.tenantId !== assignment.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+      if (student.classId) {
+        const studentClass = await this.school.findClass(context, student.classId);
+        targetClass ??= studentClass;
       }
     }
 
+    const courseId = optionalText(assignment.courseId);
+    if (!courseId) return;
+    const course = await this.school.findCourse(context, courseId);
+    if (course.tenantId !== assignment.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
     if (!targetClass?.gradeLevelId) return;
 
     const gradeLevelCourses = filterTenantResources(
@@ -481,6 +492,30 @@ export class TeacherService {
     const courseFitsClass = gradeLevelCourses.some((template) => template.courseId === course.id);
     if (!courseFitsClass) {
       throw new BadRequestException("TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH");
+    }
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  private async filterCampusScopedAssignments<T extends { classId?: string; studentId?: string }>(context: RequestContext, assignments: T[]): Promise<T[]> {
+    if (!this.campusRestriction(context)) return assignments;
+    const classIds = new Set((await this.school.listClasses(context)).map((record) => record.id));
+    const studentIds = new Set(filterTenantResources(context, await this.studentStore.list())
+      .filter((student) => Boolean(student.classId && classIds.has(student.classId))).map((student) => student.id));
+    return assignments.filter((assignment) => Boolean(assignment.classId || assignment.studentId)
+      && (!assignment.classId || classIds.has(assignment.classId))
+      && (!assignment.studentId || studentIds.has(assignment.studentId)));
+  }
+
+  private async assertAssignmentCampusScope(context: RequestContext, assignment: { classId?: string; studentId?: string }): Promise<void> {
+    if (!(await this.filterCampusScopedAssignments(context, [assignment])).length) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_FORBIDDEN");
     }
   }
 
