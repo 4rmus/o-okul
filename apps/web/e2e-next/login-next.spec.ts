@@ -6138,7 +6138,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
             getSubscription: async () => null,
             subscribe: async () => ({
               toJSON: () => ({
-                endpoint: "https://push.example/subscription",
+                endpoint: "https://fcm.googleapis.com/fcm/send/subscription",
                 keys: {
                   auth: "auth-key",
                   p256dh: "p256dh-key",

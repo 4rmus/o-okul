@@ -1875,9 +1875,13 @@ Idempotency-Key'in SHA-256 önekidir), worker `web-push` ile gönderir. Push job
 başarısız olsa da 30 gün saklanır (`removeOnComplete`/`removeOnFail` `age`): aynı gönderim isteğinin
 yeniden denenmesi bu pencerede ikinci push üretmez; yeni gönderim yeni cihazlara da ulaşır. FCM
 cihazlarına push gitmez (ürün sahibi kabulü, 2026-10-05).
-Payload yalnız başlık ve iç bağlantı taşır; 404/410 yanıtında `NotificationDeviceToken.disabledAt`
+Payload başlık, iç bağlantı ve anonim cihaz kayıt kimliği taşır; 404/410 yanıtında `NotificationDeviceToken.disabledAt`
 set edilir. `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` veya `VAPID_SUBJECT` eksikse worker gönderim
 yapmaz ve raporu `PUSH_VAPID_NOT_CONFIGURED` ile `failed` yazar.
+
+Tarayıcı hesabı değişiminde abonelik emekliye ayrılır; eski kuyruk cihaz kimlikleri ve tarayıcı bağlamı uyuşmayan
+bildirimler kapalı kalır. Endpoint izin listesi, geçişte push duraklatma ve mevcut kullanıcıların yeniden açık onayı
+için [browser push ownership and endpoint policy](web-push-device-security.md) uygulanır.
 
 Anahtar çifti ortam başına bir kez, repo dışında ve ürün sahibi onayıyla üretilir (KV-7 VAPID secret
 onayı). Bu runbook adımı secret üretmez veya ayarlamaz; operatör çalıştırır:

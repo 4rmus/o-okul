@@ -211,10 +211,9 @@ async function sendNotice(
   if (deps.pushSender) {
     const sender = deps.pushSender;
     const devices = await deps.store.listActiveDevices(tenantId, userIds);
-    const payload = JSON.stringify({ title: notice.title, url: notice.url });
     const outcomes = await Promise.all(devices.map(async (device) => ({
       id: device.id,
-      outcome: await sender.send(device.token, payload).catch((): PushSendOutcome => "failed"),
+      outcome: await sender.send(device.token, JSON.stringify({ title: notice.title, url: notice.url, deviceId: device.id })).catch((): PushSendOutcome => "failed"),
     })));
     pushSentCount = outcomes.filter((entry) => entry.outcome === "sent").length;
     const goneIds = outcomes.filter((entry) => entry.outcome === "gone").map((entry) => entry.id);

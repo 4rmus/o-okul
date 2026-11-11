@@ -17,7 +17,7 @@ const vapidEnv = {
 };
 
 const subscription = JSON.stringify({
-  endpoint: "https://push.example.test/sub-1",
+  endpoint: "https://fcm.googleapis.com/fcm/send/sub-1",
   keys: { p256dh: "p256dh-key", auth: "auth-key" },
 });
 
@@ -53,12 +53,12 @@ describe("announcement push delivery", () => {
 
     expect(result).toMatchObject({ channel: "PUSH", recipientCount: 3, deliveredCount: 3, failedCount: 0, status: "completed" });
     expect(sender.payloads.map((payload) => JSON.parse(payload))).toEqual([
-      { title: "Veli toplantısı", url: "/veli/duyurular" },
-      { title: "Veli toplantısı", url: "/ogrenci/duyurular" },
-      { title: "Veli toplantısı", url: "/kurum/duyurular" },
+      { title: "Veli toplantısı", url: "/veli/duyurular", deviceId: "device-1" },
+      { title: "Veli toplantısı", url: "/ogrenci/duyurular", deviceId: "device-2" },
+      { title: "Veli toplantısı", url: "/kurum/duyurular", deviceId: "device-3" },
     ]);
     for (const payload of sender.payloads) {
-      expect(Object.keys(JSON.parse(payload) as object).sort()).toEqual(["title", "url"]);
+      expect(Object.keys(JSON.parse(payload) as object).sort()).toEqual(["deviceId", "title", "url"]);
       expect(payload).not.toMatch(/Cuma günü|10000000|555|500\d|Ayşe|Yılmaz/);
     }
     expect(store.reports).toEqual([expect.objectContaining({ recipientCount: 3, deliveredCount: 3, failedCount: 0, status: "completed" })]);
@@ -123,6 +123,27 @@ describe("announcement push delivery", () => {
 
     await expect(processAnnouncementDeliveryJob(pushJob(), noReporter, { sender: new FakeSender(() => "sent"), store }))
       .rejects.toThrow("ANNOUNCEMENT_PUSH_REPORT_FAILED");
+  });
+
+  it("checks stored legacy endpoints before any network call and never follows redirects", async () => {
+    const calls: unknown[] = [];
+    const sender = createWebPushSenderFromEnv(vapidEnv, (async (...args: unknown[]) => {
+      calls.push(args);
+      return { statusCode: 302, headers: { location: "http://169.254.169.254/private" }, body: "" };
+    }) as never)!;
+    for (const endpoint of ["https://127.0.0.1/private", "https://fcm.googleapis.com.evil.test/device", "https://evil.fcm.googleapis.com/device", "https://user:pass@fcm.googleapis.com/device", "https://fcm.googleapis.com:8443/device", "https://evil.web.push.apple.com/device", "https://nested.webpush.notify.windows.com/device"]) {
+      expect(await sender.send(JSON.stringify({ endpoint, keys: { auth: "auth", p256dh: "public" } }), "{}")).toBe("failed");
+    }
+    expect(calls).toHaveLength(0);
+    expect(await sender.send(subscription, "{}")).toBe("failed");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("skips queued IDs retired by an ownership transfer", async () => {
+    const store = new FakePushStore([{ id: "new-owner-binding", token: subscription }]);
+    const sender = new FakeSender(() => "sent");
+    await processAnnouncementDeliveryJob(pushJob({ deviceIds: ["old-owner-binding"] }), noReporter, { sender, store });
+    expect(sender.payloads).toEqual([]);
   });
 
   it("25'ten büyük chunk'ı reddeder", async () => {

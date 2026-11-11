@@ -484,3 +484,4 @@ export type { TenantResetDeliveryReceipt } from "./domain.js";
 export type { TenantDeviceBackupPreview } from "./domain.js";
 
 export type { TenantDeviceRestoreMfaTarget, TenantDeviceRestoreOperation } from "./domain.js";
+export { parseWebPushSubscription, type TrustedWebPushSubscription } from "./web-push.js";

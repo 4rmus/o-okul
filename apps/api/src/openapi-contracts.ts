@@ -703,7 +703,7 @@ const mfaStepUpResponseSchema = objectSchema({
 const notificationDeviceRegisterRequestSchema = objectSchema({
   platform: stringSchema(),
   provider: stringSchema({ minLength: 1 }),
-  token: stringSchema({ minLength: 1 }),
+  token: stringSchema({ minLength: 1, description: "Opaque provider token. For provider web-push: JSON browser subscription with a supported trusted HTTPS browser push service endpoint and auth/p256dh keys; canonicalized and exclusively bound to the current account." }),
 }, ["provider", "token"]);
 
 const publicNotificationDeviceRecordSchema = objectSchema({

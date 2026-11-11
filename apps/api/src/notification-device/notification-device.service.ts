@@ -1,5 +1,5 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { NotificationDeviceTokenRecord } from "@o-okul/shared-types";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { parseWebPushSubscription, type NotificationDeviceTokenRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
 import {
@@ -24,15 +24,22 @@ export class NotificationDeviceService {
     return this.store.listByUser(scope.tenantId, scope.userId);
   }
 
-  registerCurrentUser(
+  async registerCurrentUser(
     context: RequestContext,
     input: RegisterNotificationDeviceInput,
   ): Promise<NotificationDeviceTokenRecord> {
     const scope = resolveDeviceScope(context);
+    const provider = requiredText(input.provider, "NOTIFICATION_DEVICE_PROVIDER_REQUIRED");
+    let token = requiredText(input.token, "NOTIFICATION_DEVICE_TOKEN_REQUIRED");
+    if (provider === "web-push") {
+      const subscription = parseWebPushSubscription(token);
+      if (!subscription) throw new BadRequestException("NOTIFICATION_DEVICE_SUBSCRIPTION_INVALID");
+      token = JSON.stringify(subscription);
+    }
     return this.store.upsert({
       ...scope,
-      provider: requiredText(input.provider, "NOTIFICATION_DEVICE_PROVIDER_REQUIRED"),
-      token: requiredText(input.token, "NOTIFICATION_DEVICE_TOKEN_REQUIRED"),
+      provider,
+      token,
       platform: optionalText(input.platform),
       lastSeenAt: new Date().toISOString(),
     });

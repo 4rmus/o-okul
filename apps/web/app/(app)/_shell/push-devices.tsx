@@ -2,24 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { Alert, Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
-import { type NotificationDeviceTokenRecord } from "@o-okul/shared-types";
-import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
+import { type AuthResponse, type NotificationDeviceTokenRecord } from "@o-okul/shared-types";
+import { useAuth } from "../../providers.js";
+import { apiBaseUrl, apiRequest, readData, registerPushForCurrentSession } from "../../../src/api-client.js";
+import { readPushBinding, retireWebPushBinding } from "../../../src/web-push-lifecycle.js";
 
 /** Requests the browser permission, subscribes the service worker and registers the device at `/me/notification-devices`. */
-export async function registerWebPushDevice(accessToken: string): Promise<NotificationDeviceTokenRecord> {
-  const token = await resolveWebPushToken();
-  return apiRequest<NotificationDeviceTokenRecord>(accessToken, `${apiBaseUrl}/me/notification-devices`, {
-    body: JSON.stringify({
-      provider: "web-push",
-      token,
-      platform: "web",
-    }),
-    headers: { "content-type": "application/json" },
-    method: "POST",
+export async function registerWebPushDevice(session: AuthResponse["session"] | undefined): Promise<NotificationDeviceTokenRecord> {
+  if (!session) throw new Error("AUTH_CONTEXT_CHANGED");
+  if (!("Notification" in window)) throw new Error("WEB_PUSH_UNSUPPORTED");
+  if (await Notification.requestPermission() !== "granted") throw new Error("WEB_PUSH_PERMISSION_DENIED");
+  return registerPushForCurrentSession(session, async (accessToken) => {
+    const token = await resolveWebPushToken();
+    const response = await fetch(`${apiBaseUrl}/me/notification-devices`, {
+      body: JSON.stringify({ provider: "web-push", token, platform: "web" }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("WEB_PUSH_REGISTRATION_FAILED");
+    return readData<NotificationDeviceTokenRecord>(response);
   });
 }
 
 export function PushDevicePanel({ accessToken }: { accessToken: string }) {
+  const { auth } = useAuth();
   const [devices, setDevices] = useState<NotificationDeviceTokenRecord[]>([]);
   const [status, setStatus] = useState("Hazır");
   const [isSaving, setIsSaving] = useState(false);
@@ -41,7 +47,7 @@ export function PushDevicePanel({ accessToken }: { accessToken: string }) {
   async function handleRegister() {
     setIsSaving(true);
     try {
-      const record = await registerWebPushDevice(accessToken);
+      const record = await registerWebPushDevice(auth?.session);
       setDevices((current) => [record, ...current.filter((device) => device.id !== record.id)]);
       setStatus("Push açık");
     } catch (error) {
@@ -57,6 +63,7 @@ export function PushDevicePanel({ accessToken }: { accessToken: string }) {
       const record = await apiRequest<NotificationDeviceTokenRecord>(accessToken, `${apiBaseUrl}/me/notification-devices/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
+      await retireWebPushBinding(id);
       setDevices((current) => current.map((device) => (device.id === id ? record : device)));
       setStatus("Cihaz kapatıldı");
     } catch {
@@ -102,25 +109,30 @@ export function PushDevicePanel({ accessToken }: { accessToken: string }) {
 /**
  * UAT F-29: a compact reminder inside a portal when web push is enabled for this build but this browser has not
  * granted the permission yet. It reuses the same registration flow as the sidebar "Bildirim cihazı" panel.
- * Rendered only on the client; hidden when the flag is off, the browser lacks Notification, or permission is granted.
+ * Rendered only on the client; an origin's granted permission still needs this account's explicit registration.
  */
 export function PushPermissionPrompt({ accessToken }: { accessToken: string }) {
+  const { auth } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [hasBinding, setHasBinding] = useState(true);
 
   useEffect(() => {
     setPermission(readPushPermissionState());
-  }, []);
+    setMessage("");
+    void readPushBinding().then((binding) => setHasBinding(Boolean(binding?.owner && binding.deviceId)), () => setHasBinding(false));
+  }, [accessToken]);
 
-  // Hidden when the flag is off / unsupported (null) or the permission was already granted before this visit.
-  if (!permission || (permission === "granted" && !message)) return null;
+  // Browser permission belongs to the origin; each account must explicitly opt in after an ownership reset.
+  if (!permission || (hasBinding && !message)) return null;
 
   async function handleEnable() {
     setIsSaving(true);
     setMessage("");
     try {
-      await registerWebPushDevice(accessToken);
+      await registerWebPushDevice(auth?.session);
+      setHasBinding(true);
       setMessage("Push açıldı; bu cihaz bildirim alacak.");
       setPermission("granted");
     } catch (error) {
@@ -135,15 +147,15 @@ export function PushPermissionPrompt({ accessToken }: { accessToken: string }) {
     <Alert
       aria-label="Push bildirim hatırlatması"
       className="next-push-prompt"
-      title={permission === "granted" ? "Push bildirimleri açık" : "Push bildirimleri bu cihazda kapalı"}
-      tone={permission === "granted" ? "success" : "info"}
+      title={hasBinding && permission === "granted" ? "Push bildirimleri açık" : "Push bildirimleri bu cihazda kapalı"}
+      tone={hasBinding && permission === "granted" ? "success" : "info"}
     >
       {permission === "denied" ? (
         <span>Tarayıcı bu adres için bildirimi engellemiş. İzni tarayıcı ayarlarından açınca sol menüdeki &quot;Bildirim cihazı&quot; bölümünden kaydedebilirsiniz.</span>
       ) : null}
-      {permission === "default" ? (
+      {permission !== "denied" && !message ? (
         <>
-          <span>Devamsızlık, ödeme ve duyuru bildirimlerini bu cihazda almak için push iznini açın. Aynı ayar sol menüdeki &quot;Bildirim cihazı&quot; bölümünde de bulunur.</span>
+          <span>Devamsızlık, ödeme ve duyuru bildirimlerini bu hesap için bu cihazda almak üzere push kaydını açın. Aynı ayar sol menüdeki &quot;Bildirim cihazı&quot; bölümünde de bulunur.</span>
           <Button disabled={isSaving} onClick={() => void handleEnable()} size="sm" type="button">
             Push iznini aç
           </Button>
@@ -175,9 +187,6 @@ async function resolveWebPushToken(): Promise<string> {
   if (!publicKey) throw new Error("WEB_PUSH_PUBLIC_KEY_MISSING");
   if (!("Notification" in window)) throw new Error("WEB_PUSH_UNSUPPORTED");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("WEB_PUSH_UNSUPPORTED");
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("WEB_PUSH_PERMISSION_DENIED");
 
   const registration = await navigator.serviceWorker.register("/push-sw.js");
   const existingSubscription = await registration.pushManager.getSubscription();
