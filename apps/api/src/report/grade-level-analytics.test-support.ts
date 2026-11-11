@@ -63,6 +63,9 @@ export function gradeLevelAnalyticsTermBoundaryExtras(): {
       gradeLevelAnalyticsSnapshot("level-boundary-start", "exam-boundary-start", {
         gradeLevelId,
         examStartsAt: "2026-08-31T21:30:00.000Z",
+        examType: "LGS",
+        examYear: 2026,
+        scoringProfileId: "TR-LGS-2026-NOSD-V1",
       }),
       gradeLevelAnalyticsSnapshot("level-boundary-end", "exam-boundary-end", { gradeLevelId }),
     ],
@@ -80,9 +83,16 @@ export function gradeLevelAnalyticsExam(
 export function gradeLevelAnalyticsSnapshot(
   id: string,
   examId: string,
-  options: Partial<ReportSnapshotRecord> & { averages?: Record<string, number>; examStartsAt?: string; resultCount?: number } = {},
+  options: Partial<ReportSnapshotRecord> & {
+    averages?: Record<string, number>;
+    examStartsAt?: string;
+    examType?: string;
+    examYear?: number;
+    scoringProfileId?: string;
+    resultCount?: number;
+  } = {},
 ): ReportSnapshotRecord {
-  const { averages = { net: 50, questionCount: 90, successRate: 55.56 }, examStartsAt, resultCount = 10, ...record } = options;
+  const { averages = { net: 50, questionCount: 90, successRate: 55.56 }, examStartsAt, examType, examYear, scoringProfileId, resultCount = 10, ...record } = options;
   return {
     id,
     tenantId: "tenant-a",
@@ -94,6 +104,9 @@ export function gradeLevelAnalyticsSnapshot(
     snapshotData: {
       reportType: "EXAM_RESULT_SUMMARY",
       ...(examStartsAt ? { examStartsAt } : {}),
+      ...(examType ? { examType } : {}),
+      ...(examYear !== undefined ? { examYear } : {}),
+      ...(scoringProfileId ? { scoringProfileId } : {}),
       resultCount,
       averages,
       students: [{ studentId: "student-a", displayName: "Ada A", total: { net: 1 } }],
