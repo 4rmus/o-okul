@@ -44,7 +44,7 @@ interface PrimaryTask {
 
 const routeCases = [
   route("/", "İyi bir okul, her öğrenciyi görür.", "anonymous", { role: "region", name: "Öğrenci kaydında toplanan bilgiler" }),
-  route("/fiyatlar", "Aktif öğrenci sayınıza göre yıllık fiyat.", "anonymous", { role: "region", name: "Paketler" }),
+  route("/fiyatlar", "Aktif öğrenci sayınıza göre yıllık fiyat.", "anonymous", { role: "region", name: "Fiyat kademeleri" }),
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
