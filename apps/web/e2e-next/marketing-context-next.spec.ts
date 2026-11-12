@@ -66,6 +66,9 @@ test.describe("Public marketing context", () => {
     await expect(page.getByText("Verileriniz Türkiye'deki sunucularda barındırılır.", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Demo talep et" }).first()).toHaveAttribute("href", "/iletisim#demo");
     await expect(page.getByRole("link", { name: "Fiyatları gör" })).toHaveAttribute("href", "/fiyatlar");
+    // Landing fiyat bölümü rakamları pricing.ts'ten okur ve kısa kalır.
+    await expect(page.locator("#fiyat").getByText("Öğrenci başı yıllık 75 TL–99 TL, KDV hariç. Kurulum ücreti yok, tüm modüller dahil.", { exact: true })).toBeVisible();
+    await expect(page.locator("#fiyat").getByRole("link", { name: "Fiyatınızı hesaplayın" })).toHaveAttribute("href", "/fiyatlar");
     await expect(page.getByRole("link", { name: "Giriş yap", exact: true })).toHaveAttribute("href", "/login");
     await expect(page.getByText(/veli portal|veli uygulama|e-Okul|KVKK uyumlu|yurt ?dışına/i)).toHaveCount(0);
   });
@@ -85,24 +88,23 @@ test.describe("Public marketing context", () => {
     await page.goto("/fiyatlar");
 
     await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
-    await expect(page.getByText("Öğrenci başı yıllık 75 TL–99 TL, KDV hariç.", { exact: false })).toBeVisible();
-    const plans = page.getByRole("region", { name: "Paketler" });
-    await expect(plans.getByRole("listitem")).toHaveCount(5);
-    for (const [students, unitPrice, total] of [["100 öğrenciye kadar", "99 TL", "9.900 TL"], ["250 öğrenciye kadar", "95 TL", "24.150 TL"], ["500 öğrenciye kadar", "90 TL", "46.650 TL"], ["1.000 öğrenciye kadar", "85 TL", "89.150 TL"], ["2.000 öğrenciye kadar", "80 TL", "169.150 TL"]] as const) {
-      const card = plans.getByRole("listitem").filter({ has: page.getByRole("heading", { name: students }) });
-      await expect(card).toContainText(total);
-      await expect(card).toContainText(`Öğrenci başı ${unitPrice}`);
-      await expect(card.getByRole("link", { name: "Ödeme & İletişim" })).toHaveAttribute("href", "/iletisim#teklif");
-    }
-    await expect(plans.getByText("1–100: 99 TL, 101–250: 95 TL, 251–500: 90 TL, 501–1.000: 85 TL, 1.001–2.000: 80 TL, 2.001–3.000: 75 TL", { exact: false })).toBeVisible();
-    await expect(page.getByText("Kurulum ücreti yok, tüm modüller her pakette dahil", { exact: false })).toBeVisible();
-    const packageModules = page.getByRole("list", { name: "Her pakette bulunan modüller" }).getByRole("listitem");
+    await expect(page.getByText("Öğrenci başı yıllık 75 TL–99 TL, KDV hariç.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Fiyata dahil olanlar" }).getByRole("listitem")).toHaveText(["Kurulum ücreti yok", "Tüm modüller dahil", "Çalışan hesapları ücretsiz"]);
+    // Sade görünüm: kademeler tek tabloda; kademe başına kart ve tekrar eden iletişim düğmesi yok.
+    const tiers = page.getByRole("region", { name: "Fiyat kademeleri" });
+    const expectedTiers = [["1–100", "99 TL"], ["101–250", "95 TL"], ["251–500", "90 TL"], ["501–1.000", "85 TL"], ["1.001–2.000", "80 TL"], ["2.001–3.000", "75 TL"], ["3.001 ve üzeri", "Teklif"]] as const;
+    await expect(tiers.getByRole("columnheader")).toHaveText(["Aktif öğrenci", "Öğrenci başı yıllık"]);
+    await expect(tiers.getByRole("rowheader")).toHaveText(expectedTiers.map(([range]) => range));
+    await expect(tiers.getByRole("cell")).toHaveText(expectedTiers.map(([, unitPrice]) => unitPrice));
+    await expect(tiers.getByRole("link")).toHaveCount(0);
+    await expect(tiers.getByText("Her fiyat yalnız kendi aralığındaki öğrencilere uygulanır; tutarlar toplanır.", { exact: true })).toBeVisible();
+    await expect(tiers.getByText("Örnek, 1.000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: true })).toBeVisible();
+    await expect(tiers.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: true })).toBeVisible();
+    await expect(tiers.getByText("Ödeme yıllıktır; aylık ödeme seçeneği yoktur.", { exact: true })).toBeVisible();
+    const packageModules = page.getByRole("list", { name: "Fiyata dahil modüller" }).getByRole("listitem");
     await expect(packageModules).toHaveCount(6);
     // DEC-20261102-07: liste öğrenci kaydıyla başlar; kurum operasyonu, finans ve roller ardından gelir.
     await expect(packageModules.getByRole("heading", { level: 3 })).toHaveText(["Öğrenci kaydı", "Kurum operasyonu", "Finans takibi", "Rol tabanlı erişim", "Deneme analizi", "Optik okuma ve karne"]);
-    await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: false })).toBeVisible();
-    await expect(page.getByText("aylık ödeme seçeneği yoktur", { exact: false })).toBeVisible();
-    await expect(page.getByText("Örnek, 1.000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: false })).toBeVisible();
 
     const input = page.getByLabel("Aktif öğrenci sayısı");
     const result = page.locator("output");

@@ -15,6 +15,13 @@ import {
 } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../src/brand.js";
 import { AppearanceSelect } from "../src/appearance-select.js";
+import { estimateAnnualPrice, formatCount, formatTl, minimumBilledStudents, pricingTiers, quoteFromStudents } from "./fiyatlar/pricing.js";
+
+// Fiyat rakamları yalnız fiyatlar/pricing.ts'ten gelir (DEC-20261028-01, docs/marketing-claims.md).
+const unitPriceRange = `${formatTl(pricingTiers[pricingTiers.length - 1]!.unitPrice)}–${formatTl(pricingTiers[0].unitPrice)}`;
+const pricingExampleStudents = 1000;
+const pricingExample = estimateAnnualPrice(pricingExampleStudents);
+const pricingExampleTotal = pricingExample.kind === "price" ? formatTl(pricingExample.total) : "";
 
 const optikSteps = [
   ["01", "Dosyayı alın", "TXT veya DAT optik verisini sınav kaydına aktarın."],
@@ -110,7 +117,7 @@ const trialFaq = {
 const faqs = [
   {
     question: "Fiyat nasıl hesaplanır?",
-    answer: "Fiyat kademelidir: ilk 100 öğrenci 99 TL, sonraki 150 öğrenci 95 TL, sonraki 250 öğrenci 90 TL, sonraki 500 öğrenci 85 TL, sonraki 1000 öğrenci 80 TL, sonraki 1000 öğrenci 75 TL üzerinden hesaplanır ve kademe tutarları toplanır. En küçük paket 100 öğrencidir; 3001 ve üzeri öğrenci için özel teklif verilir. Fiyatlar KDV hariçtir, kurulum ücreti yoktur ve tüm modüller dahildir.",
+    answer: `Öğrenci başı yıllık ${unitPriceRange}, KDV hariç. Fiyat kademelidir: her fiyat yalnız kendi aralığındaki öğrencilere uygulanır, tutarlar toplanır. Örnek: ${formatCount(pricingExampleStudents)} öğrenci için yıllık ${pricingExampleTotal}. En küçük paket ${minimumBilledStudents} öğrencidir; ${formatCount(quoteFromStudents)} ve üzeri öğrenci için teklif veriyoruz. Kurulum ücreti yok, tüm modüller dahil.`,
   },
   ...(trialOfferPublished ? [trialFaq] : []),
   {
@@ -251,12 +258,9 @@ export default function HomePage() {
 
         <section id="fiyat" className="next-marketing-section" aria-labelledby="pricing-title">
           <div className="next-marketing-section__header">
-            <div><p className="next-marketing-kicker">Yayınlanmış fiyat</p><h2 id="pricing-title">Fiyatı aktif öğrenci sayınız belirler.</h2></div>
-            <p>
-              Yıllık ve KDV hariç, kademeli: ilk 100 öğrenci için öğrenci başı 99 TL, sonraki öğrenciler daha düşük
-              birim fiyattan hesaplanır (en küçük paket 100 öğrenci). Kurulum ücreti yok, tüm modüller dahil.
-            </p>
-            <Link className="next-marketing-text-link" href="/fiyatlar">Kademeleri ve hesaplayıcıyı aç<ArrowRight size={17} aria-hidden="true" /></Link>
+            <div><p className="next-marketing-kicker">Fiyat</p><h2 id="pricing-title">Fiyatı aktif öğrenci sayınız belirler.</h2></div>
+            <p>Öğrenci başı yıllık {unitPriceRange}, KDV hariç. Kurulum ücreti yok, tüm modüller dahil.</p>
+            <Link className="next-marketing-text-link" href="/fiyatlar">Fiyatınızı hesaplayın<ArrowRight size={17} aria-hidden="true" /></Link>
           </div>
         </section>
 

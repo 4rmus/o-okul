@@ -25,7 +25,7 @@ export function PriceCalculator() {
     <div className="next-pricing-calculator" id="hesaplayici">
       <div className="next-pricing-calculator__input">
         <h2 id="calculator-title">Yıllık tutarı hesaplayın</h2>
-        <Field label="Aktif öğrenci sayısı" description="Bütün kampüslerinizdeki toplam aktif öğrenci. Hesap tarayıcınızda yapılır; sayı kaydedilmez veya gönderilmez." error={error}>
+        <Field label="Aktif öğrenci sayısı" description="Tüm kampüslerinizdeki toplam aktif öğrenci. Girdiğiniz sayı kaydedilmez." error={error}>
           <Input inputMode="numeric" min={1} name="activeStudents" onChange={(event) => setValue(event.target.value)} step={1} type="number" value={value} />
         </Field>
         <div className="next-pricing-presets" role="group" aria-label="Hazır öğrenci sayıları">
@@ -48,8 +48,8 @@ export function PriceCalculator() {
             <span className="next-pricing-calculator__label">Yıllık tutar · KDV hariç</span>
             <strong className="next-pricing-calculator__total">{formatTl(estimate.total)}</strong>
             <span className="next-pricing-calculator__average">Öğrenci başı ortalama {formatAverageTl(estimate.total / estimate.billedStudents)}</span>
+            {estimate.minimumApplied ? <p className="next-pricing-calculator__note">En küçük paket {minimumBilledStudents} öğrenci: tutar {minimumBilledStudents} öğrenci üzerinden hesaplandı.</p> : null}
             <ul className="next-pricing-calculator__lines" aria-label="Hesap dökümü">
-              {estimate.minimumApplied ? <li className="next-pricing-calculator__note">En küçük paket {minimumBilledStudents} öğrenci: tutar {minimumBilledStudents} öğrenci üzerinden hesaplandı.</li> : null}
               {estimate.lines.map((line) => (
                 <li key={line.unitPrice}>
                   <span>{formatCount(line.students)} öğrenci × {formatTl(line.unitPrice)}</span>

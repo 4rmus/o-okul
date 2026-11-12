@@ -10,10 +10,6 @@
   }
 
   @media (max-width: 1023px) {
-    .next-pricing-plans__list {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
     .next-app-shell {
       grid-template-columns: minmax(0, 1fr);
       /* Kısa içerikte fazlalık yükseklik üst çubuğa değil gövdeye gider (UI/UX F14). */
@@ -142,8 +138,9 @@
   }
 
   @media (max-width: 768px) {
-    .next-pricing-plans__list {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .next-pricing-tiers {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-md);
     }
 
     .next-pricing-features {
@@ -516,7 +513,11 @@
       padding: var(--space-sm);
     }
 
-    .next-pricing-plans__list,
+    .next-pricing-table th,
+    .next-pricing-table td {
+      padding-inline: var(--space-sm);
+    }
+
     .next-pricing-features {
       grid-template-columns: minmax(0, 1fr);
     }

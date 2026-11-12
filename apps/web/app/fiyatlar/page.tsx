@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppearanceSelect } from "../../src/appearance-select.js";
-import { ArrowRight, BarChart3, BookOpen, CalendarDays, ScanLine, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, BarChart3, BookOpen, CalendarDays, Check, ScanLine, ShieldCheck, Wallet } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../../src/brand.js";
 import { PriceCalculator } from "./price-calculator.js";
 import { estimateAnnualPrice, formatCount, formatTl, minimumBilledStudents, pricingTiers, quoteFromStudents } from "./pricing.js";
@@ -19,14 +19,7 @@ const exampleText = exampleEstimate.kind === "price"
 const highestUnitPrice = pricingTiers[0].unitPrice;
 const lowestUnitPrice = pricingTiers[pricingTiers.length - 1]!.unitPrice;
 
-// Beş profil kademe üst sınırlarıdır; toplam pricing.ts'ten türetilir, öğrenci başı fiyat o kademenin
-// birim fiyatıdır (ürün sahibi kararı 2026-10-28). Her pakette tüm modüller vardır.
-const planProfiles = pricingTiers.slice(0, 5);
-
-const plans = planProfiles.map((tier) => {
-  const estimate = estimateAnnualPrice(tier.max);
-  return { students: tier.max, unitPrice: tier.unitPrice, total: estimate.kind === "price" ? estimate.total : 0 };
-});
+const facts = ["Kurulum ücreti yok", "Tüm modüller dahil", "Çalışan hesapları ücretsiz"] as const;
 
 const features = [
   { icon: BookOpen, title: "Öğrenci kaydı", text: "Deneme sonuçları, okul notu, devamsızlık ve ödev aynı öğrenci kaydında." },
@@ -58,48 +51,48 @@ export default function PricingPage() {
           <div className="next-pricing__head">
             <p className="next-marketing-kicker">Fiyatlar</p>
             <h1 id="pricing-title">Aktif öğrenci sayınıza göre yıllık fiyat.</h1>
-            <p className="next-pricing__lead">
-              Öğrenci başı yıllık {formatTl(lowestUnitPrice)}–{formatTl(highestUnitPrice)}, KDV hariç. Kurulum ücreti yok, tüm modüller her pakette dahil;
-              çalışan hesapları ücretli değildir.
-            </p>
-          </div>
-
-          <div className="next-pricing-plans" role="region" aria-label="Paketler">
-            <ul className="next-pricing-plans__list">
-              {plans.map((plan) => (
-                <li key={plan.students} className="next-pricing-plan">
-                  <h2 className="next-pricing-plan__students">{formatCount(plan.students)} öğrenciye kadar</h2>
-                  <p className="next-pricing-plan__price">
-                    <strong>{formatTl(plan.total)}</strong>
-                    <span>yıllık · KDV hariç</span>
-                  </p>
-                  <p className="next-pricing-plan__unit">Öğrenci başı <strong>{formatTl(plan.unitPrice)}</strong></p>
-                  <Link className="uh-button uh-button--secondary uh-button--md" href="/iletisim#teklif">Ödeme &amp; İletişim</Link>
-                </li>
+            <p className="next-pricing__lead">Öğrenci başı yıllık {formatTl(lowestUnitPrice)}–{formatTl(highestUnitPrice)}, KDV hariç.</p>
+            <ul className="next-pricing__facts" aria-label="Fiyata dahil olanlar">
+              {facts.map((fact) => (
+                <li key={fact}><Check size={16} aria-hidden="true" />{fact}</li>
               ))}
             </ul>
-            <div className="next-pricing-plans__foot">
-              <p>
-                Kademeli hesap: her öğrenci kendi kademesinin fiyatını öder, kademe tutarları toplanır
-                ({pricingTiers.map((tier) => `${formatCount(tier.min)}–${formatCount(tier.max)}: ${formatTl(tier.unitPrice)}`).join(", ")}).
-                Örnek, {formatCount(exampleStudents)} öğrenci: {exampleText}.
-              </p>
-              <p>
-                En küçük paket {minimumBilledStudents} öğrencidir; daha az öğrencisi olan kurum {minimumBilledStudents} öğrenci üzerinden öder.
-                Fiyatlar yıllık ve KDV hariçtir; aylık ödeme seçeneği yoktur. {formatCount(quoteFromStudents)} ve üzeri öğrenci için özel teklif hazırlarız.
-              </p>
-              <a className="next-marketing-text-link" href="#hesaplayici">Kendi sayınızla hesaplayın<ArrowRight size={16} aria-hidden="true" /></a>
-            </div>
           </div>
+          <PriceCalculator />
+        </section>
+
+        <section className="next-marketing-section next-marketing-section--flush next-pricing-tiers" aria-labelledby="tiers-title">
+          <div className="next-marketing-section__header">
+            <p className="next-marketing-kicker">Nasıl hesaplanır?</p>
+            <h2 id="tiers-title">Fiyat kademeleri</h2>
+            <p>Her fiyat yalnız kendi aralığındaki öğrencilere uygulanır; tutarlar toplanır.</p>
+            <ul className="next-pricing-notes">
+              <li>Örnek, {formatCount(exampleStudents)} öğrenci: {exampleText}.</li>
+              <li>En küçük paket {minimumBilledStudents} öğrencidir; daha az öğrencisi olan kurum {minimumBilledStudents} öğrenci üzerinden öder.</li>
+              <li>Ödeme yıllıktır; aylık ödeme seçeneği yoktur.</li>
+            </ul>
+          </div>
+          <table className="next-pricing-table">
+            <caption className="uh-visually-hidden">Aktif öğrenci aralığına göre öğrenci başı yıllık fiyat, KDV hariç</caption>
+            <thead>
+              <tr><th scope="col">Aktif öğrenci</th><th scope="col">Öğrenci başı yıllık</th></tr>
+            </thead>
+            <tbody>
+              {pricingTiers.map((tier) => (
+                <tr key={tier.min}><th scope="row">{formatCount(tier.min)}–{formatCount(tier.max)}</th><td>{formatTl(tier.unitPrice)}</td></tr>
+              ))}
+              <tr><th scope="row">{formatCount(quoteFromStudents)} ve üzeri</th><td>Teklif</td></tr>
+            </tbody>
+          </table>
         </section>
 
         <section className="next-marketing-section next-marketing-section--flush" aria-labelledby="features-title">
           <div className="next-marketing-section__header">
-            <p className="next-marketing-kicker">Her pakette</p>
-            <h2 id="features-title">Tüm modüller, her paket büyüklüğünde.</h2>
-            <p>Paketler yalnız öğrenci sayısıyla ayrılır; kapsam aynıdır.</p>
+            <p className="next-marketing-kicker">Kapsam</p>
+            <h2 id="features-title">Tüm modüller fiyata dahil.</h2>
+            <p>Fiyat yalnız öğrenci sayısıyla değişir; her kurum aynı modülleri kullanır.</p>
           </div>
-          <ul className="next-pricing-features" aria-label="Her pakette bulunan modüller">
+          <ul className="next-pricing-features" aria-label="Fiyata dahil modüller">
             {features.map((feature) => (
               <li key={feature.title}>
                 <feature.icon size={22} aria-hidden="true" />
@@ -110,10 +103,6 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-        </section>
-
-        <section className="next-marketing-section" aria-labelledby="calculator-title">
-          <PriceCalculator />
         </section>
 
         {trialOfferPublished ? (
@@ -131,7 +120,7 @@ export default function PricingPage() {
           <section className="next-marketing-cta" aria-labelledby="pricing-cta-title">
             <div>
               <h2 id="pricing-cta-title">Kurumunuz için fiyatı birlikte netleştirelim.</h2>
-              <p>Demo görüşmesinde öğrenci sayınızı ve kademelerinizi konuşalım; {formatCount(quoteFromStudents)} ve üzeri öğrencisi olan kurumlara özel fiyat teklifi hazırlarız. İlk talepte öğrenci verisi paylaşmayın.</p>
+              <p>{formatCount(quoteFromStudents)} ve üzeri öğrencisi olan kurumlara özel teklif hazırlarız. İlk talepte öğrenci verisi paylaşmayın.</p>
             </div>
             <div className="next-marketing-cta__actions">
               <Link className="uh-button uh-button--primary uh-button--lg" href="/iletisim#demo"><span>Demo talep et</span><ArrowRight size={18} aria-hidden="true" /></Link>
